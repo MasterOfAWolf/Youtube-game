@@ -1,0 +1,98 @@
+<!-- HTML -->
+
+<canvas id="game" width="800" height="600"></canvas>
+
+
+<!-- TOUCH CONTROLS -->
+<div id="touchControls">
+  <div class="left-controls">
+    <button id="btnLeft">◀</button>
+    <button id="btnRight">▶</button>
+  </div>
+
+  <button id="btnRestart">⟳</button>
+
+  <div class="right-controls">
+    <button id="btnJump">⤒</button>
+    <button id="btnAttack">⚔</button>
+  </div>
+
+  <button id="btnPause">⏸</button>
+</div>
+
+<div id="menu">
+  <h1>Youtube Game</h1>
+  <button onclick="openLevelSelect()">Start Game</button>
+  <button onclick="openSettings()">Settings</button>
+  <button onclick="openControls()">Controls</button>
+</div>
+
+<div id="levelSelect" class="hidden">
+  <h2>Select Level</h2>
+  <button onclick="openFreeSelect()">Free Play</button>
+  <button onclick="openWaveSelect()">🌊 Wave Mode</button>
+  <button onclick="backToMenu()">Back</button>
+</div>
+
+<div id="freeSelect" class="hidden">
+<button onclick="startLevel(1)">Level 1</button>
+  <button onclick="startLevel(2)">Level 2</button>
+ <!-- <button onclick="startLevel(4)">BOX (LAAGGY)</button> TOUCH CONTROLS -->
+  <button onclick="startLevel(3)">X-Mas Special</button>
+  <button 
+  onclick="openLevelSelect()">Back</button>
+</div>
+<div id="waveSelect" class="hidden">
+  <h2>Wave Mode</h2>
+  <button onclick="startWaveModeLevel(1)"> Level 1 - Wave Mode</button>
+  <button onclick="startWaveModeLevel(2)"> Level 2 - Wave Mode</button>
+<button onclick="startWaveModeLevel(3)"> X-mas Special - Wave Mode</button>
+  <!-- This is a single-line comment 
+<button onclick="startWaveModeLevel(4)"> Box Chaos - Wave Mode</button> This is a single-line comment -->
+
+    <button onclick="openLevelSelect()">Back</button>
+</div>
+
+<div id="settings" class="hidden">
+  <h2>Settings</h2>
+  <label>
+    Music:
+    <input type="checkbox" id="musicToggle" checked>
+  </label>
+    <br><br>
+  <label>
+     Pixelated graphics:
+  <input type="checkbox" id="pixelToggle">
+</label>
+   <br><br>
+  <label>
+    CRT Mode:
+  <input type="checkbox" id="crtToggle">
+</label>
+<br><br>
+      Hide Touch Buttons:
+    <input type="checkbox" id="hideButtonsToggle">
+  </label>
+  <br><br>
+  <button onclick="backToMenu()">Back</button>
+</div>
+
+<!-- Comment -->
+<div id="controls" class="hidden">
+  <h2>Controls</h2>
+  <p><b>Move Left:</b> A / ←</p>
+  <p><b>Move Right:</b> D / →</p>
+  <p><b>Jump:</b> W / Space</p>
+  <p><b>Attack:</b> F</p>
+  <p><b>Pause:</b> ESC</p>
+  <p><b>Dev View:</b> M</p>
+  <p><b>Dev Grid (In Dev View):</b> G</p>
+  <br>
+  <button onclick="backToMenu()">Back</button>
+</div>
+
+<div id="pauseMenu" class="hidden">
+  <h2>Paused</h2>
+  <button onclick="togglePause()">Resume</button>
+  <button onclick="backToMenu()">Quit to Menu</button>
+</div>
