@@ -5999,12 +5999,19 @@ function drawSnails() {
       ctx.scale(-1, 1);
       ctx.drawImage(
         snailImg,
-100, 100, 50, 50
+        -snail.x - snail.width,
+        snail.y,
+        snail.width,
+        snail.height
       );
     } else {
       ctx.drawImage(
         snailImg,
-        100, 100, 50, 50      );
+        snail.x,
+        snail.y,
+        snail.width,
+        snail.height
+      );
     }
 
     ctx.restore();
