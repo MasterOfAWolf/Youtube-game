@@ -6,6 +6,9 @@ canvas.width = 800;
 canvas.height = 400;
 let pixelMode = false;
 
+const snailImg = new Image();
+snailImg.src = "Assets/Sprites/snail-pixilart.png";
+
 let wasOff = true; 
 let lightingEnabled = true;
 let lights = [];
@@ -5987,21 +5990,35 @@ drawSpikes();
   drawSnow();
 
   
-  function drawSnails() {
-  for (let s of snails) {
-        if (s.hitFlash > 0) {
-      ctx.fillStyle = "#f00"; // red
-    } else {
-      ctx.fillStyle = "#5b3"; // normal green
-    }
-    ctx.fillRect(s.x, s.y, s.width, s.height);
+function drawSnails() {
+  for (let snail of snails) {
+    if (!snail.active) continue;
 
-    // head “eye stalks”
-    ctx.fillStyle = "#2a2";
-    const headX = s.dir > 0 ? s.x + s.width - 6 : s.x + 2;
-    ctx.fillRect(headX, s.y + 2, 4, 8);
+    ctx.save();
+
+    if (snail.dir < 0) {
+      ctx.scale(-1, 1);
+      ctx.drawImage(
+        snailImg,
+        -snail.x - snail.width,
+        snail.y,
+        snail.width,
+        snail.height
+      );
+    } else {
+      ctx.drawImage(
+        snailImg,
+        snail.x,
+        snail.y,
+        snail.width,
+        snail.height
+      );
+    }
+
+    ctx.restore();
   }
 }
+
 
   // Draw boxes
   for (let b of boxes) {
