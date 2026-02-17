@@ -5992,7 +5992,6 @@ drawSpikes();
   
 function drawSnails() {
   for (let snail of snails) {
-    if (!snail.active) continue;
 
     ctx.save();
 
