@@ -7,7 +7,7 @@ canvas.height = 400;
 let pixelMode = false;
 
 const bgTile = new Image();
-bgTile.src = "Assets/Tiles/wall-tile-pixilart.png";
+bgTile.src = "Assets/Tiles/Cobblestone BG.png";
 
 const snailImg = new Image();
 snailImg.src = "Assets/Sprites/snail-pixilart.png";
