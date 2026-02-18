@@ -6,6 +6,9 @@ canvas.width = 800;
 canvas.height = 400;
 let pixelMode = false;
 
+const bgTile = new Image();
+bgTile.src = "Assets/Tiles/wall-tile-pixilart.png";
+
 const snailImg = new Image();
 snailImg.src = "Assets/Sprites/snail-pixilart.png";
 
@@ -549,6 +552,22 @@ function drawShadows(light) {
       ctx.lineTo(proj1x, proj1y);
       ctx.closePath();
       ctx.fill();
+    }
+  }
+}
+
+function drawBackground() {
+  if (!bgTile.complete) return; // wait until image is loaded
+
+  const tileW = bgTile.width;   // 100
+  const tileH = bgTile.height;  // 100
+
+  const cols = Math.ceil(canvas.width / tileW);
+  const rows = Math.ceil(canvas.height / tileH);
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      ctx.drawImage(bgTile, x * tileW, y * tileH, tileW, tileH);
     }
   }
 }
@@ -5900,7 +5919,7 @@ drawMouseCoords();
   ctx.translate(-camera.x, -camera.y);
 }
 
-
+drawBackground();
   // --- DRAW DECOR ---
 /*for (let d of decor) {
     ctx.fillStyle = d.color;
