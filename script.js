@@ -6000,17 +6000,17 @@ function drawSnails() {
       ctx.drawImage(
         snailImg,
         -snail.x - snail.width,
-        snail.y,
-        snail.width,
-        snail.height
+        snail.y + 4,
+        snail.width + 10,
+        snail.height + 10
       );
     } else {
       ctx.drawImage(
         snailImg,
         snail.x,
-        snail.y,
-        snail.width,
-        snail.height
+        snail.y + 4,
+        snail.width + 10,
+        snail.height + 10
       );
     }
 
