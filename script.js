@@ -6000,7 +6000,7 @@ function drawSnails() {
       ctx.drawImage(
         snailImg,
         -snail.x - snail.width,
-        snail.y + 4,
+        snail.y,
         snail.width + 10,
         snail.height + 10
       );
@@ -6008,7 +6008,7 @@ function drawSnails() {
       ctx.drawImage(
         snailImg,
         snail.x,
-        snail.y + 4,
+        snail.y,
         snail.width + 10,
         snail.height + 10
       );
