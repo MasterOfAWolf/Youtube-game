@@ -562,9 +562,8 @@ function drawBackground() {
   const tileW = bgTile.width;   // 100
   const tileH = bgTile.height;  // 100
 
-  const cols = Math.ceil(canvas.width / tileW);
-  const rows = Math.ceil(canvas.height / tileH);
-
+  const cols = Math.ceil(MAP_WIDTH / tileW);
+  const rows = Math.ceil(MAP_HEIGHT / tileH);
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       ctx.drawImage(bgTile, x * tileW, y * tileH, tileW, tileH);
