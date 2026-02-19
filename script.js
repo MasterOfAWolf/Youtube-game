@@ -3801,7 +3801,7 @@ function updateSnails() {
 
   snail.frameTimer++;
 
-  if (snail.frameTimer > 10) { // speed control
+  if (snail.frameTimer > 20) { // speed control
     snail.frameTimer = 0;
     snail.frame++;
 
@@ -6053,13 +6053,11 @@ function drawSnails() {
 
   if (!img.complete) continue;
  if (snail.dir < 0) {
-ctx.scale(-1, 1);
-  ctx.drawImage(
-    img,
-    snail.x,
-    snail.y,
-    snail.width,
-    snail.height
+ctx.translate(snail.x + snail.width, snail.y);
+      // 2. Flip the horizontal axis
+      ctx.scale(-1, 1);
+      // 3. Draw at 0,0 (relative to the translation)
+      ctx.drawImage(img, 0, 0, snail.width, snail.height);
   );
  } else {
      ctx.drawImage(
