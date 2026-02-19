@@ -12,6 +12,19 @@ bgTile.src = "Assets/Tiles/Cobblestone BG.png";
 const snailImg = new Image();
 snailImg.src = "Assets/Sprites/snail-pixilart.png";
 
+const snailFrames = [];
+
+const snail1 = new Image();
+snail1.src = "Assets/Sprites/Snail 1.png";
+
+const snail2 = new Image();
+snail2.src = "Assets/Sprites/Snail 2.png";
+
+const snail3 = new Image();
+snail3.src = "Assets/Sprites/Snail 3.png";
+
+snailFrames.push(snail1, snail2, snail3, snail2);
+
 let wasOff = true; 
 let lightingEnabled = true;
 let lights = [];
@@ -980,9 +993,12 @@ boxes.push(
 );
   /* ------------------ SNAILS (GROUND PRESSURE) ------------------ */
   snails.push(
-    { x: 350, y: 540, width: 28, height: 20, dx: 0, dy: 0, dir: 1, speed: 0.7, gravity: 0.6, chaseRange: 400, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0 },
-    { x: 850, y: 540, width: 28, height: 20, dx: 0, dy: 0, dir: -1, speed: 0.65, gravity: 0.6, chaseRange: 400, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0 },
-    { x: 1450, y: 540, width: 28, height: 20, dx: 0, dy: 0, dir: 1, speed: 0.55, gravity: 0.6, chaseRange: 400, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0 }
+    { x: 350, y: 540, width: 28, height: 20, dx: 0, dy: 0, dir: 1, speed: 0.7, gravity: 0.6, chaseRange: 400, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, frame: 0,
+  frameTimer: 0},
+    { x: 850, y: 540, width: 28, height: 20, dx: 0, dy: 0, dir: -1, speed: 0.65, gravity: 0.6, chaseRange: 400, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, frame: 0,
+  frameTimer: 0 },
+    { x: 1450, y: 540, width: 28, height: 20, dx: 0, dy: 0, dir: 1, speed: 0.55, gravity: 0.6, chaseRange: 400, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, frame: 0,
+  frameTimer: 0 }
   );
    
 
@@ -1075,7 +1091,9 @@ snails.push(
     chaseRange: 400,
     knockbackTimer: 0,
     knockbackDx: 0,
-    knockbackDy: 0
+    knockbackDy: 0,
+    frame: 0,
+    frameTimer: 0
   }
 );
 
@@ -1142,7 +1160,8 @@ function loadMap_Level2() {
     dx: 0, dy: 0, dir: 1, speed: 0.7,
     chaseRange: 400, gravity: 0.6,
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-    hp: 1, maxHp: 1, hitFlash: 0
+    hp: 1, maxHp: 1, hitFlash: 0, frame: 0,
+  frameTimer: 0
   });
 
   /* ------------------ RIGHT PATH: Seesaw & Precision Route ------------------ */
@@ -1264,14 +1283,16 @@ function loadMap_Level2() {
       dx: 0, dy: 0, dir: 1, speed: 0.8,
       chaseRange: 350, gravity: 0.6,
       knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-      hp: 1, maxHp: 1, hitFlash: 0
+      hp: 1, maxHp: 1, hitFlash: 0, frame: 0,
+  frameTimer: 0
     },
     {
       x: 1050, y: 918, width: 28, height: 20,
       dx: 0, dy: 0, dir: -1, speed: 0.8,
       chaseRange: 350, gravity: 0.6,
       knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-      hp: 1, maxHp: 1, hitFlash: 0
+      hp: 1, maxHp: 1, hitFlash: 0, frame: 0,
+  frameTimer: 0
     }
   );
 
@@ -1469,7 +1490,8 @@ walls.push({ x: 80, y: 980, width: 120, height: 20, ice: true });
       x: 750, y: 1430, width: 32, height: 24,
       dx: 0, dy: 0, dir: 1, speed: 0.9,
       chaseRange: 500, gravity: 0.6,
-      knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0
+      knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, frame: 0,
+  frameTimer: 0
     }
   );
 
@@ -2986,7 +3008,9 @@ function spawnEnemy(type, hp) {
         knockbackDy: 0,
         hp: hp || 1,
         maxHp: hp || 1,
-        hitFlash: 0
+        hitFlash: 0,
+        frame: 0, 
+        frameTimer: 0
       });
       break;
       
@@ -3773,6 +3797,19 @@ function updateSnails() {
           }
         }
       }
+      for (let snail of snails) {
+
+  snail.frameTimer++;
+
+  if (snail.frameTimer > 10) { // speed control
+    snail.frameTimer = 0;
+    snail.frame++;
+
+    if (snail.frame >= snailFrames.length) {
+      snail.frame = 0;
+    }
+  }
+}
     }
 
     // --- Edge detection: turn around before falling ---
@@ -6010,28 +6047,29 @@ drawSpikes();
   
 function drawSnails() {
   for (let snail of snails) {
+  ctx.save();
+  
+  const img = snailFrames[snail.frame];
 
-    ctx.save();
-
-    if (snail.dir < 0) {
-      ctx.scale(-1, 1);
-      ctx.drawImage(
-        snailImg,
-        -snail.x - snail.width,
-        snail.y,
-        snail.width + 10,
-        snail.height + 10
-      );
-    } else {
-      ctx.drawImage(
-        snailImg,
-        snail.x,
-        snail.y,
-        snail.width + 10,
-        snail.height + 10
-      );
-    }
-
+  if (!img.complete) continue;
+ if (snail.dir < 0) {
+ctx.scale(-1, 1);
+  ctx.drawImage(
+    img,
+    snail.x,
+    snail.y,
+    snail.width,
+    snail.height
+  );
+ } else {
+     ctx.drawImage(
+    img,
+    snail.x,
+    snail.y,
+    snail.width,
+    snail.height
+  );
+}
     ctx.restore();
   }
 }
