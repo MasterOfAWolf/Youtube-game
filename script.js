@@ -6046,30 +6046,27 @@ drawSpikes();
 
   
 function drawSnails() {
-  for (let snail of snails) {
-  ctx.save();
-  
-  const img = snailFrames[snail.frame];
+    for (let snail of snails) {
+        ctx.save();
+        const img = snailFrames[snail.frame];
+        
+        // Ensure image is loaded before drawing
+        if (!img || !img.complete) continue;
 
-  if (!img.complete) continue;
- if (snail.dir < 0) {
-ctx.translate(snail.x + snail.width, snail.y);
-      // 2. Flip the horizontal axis
-      ctx.scale(-1, 1);
-      // 3. Draw at 0,0 (relative to the translation)
-      ctx.drawImage(img, 0, 0, snail.width, snail.height);
-  );
- } else {
-     ctx.drawImage(
-    img,
-    snail.x,
-    snail.y,
-    snail.width,
-    snail.height
-  );
-}
-    ctx.restore();
-  }
+        if (snail.dir < 0) {
+            // 1. Move origin to the right edge of the snail
+            ctx.translate(snail.x + snail.width, snail.y);
+            // 2. Flip horizontal axis
+            ctx.scale(-1, 1);
+            // 3. Draw image at 0,0 (which is now top-left, but flipped)
+            ctx.drawImage(img, 0, 0, snail.width, snail.height);
+        } else {
+            // Draw normally
+            ctx.drawImage(img, snail.x, snail.y, snail.width, snail.height);
+        }
+        
+        ctx.restore();
+    }
 }
 
 
