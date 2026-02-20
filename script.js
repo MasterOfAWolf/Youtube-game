@@ -328,9 +328,9 @@ canvas.addEventListener("mousedown", (e) => {
 // --- Inject mobile joystick into touchControls div ---
 (function injectJoystick() {
   const joystickHTML = `
-    <div id="potatoJoystickArea" style="display:none; position:relative; width:100px; height:100px; border-radius:50%; background:rgba(255,255,255,0.12); border:2px solid rgba(255,200,80,0.5); touch-action:none; flex-shrink:0;">
+    <div id="potatoJoystickArea" style="display:none; position:fixed; bottom:90px; left:50%; transform:translateX(-50%); width:100px; height:100px; border-radius:50%; background:rgba(255,255,255,0.12); border:2px solid rgba(255,200,80,0.5); touch-action:none; pointer-events:auto; z-index:20;">
       <div id="potatoJoystickKnob" style="position:absolute; width:40px; height:40px; border-radius:50%; background:rgba(181,139,74,0.9); border:2px solid #ffd966; top:50%; left:50%; transform:translate(-50%,-50%); pointer-events:none;"></div>
-      <div style="position:absolute; bottom:-22px; left:50%; transform:translateX(-50%); font-size:11px; color:#ffd966; white-space:nowrap;">🥔 AIM+FIRE</div>
+      <div style="position:absolute; bottom:-22px; left:50%; transform:translateX(-50%); font-size:11px; color:#ffd966; white-space:nowrap; pointer-events:none;">🥔 AIM+FIRE</div>
     </div>`;
 
   // Insert into existing touchControls
