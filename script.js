@@ -55,8 +55,24 @@ let snowballs = [];
 let potatoMessage = "";
 let potatoMessageTimer = 0;
 let potatoHUDLine = "";
-let ambientLight = .67
-;
+let ambientLight = .67;
+
+let cannonProjectiles = [];
+let explosions = [];
+let cannonAimAngle = 0;       // radians, updated every frame from mouse or joystick
+let cannonCooldown = 0;       // prevents spray-firing
+const CANNON_COOLDOWN_FRAMES = 18;
+
+// Joystick state (mobile aiming)
+const joystick = {
+  active: false,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+  angle: 0,
+  magnitude: 0
+};
 
 const potatoDeathLines = [
   "🥔 that was avoidable",
@@ -302,6 +318,89 @@ bindTouch("btnAttack", "f");
 document.getElementById("btnPause").addEventListener("click", () => {
   togglePause();
 });
+
+// --- Mouse click to fire ---
+canvas.addEventListener("mousedown", (e) => {
+  if (!hasPotato || !gameRunning || gamePaused || gameOver) return;
+  if (e.button === 0) firePotatoCannon();
+});
+
+// --- Inject mobile joystick into touchControls div ---
+(function injectJoystick() {
+  const joystickHTML = `
+    <div id="potatoJoystickArea" style="display:none; position:relative; width:100px; height:100px; border-radius:50%; background:rgba(255,255,255,0.12); border:2px solid rgba(255,200,80,0.5); touch-action:none; flex-shrink:0;">
+      <div id="potatoJoystickKnob" style="position:absolute; width:40px; height:40px; border-radius:50%; background:rgba(181,139,74,0.9); border:2px solid #ffd966; top:50%; left:50%; transform:translate(-50%,-50%); pointer-events:none;"></div>
+      <div style="position:absolute; bottom:-22px; left:50%; transform:translateX(-50%); font-size:11px; color:#ffd966; white-space:nowrap;">🥔 AIM+FIRE</div>
+    </div>`;
+
+  // Insert into existing touchControls
+  const controls = document.getElementById("touchControls");
+  if (controls) {
+    controls.insertAdjacentHTML("beforeend", joystickHTML);
+  }
+
+  const zone  = document.getElementById("potatoJoystickArea");
+  const knob  = document.getElementById("potatoJoystickKnob");
+  if (!zone || !knob) return;
+
+  function getCenter() {
+    const r = zone.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  zone.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    joystick.active    = true;
+    joystick.startX    = t.clientX;
+    joystick.startY    = t.clientY;
+    joystick.currentX  = t.clientX;
+    joystick.currentY  = t.clientY;
+  }, { passive: false });
+
+  zone.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    joystick.currentX = t.clientX;
+    joystick.currentY = t.clientY;
+
+    const center = getCenter();
+    const dx = t.clientX - center.x;
+    const dy = t.clientY - center.y;
+    const maxR = 30;
+    const dist = Math.min(Math.hypot(dx, dy), maxR);
+    const angle = Math.atan2(dy, dx);
+
+    joystick.angle     = angle;
+    joystick.magnitude = dist / maxR;
+
+    // Move knob visually
+    knob.style.left = `calc(50% + ${Math.cos(angle) * dist}px)`;
+    knob.style.top  = `calc(50% + ${Math.sin(angle) * dist}px)`;
+  }, { passive: false });
+
+  function onJoystickRelease() {
+    if (joystick.active && joystick.magnitude > 0.15) {
+      cannonAimAngle = joystick.angle;
+      firePotatoCannon();
+    }
+    joystick.active    = false;
+    joystick.magnitude = 0;
+    knob.style.left = "50%";
+    knob.style.top  = "50%";
+    knob.style.transform = "translate(-50%, -50%)";
+  }
+
+  zone.addEventListener("touchend",    onJoystickRelease);
+  zone.addEventListener("touchcancel", onJoystickRelease);
+})();
+
+// Show/hide joystick based on potato state (call this wherever state changes)
+function syncJoystickVisibility() {
+  const zone = document.getElementById("potatoJoystickArea");
+  if (!zone) return;
+  zone.style.display = hasPotato ? "flex" : "none";
+}
 
 const crtToggle = document.getElementById("crtToggle");
 
@@ -686,6 +785,358 @@ document.addEventListener("keydown", (e) => {
     lightingEnabled = !lightingEnabled;
   }
 });
+
+// --- Aim update (called every frame in gameLoop) ---
+function updateCannonAim() {
+  if (!hasPotato) return;
+
+  if (!joystick.active) {
+    // Desktop: aim toward world-space mouse
+    const worldMouseX = mouse.x + camera.x;
+    const worldMouseY = mouse.y + camera.y;
+    const cx = player.x + player.width  / 2;
+    const cy = player.y + player.height / 2;
+    cannonAimAngle = Math.atan2(worldMouseY - cy, worldMouseX - cx);
+  } else {
+    cannonAimAngle = joystick.angle;
+  }
+
+  // Keep player facing the cannon direction
+  player.facing = Math.abs(cannonAimAngle) < Math.PI / 2 ? 1 : -1;
+
+  // Cooldown tick
+  if (cannonCooldown > 0) cannonCooldown--;
+}
+
+// --- Fire a projectile ---
+function firePotatoCannon() {
+  if (cannonCooldown > 0) return;
+
+  const speed = 14;
+  const cx = player.x + player.width  / 2;
+  const cy = player.y + player.height / 2;
+  const baked = potatoState === "baked";
+
+  cannonProjectiles.push({
+    x:         cx + Math.cos(cannonAimAngle) * 20,  // spawn at barrel tip
+    y:         cy + Math.sin(cannonAimAngle) * 20,
+    vx:        Math.cos(cannonAimAngle) * speed,
+    vy:        Math.sin(cannonAimAngle) * speed,
+    size:      baked ? 13 : 8,
+    explosive: baked,
+    alive:     true,
+    trail:     []
+  });
+
+  cannonCooldown = CANNON_COOLDOWN_FRAMES;
+
+  // Tiny recoil
+  player.dx -= Math.cos(cannonAimAngle) * 1.5;
+  player.dy -= Math.sin(cannonAimAngle) * 0.8;
+}
+
+// --- Update projectiles ---
+function updateCannonProjectiles() {
+  for (let i = cannonProjectiles.length - 1; i >= 0; i--) {
+    const p = cannonProjectiles[i];
+
+    if (!p.alive) { cannonProjectiles.splice(i, 1); continue; }
+
+    // Trail
+    p.trail.push({ x: p.x, y: p.y });
+    if (p.trail.length > 9) p.trail.shift();
+
+    // Physics
+    p.x  += p.vx;
+    p.y  += p.vy;
+    p.vy += 0.25;  // light gravity
+
+    // World bounds
+    if (p.x < 0 || p.x > world.width || p.y > world.height + 300) {
+      p.alive = false; continue;
+    }
+
+    // Wall collision
+    if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
+      if (p.explosive) createExplosion(p.x, p.y);
+      p.alive = false; continue;
+    }
+
+    // Enemy hit detection
+    const hitBox = { x: p.x - p.size, y: p.y - p.size, width: p.size * 2, height: p.size * 2 };
+    let hit = false;
+    const dmg = p.explosive ? 3 : 1;
+    const kb  = { x: p.vx * 0.4, y: -3 };
+
+    const enemyChecks = [
+      { list: snails,     key: 'snail' },
+      { list: SuperSnails,key: 'superSnail' },
+      { list: bats,       key: 'bat' },
+      { list: snowmen,    key: 'snowman' },
+    ];
+
+    for (const { list, key } of enemyChecks) {
+      if (hit) break;
+      for (let j = list.length - 1; j >= 0; j--) {
+        const e = list[j];
+        if (isColliding(hitBox, e)) {
+          damageEnemy(e, dmg, kb);
+          if (e.hp <= 0) { list.splice(j, 1); onEnemyKilled(key); }
+          hit = true; break;
+        }
+      }
+    }
+
+    // Yetis
+    if (!hit) for (const y of yetis) {
+      if (!y.alive) continue;
+      if (isColliding(hitBox, y)) {
+        damageEnemy(y, p.explosive ? 4 : 1, kb);
+        if (y.hp <= 0) { y.alive = false; onEnemyKilled('yeti'); }
+        hit = true; break;
+      }
+    }
+
+    // Turrets
+    if (!hit) for (let j = turrets.length - 1; j >= 0; j--) {
+      if (isColliding(hitBox, turrets[j])) {
+        damageEnemy(turrets[j], dmg, { x: 0, y: 0 });
+        if (turrets[j].hp <= 0) { turrets.splice(j, 1); onEnemyKilled('turret'); }
+        hit = true; break;
+      }
+    }
+
+    // Boxes — knock them away
+    if (!hit) for (const b of boxes) {
+      if (isColliding(hitBox, b)) {
+        damageBox(b, 1);
+        b.dx += p.vx * 0.5;
+        b.dy += p.vy * 0.3 - 2;
+        hit = true; break;
+      }
+    }
+
+    if (hit) {
+      if (p.explosive) createExplosion(p.x, p.y);
+      p.alive = false;
+    }
+  }
+}
+
+// --- Explosion (baked potato only) ---
+function createExplosion(x, y) {
+  explosions.push({ x, y, radius: 0, maxRadius: 85, timer: 28, maxTimer: 28 });
+
+  const R   = 85;
+  const dmg = 3;
+  const kb  = (ex, ey) => ({ x: (ex - x) * 0.12, y: -5 });
+
+  for (let j = snails.length - 1; j >= 0; j--) {
+    const s = snails[j];
+    if (Math.hypot((s.x + s.width/2) - x, (s.y + s.height/2) - y) < R) {
+      damageEnemy(s, dmg, kb(s.x, s.y));
+      if (s.hp <= 0) { snails.splice(j, 1); onEnemyKilled('snail'); }
+    }
+  }
+  for (let j = SuperSnails.length - 1; j >= 0; j--) {
+    const s = SuperSnails[j];
+    if (Math.hypot((s.x + s.width/2) - x, (s.y + s.height/2) - y) < R) {
+      damageEnemy(s, dmg, kb(s.x, s.y));
+      if (s.hp <= 0) { SuperSnails.splice(j, 1); onEnemyKilled('superSnail'); }
+    }
+  }
+  for (const yeti of yetis) {
+    if (!yeti.alive) continue;
+    if (Math.hypot((yeti.x + yeti.width/2) - x, (yeti.y + yeti.height/2) - y) < R) {
+      damageEnemy(yeti, 4, kb(yeti.x, yeti.y));
+      if (yeti.hp <= 0) { yeti.alive = false; onEnemyKilled('yeti'); }
+    }
+  }
+  for (let j = snowmen.length - 1; j >= 0; j--) {
+    const s = snowmen[j];
+    if (Math.hypot((s.x + s.width/2) - x, (s.y + s.height/2) - y) < R) {
+      damageEnemy(s, dmg, kb(s.x, s.y));
+      if (s.hp <= 0) { snowmen.splice(j, 1); onEnemyKilled('snowman'); }
+    }
+  }
+  for (const b of boxes) {
+    const dx   = (b.x + b.width/2)  - x;
+    const dy   = (b.y + b.height/2) - y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < R) {
+      const force = (1 - dist / R) * 16;
+      b.dx += (dx / dist) * force;
+      b.dy -= (1 - dist / R) * 10;
+    }
+  }
+
+  // Screen shake + VHS glitch
+  camera.x += (Math.random() - 0.5) * 22;
+  camera.y += (Math.random() - 0.5) * 22;
+  triggerVHSGlitch();
+
+  if (hasPotato) {
+    potatoMessage = "🥔🔥 BOOM";
+    potatoMessageTimer = 60;
+  }
+}
+
+// --- Update explosion animations ---
+function updateExplosions() {
+  for (let i = explosions.length - 1; i >= 0; i--) {
+    const e = explosions[i];
+    e.timer--;
+    e.radius = e.maxRadius * (1 - e.timer / e.maxTimer);
+    if (e.timer <= 0) explosions.splice(i, 1);
+  }
+}
+
+function drawPotatoCannon() {
+  if (!hasPotato) return;
+
+  const cx     = player.x + player.width  / 2;
+  const cy     = player.y + player.height / 2;
+  const baked  = potatoState === "baked";
+
+  // --- Draw cannon barrel ---
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(cannonAimAngle);
+
+  // Barrel body
+  ctx.fillStyle = baked ? "#6b3a1f" : "#5a3820";
+  ctx.fillRect(2, -5, 28, 10);
+
+  // Metal bands
+  ctx.fillStyle = baked ? "#9c5522" : "#7a5030";
+  ctx.fillRect(4,  -5, 4, 10);
+  ctx.fillRect(18, -5, 4, 10);
+
+  // Muzzle
+  ctx.fillStyle = baked ? "#ff7722" : "#4a2e18";
+  ctx.fillRect(27, -6, 5, 12);
+
+  // Baked: fiery glow around barrel
+  if (baked) {
+    ctx.shadowColor  = "#ff6600";
+    ctx.shadowBlur   = 14;
+    ctx.strokeStyle  = "#ffaa44";
+    ctx.lineWidth    = 1.5;
+    ctx.strokeRect(2, -5, 28, 10);
+  }
+
+  ctx.restore();
+
+  // --- Draw projectiles ---
+  for (const p of cannonProjectiles) {
+    if (!p.alive) continue;
+
+    // Trail
+    for (let j = 0; j < p.trail.length; j++) {
+      const frac  = j / p.trail.length;
+      const alpha = frac * 0.55;
+      const sz    = p.size * frac * 0.65;
+      ctx.fillStyle = p.explosive
+        ? `rgba(255,110,0,${alpha})`
+        : `rgba(160,100,40,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.trail[j].x, p.trail[j].y, Math.max(sz, 1), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Main ball (rectangle sprite placeholder)
+    ctx.save();
+    if (p.explosive) {
+      ctx.shadowColor = "#ff5500";
+      ctx.shadowBlur  = 18;
+    }
+    ctx.fillStyle = p.explosive ? "#ff8800" : "#b58b4a";
+    // Draw as small rectangle (swap for sprite when asset is ready)
+    const s = p.size;
+    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2);
+
+    // Inner highlight
+    ctx.fillStyle = p.explosive ? "#ffdd88" : "#d4aa6a";
+    ctx.fillRect(p.x - s + 2, p.y - s + 2, s - 2, s - 2);
+
+    ctx.restore();
+  }
+
+  // --- Draw explosions ---
+  for (const e of explosions) {
+    const alpha = e.timer / e.maxTimer;
+
+    // Outer shockwave ring
+    ctx.strokeStyle = `rgba(255,160,40,${alpha * 0.6})`;
+    ctx.lineWidth   = 3;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Gradient fill
+    const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.radius);
+    grad.addColorStop(0,   `rgba(255,220,80,${alpha * 0.85})`);
+    grad.addColorStop(0.35,`rgba(255,100,0,${alpha * 0.65})`);
+    grad.addColorStop(0.7, `rgba(200,40,0,${alpha * 0.3})`);
+    grad.addColorStop(1,   `rgba(100,20,0,0)`);
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// HUD crosshair — draw in screen-space (after ctx.restore for camera)
+function drawCannonCrosshair() {
+  if (!hasPotato || gameOver) return;
+
+  const screenMouseX = mouse.x;
+  const screenMouseY = mouse.y;
+
+  ctx.save();
+  ctx.translate(screenMouseX, screenMouseY);
+
+  const baked = potatoState === "baked";
+  const col   = baked ? "#ff8800" : "#ffd966";
+  const r     = 12;
+
+  ctx.strokeStyle = col;
+  ctx.lineWidth   = 2;
+
+  // Crosshair circle
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Cross lines
+  [[-r - 5, 0], [r + 5, 0], [0, -r - 5], [0, r + 5]].forEach(([tx, ty]) => {
+    ctx.beginPath();
+    ctx.moveTo(tx < 0 ? -r + 3 : r - 3, ty < 0 ? -r + 3 : r - 3);
+    ctx.lineTo(tx || (ty < 0 ? 0 : 0), ty || 0);
+    if (Math.abs(tx) > 0) { ctx.moveTo(tx < 0 ? -r : r, 0); ctx.lineTo(tx, 0); }
+    if (Math.abs(ty) > 0) { ctx.moveTo(0, ty < 0 ? -r : r); ctx.lineTo(0, ty); }
+    ctx.stroke();
+  });
+
+  // Simpler cross
+  ctx.beginPath();
+  ctx.moveTo(-r - 5, 0); ctx.lineTo(-r, 0);
+  ctx.moveTo( r,     0); ctx.lineTo( r + 5, 0);
+  ctx.moveTo(0, -r - 5); ctx.lineTo(0, -r);
+  ctx.moveTo(0,  r);     ctx.lineTo(0,  r + 5);
+  ctx.stroke();
+
+  if (baked) {
+    ctx.fillStyle = `rgba(255,140,0,0.25)`;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function drawSnowAura(s) {
   const cx = s.x + s.width / 2;
   const cy = s.y + s.height / 2;
@@ -3335,6 +3786,10 @@ function resetGameState() {
  hasPotato = false;
   potato.collected = false;
 
+  cannonProjectiles = [];
+  explosions = [];
+  cannonCooldown = 0;
+  syncJoystickVisibility();
   potatoMessage = "";
   potatoMessageTimer = 0;
   potatoHUDLine = "";
@@ -4413,6 +4868,10 @@ function resetGame() {
   gameOver = false;
   resetPlayer();
 
+  cannonProjectiles = [];
+  explosions = [];
+  cannonCooldown = 0;
+  syncJoystickVisibility();
   // --- POTATO RESET ---
   hasPotato = false;
   potato.collected = false;
@@ -5528,6 +5987,10 @@ function resetWorld() {
   player.speed *= 1;
   player.jumpPower *= 1;
 
+  cannonProjectiles = [];
+  explosions = [];
+  cannonCooldown = 0;
+  syncJoystickVisibility();
   waveSystem = {
   enabled: false,
   currentWave: 0,
@@ -6226,6 +6689,7 @@ if (player.attackCharging) {
   drawBats();
   drawSpecialBoxes();
   drawPlayerSword();
+  drawPotatoCannon();
   drawLighting();
   drawEnemyHealthBars();
     drawEnemyHealthBars();
@@ -6273,6 +6737,7 @@ if (devMapView) {
   drawWaveUI();  
       ctx.restore();
 
+  drawCannonCrosshair();
   if (devMapView) {
   drawDevRulers(devScale);
 }
@@ -6300,6 +6765,10 @@ saveInitialState();
     updatePlayer();
     updatePlayerSwordAttack();
     updateBats();
+    updateCannonAim();
+    updateCannonProjectiles();
+    updateExplosions();
+    syncJoystickVisibility();
     //updateBoxes();
     updateSpecialBoxes();
     updateWallSliding();
