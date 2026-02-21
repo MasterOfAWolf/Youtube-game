@@ -4304,7 +4304,7 @@ function updateSnails() {
 
   snail.frameTimer++;
 
-  if (snail.frameTimer > 20) { // speed control
+  if (snail.frameTimer > 40) { // speed control
     snail.frameTimer = 0;
     snail.frame++;
 
