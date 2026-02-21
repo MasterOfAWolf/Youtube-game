@@ -329,44 +329,36 @@ canvas.addEventListener("mousedown", (e) => {
 (function injectJoystick() {
   const joystickHTML = `
     <div id="potatoJoystickArea" style="
-      display:none;
-      position:relative;
-      width:90px; height:90px;
-      border-radius:50%;
-      background:rgba(255,255,255,0.12);
-      border:2px solid rgba(255,200,80,0.5);
-      touch-action:none;
-      pointer-events:auto;
+      display:none; 
+      position:relative; 
+      width:80px; 
+      height:80px; 
+      border-radius:50%; 
+      background:rgba(255,255,255,0.15); 
+      border:2px solid #ffd966; 
+      touch-action:none; 
       flex-shrink:0;
-      align-self:flex-end;
-      margin-bottom:0px;
     ">
       <div id="potatoJoystickKnob" style="
-        position:absolute; width:36px; height:36px;
-        border-radius:50%;
-        background:rgba(181,139,74,0.9);
-        border:2px solid #ffd966;
-        top:50%; left:50%;
-        transform:translate(-50%,-50%);
+        position:absolute; 
+        width:32px; 
+        height:32px; 
+        border-radius:50%; 
+        background:#b58b4a; 
+        border:2px solid #ffd966; 
+        top:50%; 
+        left:50%; 
+        transform:translate(-50%,-50%); 
         pointer-events:none;
       "></div>
-      <div style="
-        position:absolute; bottom:-20px; left:50%;
-        transform:translateX(-50%);
-        font-size:10px; color:#ffd966;
-        white-space:nowrap; pointer-events:none;
-      ">🥔 AIM</div>
+      <div style="position:absolute; bottom:-22px; left:50%; transform:translateX(-50%); font-size:10px; color:#ffd966; font-weight:bold; white-space:nowrap; pointer-events:none;">🥔 AIM</div>
     </div>`;
 
-  // Insert between the two control groups
-  const controls = document.getElementById("touchControls");
-  const rightControls = controls.querySelector(".right-controls");
-  if (controls && rightControls) {
-    rightControls.insertAdjacentHTML("beforebegin", joystickHTML);
-  } else if (controls) {
-    controls.insertAdjacentHTML("beforeend", joystickHTML);
+  const rightControls = document.querySelector(".right-controls");
+  if (rightControls) {
+    // Append it to the right-controls container
+    rightControls.insertAdjacentHTML("beforeend", joystickHTML);
   }
-
   const zone = document.getElementById("potatoJoystickArea");
   const knob = document.getElementById("potatoJoystickKnob");
   if (!zone || !knob) return;
