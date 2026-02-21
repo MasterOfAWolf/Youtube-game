@@ -6,6 +6,11 @@ canvas.width = 800;
 canvas.height = 400;
 let pixelMode = false;
 
+const TARGET_FPS = 60;
+const FRAME_DURATION = 1000 / TARGET_FPS; // ~16.67ms per frame
+let lastFrameTime = 0;
+let deltaTime = 0;
+
 const bgTile = new Image();
 bgTile.src = "Assets/Tiles/Cobblestone BG.png";
 
@@ -1282,6 +1287,7 @@ function startGame() {
   
   gameRunning = true;
   gamePaused = false;
+  lastFrameTime = performance.now();
   lastTimestamp = performance.now();
 
   // Start loop
@@ -2068,6 +2074,7 @@ function startLevel(level) {
 
   gameRunning = true;
   gamePaused = false;
+  lastFrameTime = performance.now();
   lastTimestamp = performance.now();
 
   gameLoopId = requestAnimationFrame(gameLoop);
@@ -3736,6 +3743,7 @@ function startWaveModeLevel(level) {
   
   gameRunning = true;
   gamePaused = false;
+  lastFrameTime = performance.now();
   lastTimestamp = performance.now();
   
   gameLoopId = requestAnimationFrame(gameLoop);
@@ -6794,9 +6802,17 @@ if (devMapView) {
 saveInitialState();
 
 // --- MAIN LOOP ---
-
-  function gameLoop() {
+function gameLoop(currentTime) {
   if (!gameRunning) return;
+
+  // Calculate time since last frame
+  deltaTime = currentTime - lastFrameTime;
+
+  // Only update if enough time has passed (60 FPS cap)
+  if (deltaTime >= FRAME_DURATION) {
+    // Track how much extra time we have
+    const excess = deltaTime % FRAME_DURATION;
+    lastFrameTime = currentTime - excess;
 
   if (!gamePaused) {
     updateWaveSystem();
@@ -6837,7 +6853,7 @@ saveInitialState();
     drawOven();
     draw();
   }
-
+  }
   requestAnimationFrame(gameLoop);
 }
 gameLoop();
