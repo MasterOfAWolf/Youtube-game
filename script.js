@@ -328,66 +328,114 @@ canvas.addEventListener("mousedown", (e) => {
 // --- Inject mobile joystick into touchControls div ---
 (function injectJoystick() {
   const joystickHTML = `
-    <div id="potatoJoystickArea" style="display:none; position:fixed; bottom:90px; left:50%; transform:translateX(-50%); width:100px; height:100px; border-radius:50%; background:rgba(255,255,255,0.12); border:2px solid rgba(255,200,80,0.5); touch-action:none; pointer-events:auto; z-index:20;">
-      <div id="potatoJoystickKnob" style="position:absolute; width:40px; height:40px; border-radius:50%; background:rgba(181,139,74,0.9); border:2px solid #ffd966; top:50%; left:50%; transform:translate(-50%,-50%); pointer-events:none;"></div>
-      <div style="position:absolute; bottom:-22px; left:50%; transform:translateX(-50%); font-size:11px; color:#ffd966; white-space:nowrap; pointer-events:none;">🥔 AIM+FIRE</div>
+    <div id="potatoJoystickArea" style="
+      display:none;
+      position:relative;
+      width:90px; height:90px;
+      border-radius:50%;
+      background:rgba(255,255,255,0.12);
+      border:2px solid rgba(255,200,80,0.5);
+      touch-action:none;
+      pointer-events:auto;
+      flex-shrink:0;
+      align-self:flex-end;
+      margin-bottom:0px;
+    ">
+      <div id="potatoJoystickKnob" style="
+        position:absolute; width:36px; height:36px;
+        border-radius:50%;
+        background:rgba(181,139,74,0.9);
+        border:2px solid #ffd966;
+        top:50%; left:50%;
+        transform:translate(-50%,-50%);
+        pointer-events:none;
+      "></div>
+      <div style="
+        position:absolute; bottom:-20px; left:50%;
+        transform:translateX(-50%);
+        font-size:10px; color:#ffd966;
+        white-space:nowrap; pointer-events:none;
+      ">🥔 AIM</div>
     </div>`;
 
-  // Insert into existing touchControls
+  // Insert between the two control groups
   const controls = document.getElementById("touchControls");
-  if (controls) {
+  const rightControls = controls.querySelector(".right-controls");
+  if (controls && rightControls) {
+    rightControls.insertAdjacentHTML("beforebegin", joystickHTML);
+  } else if (controls) {
     controls.insertAdjacentHTML("beforeend", joystickHTML);
   }
 
-  const zone  = document.getElementById("potatoJoystickArea");
-  const knob  = document.getElementById("potatoJoystickKnob");
+  const zone = document.getElementById("potatoJoystickArea");
+  const knob = document.getElementById("potatoJoystickKnob");
   if (!zone || !knob) return;
 
-  function getCenter() {
-    const r = zone.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  }
+  let activeTouchId = null; // ← track which finger owns the joystick
 
   zone.addEventListener("touchstart", (e) => {
     e.preventDefault();
-    const t = e.touches[0];
-    joystick.active    = true;
-    joystick.startX    = t.clientX;
-    joystick.startY    = t.clientY;
-    joystick.currentX  = t.clientX;
-    joystick.currentY  = t.clientY;
+    if (activeTouchId !== null) return; // already tracking a finger
+    const t = e.changedTouches[0];
+    activeTouchId = t.identifier;
+    joystick.active   = true;
+    joystick.startX   = t.clientX;
+    joystick.startY   = t.clientY;
+    joystick.currentX = t.clientX;
+    joystick.currentY = t.clientY;
   }, { passive: false });
 
   zone.addEventListener("touchmove", (e) => {
     e.preventDefault();
-    const t = e.touches[0];
+    // Only respond to the finger that started on this joystick
+    let t = null;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === activeTouchId) {
+        t = e.changedTouches[i];
+        break;
+      }
+    }
+    if (!t) return;
+
     joystick.currentX = t.clientX;
     joystick.currentY = t.clientY;
 
-    const center = getCenter();
-    const dx = t.clientX - center.x;
-    const dy = t.clientY - center.y;
-    const maxR = 30;
-    const dist = Math.min(Math.hypot(dx, dy), maxR);
-    const angle = Math.atan2(dy, dx);
+    const rect   = zone.getBoundingClientRect();
+    const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    const dx     = t.clientX - center.x;
+    const dy     = t.clientY - center.y;
+    const maxR   = 30;
+    const dist   = Math.min(Math.hypot(dx, dy), maxR);
+    const angle  = Math.atan2(dy, dx);
 
     joystick.angle     = angle;
     joystick.magnitude = dist / maxR;
 
-    // Move knob visually
-    knob.style.left = `calc(50% + ${Math.cos(angle) * dist}px)`;
-    knob.style.top  = `calc(50% + ${Math.sin(angle) * dist}px)`;
+    knob.style.left      = `calc(50% + ${Math.cos(angle) * dist}px)`;
+    knob.style.top       = `calc(50% + ${Math.sin(angle) * dist}px)`;
+    knob.style.transform = "none";
   }, { passive: false });
 
-  function onJoystickRelease() {
+  function onJoystickRelease(e) {
+    // Check if the released finger is the one we're tracking
+    let found = false;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === activeTouchId) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) return; // a different finger lifted, ignore
+
     if (joystick.active && joystick.magnitude > 0.15) {
       cannonAimAngle = joystick.angle;
       firePotatoCannon();
     }
+    activeTouchId      = null;
     joystick.active    = false;
     joystick.magnitude = 0;
-    knob.style.left = "50%";
-    knob.style.top  = "50%";
+    knob.style.left      = "50%";
+    knob.style.top       = "50%";
     knob.style.transform = "translate(-50%, -50%)";
   }
 
