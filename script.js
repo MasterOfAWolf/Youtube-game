@@ -5384,7 +5384,7 @@ function bakePotato(oven) {
   oven.baked = true;
   oven.active = false;
 
-  hasPotato = false;
+  potatoState = "baked";
   potatoChaosLevel = 2;
 
   potatoMessage = randomFrom([
