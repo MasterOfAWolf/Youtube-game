@@ -369,3 +369,19 @@ body::selection {
     -2px 0 rgba(255,0,0,0.2),
      2px 0 rgba(0,255,255,0.2);
 }
+/* Update the right-controls to handle the joystick as a child */
+.right-controls {
+  position: fixed;
+  right: 10px;
+  bottom: 20px;
+  display: flex;
+  align-items: flex-end; /* Align bottom of joystick with bottom of buttons */
+  gap: 15px;
+  flex-direction: row-reverse; /* Puts joystick to the LEFT of the buttons */
+}
+
+#potatoJoystickArea {
+  pointer-events: auto;
+  z-index: 11; /* Slightly higher than standard buttons */
+  margin-bottom: 5px; /* Tiny adjustment to center with circular buttons */
+}
