@@ -128,39 +128,15 @@ const MAP_HEIGHT = 2100;
 const WALL_THICKNESS = 30;
 
 // === MUSIC MODULE ===
-const bgMusic = new Audio("Assets/Music/Dungeon Synth.mp3");
+const bgMusic = new Audio("Assets/Music/Dungeon%20Synth.mp3");
 bgMusic.loop = true;
 bgMusic.volume = 0.5;
 
-// Try to play on first user interaction (browser autoplay policy)
-let musicStarted = false;
-function tryStartMusic() {
-  if (musicStarted) return;
+function startMusic() {
   const toggle = document.getElementById("musicToggle");
-  if (toggle && toggle.checked) {
-    bgMusic.play().catch(() => {}); // silently ignore if blocked
-  }
-  musicStarted = true;
+  if (toggle && !toggle.checked) return;
+  bgMusic.play().catch(() => {});
 }
-
-document.addEventListener("pointerdown", tryStartMusic, { once: true });
-document.addEventListener("keydown", tryStartMusic, { once: true });
-
-const buttons = document.querySelectorAll("#touchControls button");
-
-// Handle pointer/touch highlights
-buttons.forEach(button => {
-  button.addEventListener("pointerdown", () => {
-    button.classList.add("pressed");
-  });
-
-  button.addEventListener("pointerup", () => {
-    button.classList.remove("pressed");
-  });
-  button.addEventListener("pointerleave", () => {
-    button.classList.remove("pressed");
-  });
-});
 
 document.getElementById("musicToggle").addEventListener("change", function () {
   if (this.checked) {
@@ -169,7 +145,6 @@ document.getElementById("musicToggle").addEventListener("change", function () {
     bgMusic.pause();
   }
 });
-
 // Map keys to buttons
 const keyMap = {
   "ArrowLeft": "btnLeft",
@@ -2098,7 +2073,7 @@ function startLevel(level) {
   resetGameState(); // reset player & flags
 
   loadLevel(level); // THIS is now the only loader
-
+  startMusic();
   gameRunning = true;
   gamePaused = false;
   lastFrameTime = performance.now();
@@ -3765,7 +3740,7 @@ function startWaveModeLevel(level) {
   stopGameLoop();
   resetGameState();
   loadLevel(level);
-  
+  startMusic();
   startWaveMode(level);
   
   gameRunning = true;
