@@ -127,6 +127,25 @@ const MAP_WIDTH = 2800;
 const MAP_HEIGHT = 2100;
 const WALL_THICKNESS = 30;
 
+// === MUSIC MODULE ===
+const bgMusic = new Audio("Assets/Music/Dungeon Synth.mp3");
+bgMusic.loop = true;
+bgMusic.volume = 0.5;
+
+// Try to play on first user interaction (browser autoplay policy)
+let musicStarted = false;
+function tryStartMusic() {
+  if (musicStarted) return;
+  const toggle = document.getElementById("musicToggle");
+  if (toggle && toggle.checked) {
+    bgMusic.play().catch(() => {}); // silently ignore if blocked
+  }
+  musicStarted = true;
+}
+
+document.addEventListener("pointerdown", tryStartMusic, { once: true });
+document.addEventListener("keydown", tryStartMusic, { once: true });
+
 const buttons = document.querySelectorAll("#touchControls button");
 
 // Handle pointer/touch highlights
@@ -141,6 +160,14 @@ buttons.forEach(button => {
   button.addEventListener("pointerleave", () => {
     button.classList.remove("pressed");
   });
+});
+
+document.getElementById("musicToggle").addEventListener("change", function () {
+  if (this.checked) {
+    bgMusic.play().catch(() => {});
+  } else {
+    bgMusic.pause();
+  }
 });
 
 // Map keys to buttons
