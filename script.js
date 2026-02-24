@@ -17,6 +17,9 @@ bgTile.src = "Assets/Tiles/Cobblestone BG.png";
 const snailImg = new Image();
 snailImg.src = "Assets/Sprites/snail-pixilart.png";
 
+const playerImg = new Image();
+snailImg.src = "Assets/Sprites/Player.png";
+
 const snailFrames = [];
 
 const snail1 = new Image();
@@ -6330,6 +6333,184 @@ function drawSnow() {
   }
 }
 
+function drawPlayer() {
+  const px = player.x;
+  const py = player.y;
+  const pw = player.width;   // 32
+  const ph = player.height;  // 32
+  const f  = player.facing;  // 1 = right, -1 = left
+
+  // ── shared state booleans ────────────────────────────────
+  const sliding  = player.wallSliding;
+  const airborne = !player.onGround && !sliding;
+  const moving   = Math.abs(player.dx) > 0.4 && player.onGround;
+  const charging = player.attackCharging;
+  const swinging = player.attackTimer > 0;
+
+  // ── walk-cycle tick (reuse existing frame counter) ───────
+  // piggyback on a simple counter stored on the player object
+  if (!player._walkTick) player._walkTick = 0;
+  if (moving) player._walkTick += 0.25;
+
+  const legSwing = moving ? Math.sin(player._walkTick) * 6 : 0;
+
+  ctx.save();
+
+  // ── flash white when charging attack ────────────────────
+  if (charging) {
+    ctx.globalAlpha = 0.7 + Math.sin(performance.now() * 0.04) * 0.3;
+  }
+
+  // ── flip context so we always draw facing right ──────────
+  ctx.translate(px + pw / 2, py);
+  ctx.scale(f, 1);           // mirror for left-facing
+  const cx = 0;              // local centre-x (after translate)
+
+  // ─────────────────────────────────────────────────────────
+  //  SHADOW (only when on ground)
+  // ─────────────────────────────────────────────────────────
+  if (player.onGround) {
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.beginPath();
+    ctx.ellipse(cx, ph + 2, 12, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  LEGS
+  // ─────────────────────────────────────────────────────────
+  const legW = 7, legH = 10;
+  const legY = ph - legH;
+
+  // jump pose: legs tucked; wall-slide: legs out to the wall side
+  let leftLegOX  = sliding ? -4 :  -legSwing * 0.8;
+  let rightLegOX = sliding ?  4 :   legSwing * 0.8;
+  let leftLegOY  = sliding ?  4 : airborne ? -3 : 0;
+  let rightLegOY = sliding ?  4 : airborne ? -3 : 0;
+
+  ctx.fillStyle = "#c0392b";
+  // left leg
+  ctx.fillRect(cx - 8 + leftLegOX,  legY + leftLegOY,  legW, legH);
+  // right leg
+  ctx.fillRect(cx + 1 + rightLegOX, legY + rightLegOY, legW, legH);
+
+  // boots
+  ctx.fillStyle = "#7f3a25";
+  ctx.fillRect(cx - 9 + leftLegOX,  legY + leftLegOY  + legH - 3, legW + 2, 4);
+  ctx.fillRect(cx      + rightLegOX, legY + rightLegOY + legH - 3, legW + 2, 4);
+
+  // ─────────────────────────────────────────────────────────
+  //  BODY
+  // ─────────────────────────────────────────────────────────
+  const bodyColor = sliding  ? "#e74c3c"   // bright red when sliding
+                  : swinging ? "#ff6b35"   // orange flash when attacking
+                  : charging ? "#fff"      // white charge-up
+                             : "#e74c3c";  // default red
+
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  // slightly rounded rect for the torso
+  const bx = cx - 9, by = ph - legH - 14, bw = 18, bh = 14;
+  ctx.roundRect(bx, by, bw, bh, 3);
+  ctx.fill();
+
+  // belt
+  ctx.fillStyle = "#7f3a25";
+  ctx.fillRect(bx, by + bh - 4, bw, 3);
+
+  // ─────────────────────────────────────────────────────────
+  //  ARMS
+  // ─────────────────────────────────────────────────────────
+  const armY   = by + 2;
+  const armSwg = moving ? legSwing * 0.6 : 0;
+
+  ctx.fillStyle = "#c0392b";
+
+  // back arm (left in local space)
+  ctx.fillRect(cx - 14, armY - armSwg, 5, 11);
+  // front arm (right in local space)
+  const frontArmY = swinging ? armY - 6 : armY + armSwg;
+  ctx.fillRect(cx + 9,  frontArmY, 5, 11);
+
+  // glove / fist
+  ctx.fillStyle = "#7f3a25";
+  ctx.beginPath();
+  ctx.arc(cx + 11, frontArmY + 11, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ─────────────────────────────────────────────────────────
+  //  HEAD
+  // ─────────────────────────────────────────────────────────
+  const headTilt = sliding ? 0.25 : swinging ? -0.15 : airborne ? -0.1 : 0;
+  ctx.save();
+  ctx.translate(cx, by - 2);
+  ctx.rotate(headTilt);
+
+  // skull
+  ctx.fillStyle = "#f4c08a";
+  ctx.beginPath();
+  ctx.ellipse(0, -5, 9, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // hair / helmet
+  ctx.fillStyle = "#3d2314";
+  ctx.fillRect(-9, -14, 18, 8);
+  ctx.beginPath();
+  ctx.ellipse(0, -13, 9, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ── eye ─────────────────────────────────────────────────
+  // one visible eye on the facing side
+  const eyeX   = 4;
+  const eyeCol = swinging ? "#ff2200"
+               : charging ? "#ffe000"
+               : "#1a1a2e";
+  ctx.fillStyle = eyeCol;
+  ctx.beginPath();
+  ctx.ellipse(eyeX, -6, 2.5, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // pupil
+  if (!swinging && !charging) {
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(eyeX + 0.8, -6.5, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── expression line (mouth) ───────────────────────────
+  ctx.strokeStyle = "#7f3a25";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  if (sliding) {
+    // alarmed O-mouth
+    ctx.arc(3, -2, 2, 0, Math.PI * 2);
+  } else if (swinging) {
+    // gritted teeth / grimace
+    ctx.moveTo(1, -1); ctx.lineTo(6, -1);
+  } else {
+    // neutral
+    ctx.moveTo(2, -1.5); ctx.lineTo(5, -1);
+  }
+  ctx.stroke();
+
+  ctx.restore(); // head transform
+
+  // ─────────────────────────────────────────────────────────
+  //  WALL-SLIDE SPARKS
+  // ─────────────────────────────────────────────────────────
+  if (sliding) {
+    ctx.fillStyle = "#ffd966";
+    for (let i = 0; i < 3; i++) {
+      const sx = cx + (f > 0 ? 10 : -10) + (Math.random() - 0.5) * 4;
+      const sy = by + Math.random() * 20;
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+  }
+
+  ctx.restore(); // main save
+}
+
 function drawIcicles() {
   if (!isChristmasMap()) return;
 
@@ -6592,11 +6773,7 @@ function drawSnails() {
   drawSuperSnails();
   drawYetis();
   drawSnowballs();
-  
-
-  // Draw player
-  ctx.fillStyle = player.wallSliding ? "#fc5f53" : "#e33";
-  ctx.fillRect(player.x, player.y, player.width, player.height);
+  drawPlayer();
 
   // --- POTATO FLOATING MESSAGE ---
 if (potatoMessageTimer > 0) {
