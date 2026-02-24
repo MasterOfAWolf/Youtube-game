@@ -1368,13 +1368,14 @@ function loadMap_Level1() {
  addMapBounds();
 
   /* ------------------ MAIN GROUND PATH ------------------ */
-  walls.push(
+    walls.push(
     { x: 30, y: 570, width: 600, height: 20 },
     { x: 700, y: 570, width: 500, height: 20 },
     { x: 1300, y: 570, width: 600, height: 20 },
-    { x: 2000, y: 570, width: 740, height: 20 }
+    { x: 2000, y: 570, width: 700, height: 20 },
+    { x: 2690, y: 570, width: 20, height: 1380 },
+    { x: 30, y: 570, width: 620, height: 20 }
   );
-
   /* ------------------ LOWER PLATFORMS ------------------ */
   walls.push(
     { x: 200, y: 450, width: 160, height: 20 },
