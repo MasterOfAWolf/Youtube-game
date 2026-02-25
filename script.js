@@ -33,6 +33,13 @@ snail3.src = "Assets/Sprites/Snail 3.png";
 
 snailFrames.push(snail1, snail2, snail3, snail2);
 
+const chairFrames = [];
+for (let i = 0; i < 5; i++) {
+  const img = new Image();
+  img.src = `Assets/Sprites/pixil-frame-${i}.png`;
+  chairFrames.push(img);
+}
+
 let wasOff = true; 
 let lightingEnabled = true;
 let lights = [];
@@ -46,6 +53,8 @@ let enemies = [];
 let walls = [];
 let boxes = [];
 let items = [];
+let chairs = [];
+let initialChairs = [];
 let bats = [];
 let ladders = [];
 let spikes = [];
@@ -1387,6 +1396,9 @@ function loadMap_Level1() {
     { x: 2690, y: 570, width: 20, height: 1380 },
     { x: 30, y: 570, width: 620, height: 20 }
   );
+
+    chairs.push(createChair(500, 540));
+  chairs.push(createChair(1200, 540));
   /* ------------------ LOWER PLATFORMS ------------------ */
   walls.push(
     { x: 200, y: 450, width: 160, height: 20 },
@@ -3014,7 +3026,21 @@ function drawEnemyHealthBars() {
     ctx.lineWidth = 1;
     ctx.strokeRect(x, y, barWidth, barHeight);
   }
-  
+  for (let c of chairs) {
+    if (!c.hp || c.hp <= 0) continue;
+    const barWidth = 32;
+    const barHeight = 4;
+    const x = c.x + (c.width - barWidth) / 2;
+    const y = c.y - 8;
+    ctx.fillStyle = "#300";
+    ctx.fillRect(x, y, barWidth, barHeight);
+    const hp = c.hp / c.maxHp;
+    ctx.fillStyle = hp > 0.5 ? "#0f0" : hp > 0.25 ? "#ff0" : "#f00";
+    ctx.fillRect(x, y, barWidth * hp, barHeight);
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, barWidth, barHeight);
+  }
   for (let b of bats) {
     if (!b.hp || b.hp <= 0) continue;
     
@@ -3869,7 +3895,7 @@ function resetGameState() {
   potatoHUDLine = "";
   potatoState = "none";
   // "none" | "raw" | "baked"
-
+  if (initialChairs && initialChairs.length) chairs = initialChairs.map(c => ({ ...c }));
   if (initialBoxes && initialBoxes.length) boxes = initialBoxes.map(b => ({ ...b }));
   if (initialSnails && initialSnails.length) snails = initialSnails.map(s => ({ ...s }));
   if (initialSuperSnails && initialSuperSnails.length) SuperSnails = initialSuperSnails.map(s => ({ ...s }));
@@ -3966,6 +3992,7 @@ function saveInitialState() {
   initialWalls = walls.map(w => ({ ...w }));
   initialSpikes = spikes.map(s => ({ ...s }));
   initialLadders = ladders.map(l => ({ ...l }));
+  initialChairs = chairs.map(c => ({ ...c }));
   
   
 }
@@ -5518,6 +5545,137 @@ function tryDash() {
   if (!player.onGround) player.dashUsedInAir = true;
 }
 
+// === CHAIR MODULE ===
+function createChair(x, y) {
+  return {
+    x, y,
+    width: 40,
+    height: 48,
+    dx: 0,
+    dy: 0,
+    dir: Math.random() > 0.5 ? 1 : -1,
+    speed: 1.2 + Math.random() * 0.6,
+    frame: 0,
+    frameTimer: 0,
+    frameSpeed: 7,
+    onGround: false,
+    hp: 3,
+    maxHp: 3,
+    hitFlash: 0,
+    knockbackTimer: 0,
+    knockbackDx: 0,
+    knockbackDy: 0
+  };
+}
+
+function updateChairs() {
+  for (let c of chairs) {
+
+    if (c.hitFlash > 0) c.hitFlash--;
+
+    // Knockback
+    if (c.knockbackTimer > 0) {
+      c.x += c.knockbackDx;
+      c.y += c.knockbackDy;
+      c.knockbackDx *= 0.85;
+      c.knockbackDy *= 0.85;
+      c.knockbackTimer--;
+      continue;
+    }
+
+    // Gravity
+    c.dy += gravity;
+    if (c.dy > 12) c.dy = 12;
+
+    c.dx = c.dir * c.speed;
+    c.x += c.dx;
+    c.y += c.dy;
+    c.onGround = false;
+
+    // Wall collisions
+    for (let wall of walls) {
+      if (!isColliding(c, wall)) continue;
+      const ox = Math.min(c.x + c.width - wall.x, wall.x + wall.width - c.x);
+      const oy = Math.min(c.y + c.height - wall.y, wall.y + wall.height - c.y);
+
+      if (ox < oy) {
+        c.x += c.x < wall.x ? -ox : ox;
+        c.dir *= -1;
+        c.dx = 0;
+      } else {
+        if (c.y < wall.y) {
+          c.y -= oy;
+          c.dy = 0;
+          c.onGround = true;
+        } else {
+          c.y += oy;
+          c.dy = 0;
+        }
+      }
+    }
+
+    // Edge detection — turn before falling off ledge
+    if (c.onGround) {
+      const frontX = c.dir > 0 ? c.x + c.width + 2 : c.x - 2;
+      const frontY = c.y + c.height + 4;
+      let groundAhead = false;
+      for (let wall of walls) {
+        if (frontX > wall.x && frontX < wall.x + wall.width &&
+            frontY > wall.y && frontY < wall.y + wall.height) {
+          groundAhead = true;
+          break;
+        }
+      }
+      if (!groundAhead) c.dir *= -1;
+    }
+
+    // Animation
+    c.frameTimer++;
+    if (c.frameTimer >= c.frameSpeed) {
+      c.frameTimer = 0;
+      c.frame = (c.frame + 1) % chairFrames.length;
+    }
+
+    // --- PLAYER COLLISION ---
+    if (!isColliding(c, player)) continue;
+
+    const playerFeet = player.y + player.height;
+    const chairMid = c.y + c.height * 0.5; // halfway down sprite
+
+    const landingFromAbove = playerFeet <= chairMid + 8 && player.dy >= 0;
+
+    if (landingFromAbove) {
+      // Safe zone — ride it
+      player.y = c.y - player.height;
+      player.dy = 0;
+      player.onGround = true;
+      player.x += c.dx; // carry player along
+    } else {
+      // Leg zone — ouch
+      loseLife();
+    }
+  }
+}
+
+function drawChairs() {
+  for (let c of chairs) {
+    const img = chairFrames[c.frame];
+    if (!img || !img.complete) continue;
+
+    ctx.save();
+    if (c.hitFlash > 0) ctx.filter = "brightness(8)";
+
+    if (c.dir < 0) {
+      ctx.translate(c.x + c.width, c.y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+    } else {
+      ctx.drawImage(img, c.x, c.y, c.width, c.height);
+    }
+    ctx.restore();
+  }
+}
+
 // --- UPDATE PLAYER ---
 function updatePlayer() {
   if (gameOver) return;
@@ -6054,6 +6212,21 @@ function updatePlayerSwordAttack() {
       player.attackHitObjects.add(box);
     }
   }
+    // Hit chairs
+  for (let i = chairs.length - 1; i >= 0; i--) {
+    let c = chairs[i];
+    if (isColliding(attackBox, c) && !player.attackHitObjects.has(c)) {
+      const died = damageEnemy(c, 1, {
+        x: player.attackKnockback * 2 * Math.sign(c.x - player.x),
+        y: -player.attackKnockback * 1.5
+      });
+      if (died) {
+        chairs.splice(i, 1);
+        onEnemyKilled('chair');
+      }
+      player.attackHitObjects.add(c);
+    }
+  }
 }
 
 function resetWorld() {
@@ -6063,6 +6236,7 @@ function resetWorld() {
   boxes = [];
   snails = [];
   bats = [];
+  chairs = [];
   SuperSnails = [];
   ladders = [];
   spikes = [];
@@ -6632,7 +6806,7 @@ function drawSnails() {
   for (let b of boxes) {
   drawBox(b);
 }
-
+  drawChairs();
   drawSnails();
   drawSuperSnails();
   drawYetis();
@@ -6816,7 +6990,6 @@ if (player.dashActive || player.dashDuration > 0) {
   drawPotatoCannon();
   drawLighting();
   drawEnemyHealthBars();
-    drawEnemyHealthBars();
   ctx.restore(); // Restore camera transform for HUD
 
   drawOffScreenIndicators();
@@ -6935,6 +7108,7 @@ function gameLoop(currentTime) {
     potatoChaos();
     updateOvens(player);
     updateSnails();
+    updateChairs();
     updateSuperSnails();
     updateCamera();
     updateSnow();
