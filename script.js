@@ -5561,10 +5561,12 @@ if (
 }
 
 // hard clamp speed (THIS is the important part)
-player.dx = Math.max(
-  -moveSpeed,
-  Math.min(player.dx, moveSpeed)
-);
+if (!player.dashActive) {
+  player.dx = Math.max(
+    -moveSpeed,
+    Math.min(player.dx, moveSpeed)
+  );
+}
 
 
   // Jumping
