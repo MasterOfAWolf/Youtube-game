@@ -71,6 +71,7 @@ let cannonAimAngle = 0;       // radians, updated every frame from mouse or joys
 let cannonCooldown = 0;       // prevents spray-firing
 const CANNON_COOLDOWN_FRAMES = 18;
 
+const attackBtn = document.getElementById("btnAttack");
 // Joystick state (mobile aiming)
 const joystick = {
   active: false,
@@ -3958,15 +3959,6 @@ function saveInitialState() {
   initialLadders = ladders.map(l => ({ ...l }));
   
   
-}
-
-for (let oven of ovens) {
-  if (!oven.used &&
-      potatoState === "raw" &&
-      isColliding(player, oven)) {
-
-    bakePotato(oven);
-  }
 }
 
 function bakePotato(oven) {
