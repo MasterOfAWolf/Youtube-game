@@ -5668,9 +5668,9 @@ function drawChairs() {
     if (c.dir < 0) {
       ctx.translate(c.x + c.width, c.y);
       ctx.scale(-1, 1);
-      ctx.drawImage(img, 0, 0, c.width, c.height);
+      ctx.drawImage(img, -10, -10, c.width + 20, c.height + 20);
     } else {
-      ctx.drawImage(img, c.x, c.y, c.width, c.height);
+      ctx.drawImage(img, c.x -10, c.y -10, c.width + 20, c.height + 20);
     }
     ctx.restore();
   }
