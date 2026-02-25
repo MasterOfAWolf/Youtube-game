@@ -5646,7 +5646,7 @@ function updateChairs() {
 
     if (landingFromAbove) {
       // Safe zone — ride it
-      player.y = c.y - player.height + 22;
+      player.y = c.y - player.height + 18;
       player.dy = 0;
       player.onGround = true;
       player.x += c.dx; // carry player along
