@@ -5636,30 +5636,23 @@ function updateChairs() {
       c.frame = (c.frame + 1) % chairFrames.length;
     }
 
-   // --- PLAYER COLLISION ---
-if (isColliding(c, player)) {
-    const playerFeet = player.y + player.height;
-    
-    // 1. Define how deep into the sprite the "seat" is (e.g., 8 pixels down from the top)
-    const sittingOffset = 8; 
-    const seatY = c.y + sittingOffset;
+    // --- PLAYER COLLISION ---
+    if (!isColliding(c, player)) continue;
 
-    // 2. Adjust the 'Above' check: use a small buffer so the player snaps 
-    // into the seat if they are anywhere near the top half
-    const chairMid = c.y + (c.height * 0.5);
-    const landingFromAbove = playerFeet <= chairMid + 10 && player.dy >= 0;
+    const playerFeet = player.y + player.height;
+    const chairMid = c.y + c.height * 0.5; // halfway down sprite
+
+    const landingFromAbove = playerFeet <= chairMid + 8 && player.dy >= 0;
 
     if (landingFromAbove) {
-        // RIDE/SIT: Snap the player's feet to the seatY instead of c.y
-        player.y = seatY - player.height; 
-        player.dy = 0;
-        player.onGround = true;
-        
-        // Carry player along with chair horizontal movement
-        player.x += c.dx; 
+      // Safe zone — ride it
+      player.y = c.y - player.height;
+      player.dy = 0;
+      player.onGround = true;
+      player.x += c.dx; // carry player along
     } else {
-        // HIT LEGS: Only trigger damage if we aren't safely sitting
-        loseLife();
+      // Leg zone — ouch
+      loseLife();
     }
   }
 }
