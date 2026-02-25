@@ -976,6 +976,20 @@ function updateCannonProjectiles() {
       }
     }
 
+        // Chairs — knock and damage
+    if (!hit) for (let j = chairs.length - 1; j >= 0; j--) {
+      const c = chairs[j];
+      if (isColliding(hitBox, c)) {
+        const kbDir = { x: p.vx * 0.5, y: -4 };
+        damageEnemy(c, dmg, kbDir);
+        // Extra physics shove on top of knockback
+        c.dx += p.vx * 0.6;
+        c.dy += p.vy * 0.3 - 3;
+        if (c.hp <= 0) { chairs.splice(j, 1); onEnemyKilled('chair'); }
+        if (p.explosive) createExplosion(p.x, p.y);
+        hit = true; break;
+      }
+    }
     // Boxes — knock them away
     if (!hit) for (const b of boxes) {
       if (isColliding(hitBox, b)) {
@@ -1039,7 +1053,20 @@ function createExplosion(x, y) {
       b.dy -= (1 - dist / R) * 10;
     }
   }
-
+  // Chairs caught in explosion radius
+  for (let j = chairs.length - 1; j >= 0; j--) {
+    const c = chairs[j];
+    const dx   = (c.x + c.width/2)  - x;
+    const dy   = (c.y + c.height/2) - y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < R) {
+      const force = (1 - dist / R) * 14;
+      damageEnemy(c, 3, { x: (dx / dist) * force * 0.4, y: -5 });
+      c.dx += (dx / dist) * force;
+      c.dy -= (1 - dist / R) * 9;
+      if (c.hp <= 0) { chairs.splice(j, 1); onEnemyKilled('chair'); }
+    }
+  }
   // Screen shake + VHS glitch
   camera.x += (Math.random() - 0.5) * 22;
   camera.y += (Math.random() - 0.5) * 22;
