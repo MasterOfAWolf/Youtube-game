@@ -240,36 +240,37 @@ function rectsOverlap(a, b) {
 
 function bindTouch(buttonId, key) {
   const btn = document.getElementById(buttonId);
+  const TAP_WINDOW = 300; // ms between taps to count as double-tap
+  let lastTap = 0;
 
-  // Touch
   btn.addEventListener("touchstart", e => {
     e.preventDefault();
     keys[key] = true;
-  });
 
-  btn.addEventListener("touchend", e => {
-    e.preventDefault();
-    keys[key] = false;
+    // Double-tap dash for left/right buttons
+    if (key === "a" || key === "d") {
+      const now = performance.now();
+      if (now - lastTap < TAP_WINDOW) {
+        player.facing = key === "d" ? 1 : -1;
+        tryDash();
+      }
+      lastTap = now;
+    }
   });
-
-  // Mouse (so you can test on desktop!)
-  btn.addEventListener("mousedown", () => keys[key] = true);
+  btn.addEventListener("touchend", e => { e.preventDefault(); keys[key] = false; });
+  btn.addEventListener("mousedown", () => {
+    keys[key] = true;
+    if (key === "a" || key === "d") {
+      const now = performance.now();
+      if (now - (btn._lastMouse || 0) < 300) {
+        player.facing = key === "d" ? 1 : -1;
+        tryDash();
+      }
+      btn._lastMouse = now;
+    }
+  });
   btn.addEventListener("mouseup", () => keys[key] = false);
   btn.addEventListener("mouseleave", () => keys[key] = false);
-}
-
-const attackBtn = document.getElementById("btnAttack");
-
-function pressAttack() {
-  if (!keys["f"]) {
-    keys["f"] = true;
-
-    // manually trigger the same logic as keydown
-    if (player.attackTimer <= 0 && player.attackCooldown <= 0 && !player.attackCharging) {
-      player.attackCharging = true;
-      player.attackChargeTime = 0;
-    }
-  }
 }
 
 function releaseAttack() {
@@ -2912,6 +2913,15 @@ player.attackDuration = 20;      // frames the swing lasts
 player.attackKnockback = 2;      // scales with charge
 player.attackHitObjects = new Set(); // track hits per swing
 
+// --- DASH ---
+player.dashSpeed = 14;
+player.dashDuration = 0;       // frames remaining in dash
+player.dashMaxDuration = 12;   // how long the dash lasts
+player.dashCooldown = 0;
+player.dashMaxCooldown = 50;   // ~0.8s at 60fps
+player.dashUsedInAir = false;  // one air dash per jump
+player.dashActive = false;
+
 function addEnemyHealth() {
   // Snails get 1-2 HP
   for (let s of snails) {
@@ -5300,6 +5310,8 @@ document.addEventListener("keydown", e => {
     keys[e.key] = true;
 
     // Start charging if not attacking or on cooldown
+    if (e.key === "Shift") { e.preventDefault(); tryDash(); }
+  
     if ((keys["f"]) && player.attackTimer <= 0 && player.attackCooldown <= 0 && !player.attackCharging) {
         player.attackCharging = true;
         player.attackChargeTime = 0;
@@ -5490,6 +5502,19 @@ if (!hasPotato) {
     }
     }
   }
+}
+
+function tryDash() {
+  if (player.dashCooldown > 0) return;
+  if (!player.onGround && player.dashUsedInAir) return;
+
+  player.dashActive = true;
+  player.dashDuration = player.dashMaxDuration;
+  player.dashCooldown = player.dashMaxCooldown;
+  player.dy = player.wallSliding ? 0 : player.dy * 0.2; // kill vertical on dash
+  player.dx = player.facing * player.dashSpeed;
+
+  if (!player.onGround) player.dashUsedInAir = true;
 }
 
 // --- UPDATE PLAYER ---
@@ -5718,6 +5743,16 @@ if (player.attackCooldown > 0) player.attackCooldown--;
   player.y += player.dy;
   
       if (player.dy > 14) player.dy = 14;
+
+  // Dash override
+  if (player.dashDuration > 0) {
+    player.dx = player.facing * player.dashSpeed;
+    player.dy *= 0.15; // suppress gravity during dash
+    player.dashDuration--;
+    if (player.dashDuration === 0) player.dashActive = false;
+  }
+  if (player.dashCooldown > 0) player.dashCooldown--;
+  
   // Reset ground/wall flags
   player.onGround = false;
   player.onWall = false;
@@ -5772,6 +5807,9 @@ player.prevOnGround = player.onGround;
   return;
 }
 
+// Reset air dash when grounded
+  if (player.onGround) player.dashUsedInAir = false;
+  
   // --- Lose life if player falls off-screen ---
   if (player.y > world.height + 200) { // extra margin below screen
     loseLife();
@@ -6749,6 +6787,29 @@ if (player.attackCharging) {
   drawBats();
   drawSpecialBoxes();
   drawPlayerSword();
+  
+  // Dash afterimage trail
+if (player.dashActive || player.dashDuration > 0) {
+  const alpha = (player.dashDuration / player.dashMaxDuration) * 0.5;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (player.facing === -1) {
+    ctx.translate(player.x + player.width, player.y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(playerImg, 8, 0, player.width, player.height);
+  } else {
+    ctx.drawImage(playerImg, player.x - 8, player.y, player.width, player.height);
+  }
+  ctx.globalAlpha = alpha * 0.4;
+  if (player.facing === -1) {
+    ctx.translate(-8, 0);
+    ctx.drawImage(playerImg, 8, 0, player.width, player.height);
+  } else {
+    ctx.drawImage(playerImg, player.x - 16, player.y, player.width, player.height);
+  }
+  ctx.restore();
+}
+  
   drawPotatoCannon();
   drawLighting();
   drawEnemyHealthBars();
@@ -6769,6 +6830,21 @@ if (devMapView) {
   ctx.fillStyle = "#fff";
   ctx.font = "18px Arial";
   ctx.fillText("Lives: " + playerLives, 10, 40);
+
+  // Dash cooldown indicator
+if (player.dashCooldown > 0) {
+  ctx.fillStyle = "#aaa";
+  ctx.font = "13px Arial";
+  ctx.fillText("DASH cooling...", 10, 80);
+} else if (player.onGround || !player.dashUsedInAir) {
+  ctx.fillStyle = "#00eeff";
+  ctx.font = "13px Arial";
+  ctx.fillText("DASH ready [Shift]", 10, 80);
+} else {
+  ctx.fillStyle = "#555";
+  ctx.font = "13px Arial";
+  ctx.fillText("DASH used", 10, 80);
+}
 
   // --- POTATO HUD WHISPER ---
   ctx.fillStyle = "#ffcc66";
