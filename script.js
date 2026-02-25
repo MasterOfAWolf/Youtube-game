@@ -5636,6 +5636,65 @@ function updateChairs() {
       c.frame = (c.frame + 1) % chairFrames.length;
     }
 
+    // --- CHAIR COLLISIONS WITH BOXES ---
+    for (let box of boxes) {
+      if (!isColliding(c, box)) continue;
+
+      const ox = Math.min(c.x + c.width - box.x, box.x + box.width - c.x);
+      const oy = Math.min(c.y + c.height - box.y, box.y + box.height - c.y);
+
+      if (ox < oy) {
+        // Horizontal — chair shoves box sideways
+        if (c.x < box.x) {
+          // Check if box is blocked by a wall before pushing
+          const blocked = walls.some(w =>
+            box.x + ox > w.x &&
+            box.x + ox < w.x + w.width &&
+            box.y + box.height > w.y &&
+            box.y < w.y + w.height
+          );
+          if (!blocked) {
+            box.x += ox;
+            box.dx = c.dx * 0.85;
+          } else {
+            // Chair is blocked by box+wall — bounce chair
+            c.dir *= -1;
+            c.dx = 0;
+          }
+        } else {
+          const blocked = walls.some(w =>
+            box.x - ox + box.width > w.x &&
+            box.x - ox < w.x + w.width &&
+            box.y + box.height > w.y &&
+            box.y < w.y + w.height
+          );
+          if (!blocked) {
+            box.x -= ox;
+            box.dx = c.dx * 0.85;
+          } else {
+            c.dir *= -1;
+            c.dx = 0;
+          }
+        }
+      } else {
+        if (c.y < box.y) {
+          // Chair lands on top of box
+          c.y -= oy;
+          c.dy = 0;
+          c.onGround = true;
+          // Box gets pressed down slightly by chair weight
+          box.dy += 0.5;
+          // Carry box along if chair is moving
+          box.dx += c.dx * 0.4;
+        } else {
+          // Box lands on top of chair — ride it
+          box.y = c.y - box.height;
+          box.dy = 0;
+          box.x += c.dx * 0.85; // box rides the chair
+        }
+      }
+    }
+    
     // --- PLAYER COLLISION ---
     if (!isColliding(c, player)) continue;
 
