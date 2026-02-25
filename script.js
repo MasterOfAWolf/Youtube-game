@@ -5646,7 +5646,7 @@ function updateChairs() {
 
     if (landingFromAbove) {
       // Safe zone — ride it
-      player.y = c.y - player.height;
+      player.y = c.y - player.height + 22;
       player.dy = 0;
       player.onGround = true;
       player.x += c.dx; // carry player along
@@ -7011,21 +7011,21 @@ if (devMapView) {
 if (player.dashCooldown > 0) {
   ctx.fillStyle = "#aaa";
   ctx.font = "13px Arial";
-  ctx.fillText("DASH cooling...", 10, 80);
+  ctx.fillText("DASH cooling...", 10, 60);
 } else if (player.onGround || !player.dashUsedInAir) {
   ctx.fillStyle = "#00eeff";
   ctx.font = "13px Arial";
-  ctx.fillText("DASH ready [Shift]", 10, 80);
+  ctx.fillText("DASH ready [Shift]", 10, 60);
 } else {
   ctx.fillStyle = "#555";
   ctx.font = "13px Arial";
-  ctx.fillText("DASH used", 10, 80);
+  ctx.fillText("DASH used", 10, 60);
 }
 
   // --- POTATO HUD WHISPER ---
   ctx.fillStyle = "#ffcc66";
   ctx.font = "14px Arial";
-  ctx.fillText(potatoHUDLine, 10, 60);
+  ctx.fillText(potatoHUDLine, 10, 80);
 
   // Version label
   ctx.fillStyle = "#fff";
