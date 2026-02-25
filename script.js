@@ -60,6 +60,8 @@ let fireballs = [];
 let icicles = [];
 let yetis = [];
 let snowballs = [];
+let turrets = [];
+let seesaws = [];
 let potatoMessage = "";
 let potatoMessageTimer = 0;
 let potatoHUDLine = "";
@@ -272,6 +274,13 @@ function bindTouch(buttonId, key) {
   });
   btn.addEventListener("mouseup", () => keys[key] = false);
   btn.addEventListener("mouseleave", () => keys[key] = false);
+}
+function pressAttack() {
+  if (player.attackTimer <= 0 && player.attackCooldown <= 0 && !player.attackCharging) {
+    keys["f"] = true;
+    player.attackCharging = true;
+    player.attackChargeTime = 0;
+  }
 }
 
 function releaseAttack() {
