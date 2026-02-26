@@ -5413,15 +5413,14 @@ function togglePause() {
 function backToMenu() {
 
   stopGameLoop();  
-   document.getElementById("pauseMenu").classList.add("hidden");
+  document.getElementById("pauseMenu").classList.add("hidden");
   document.getElementById("levelSelect").classList.add("hidden");
   document.getElementById("waveSelect").classList.add("hidden");
- 
+  document.getElementById("credits").classList.add("hidden");
   document.getElementById("freeSelect").classList.add("hidden");
   document.getElementById("settings").classList.add("hidden");
   document.getElementById("menu").classList.remove("hidden");
   document.getElementById("controls").classList.add("hidden");
-
   // Hide canvas to be safe
   document.getElementById("game").style.display = "none";
 }
