@@ -16,6 +16,7 @@ canvas {
 #levelSelect,
 #settings,
 #controls,
+#credits,
 #waveSelect,
 #freeSelect,
 #pauseMenu {
@@ -43,6 +44,7 @@ canvas {
 #menu button,
 #levelSelect button,
 #settings button,
+#credits button,
 #controls button,
 #waveSelect button,
 #freeSelect button,
@@ -64,7 +66,9 @@ canvas {
 @media (max-width: 500px) {
   #menu button,
   #levelSelect button,
+  #credits button,
   #settings button,
+  #waveSelect button,
   #controls button,
   #pauseMenu button {
     font-size: 16px;
@@ -95,6 +99,7 @@ canvas {
 #levelSelect,
 #settings,
 #controls,
+#credits,
 #freeSelect,
 #waveSelect,
 #pauseMenu {
@@ -118,6 +123,7 @@ canvas {
 #settings button,
 #controls button,
 #freeSelect button,
+#credits button,
 #waveSelect button,
 #pauseMenu button {
   display: block;
