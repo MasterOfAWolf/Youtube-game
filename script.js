@@ -1378,6 +1378,13 @@ function openFreeSelect() {
   hideAllMenus();
   document.getElementById("freeSelect").classList.remove("hidden");
 }
+
+function openCredits() {
+  hideAllMenus();
+  document.getElementById("credits").classList.remove("hidden");
+  
+}
+
 function openControls() {
     document.getElementById("menu").classList.add("hidden");
     document.getElementById("controls").classList.remove("hidden");
