@@ -385,3 +385,9 @@ body::selection {
   z-index: 11; /* Slightly higher than standard buttons */
   margin-bottom: 5px; /* Tiny adjustment to center with circular buttons */
 }
+
+button, canvas {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
