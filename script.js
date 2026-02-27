@@ -1602,10 +1602,7 @@ ladders.push(
   { x: 110, y: 590, width: 39, height: 2050 },
 
   // Center recovery
-  { x: 1100, y: 1750, width: 40, height: 350 },
-
-  // Right recovery
-  { x: 2550, y: 1230, width: 40, height: 1050 }
+  { x: 1100, y: 1750, width: 40, height: 350 }
 );
 
   /* ------------------ MID-SPACE FILL PLATFORMS ------------------ */
@@ -3537,7 +3534,7 @@ function getSpawnPosition(type) {
   
   if (currentLevel === 1) {
     spawnZones = [
-      { x: 100, y: 200 },
+      { x: 100, y: 650 },
       { x: 800, y: 400 },
       { x: 1500, y: 1000 },
       { x: 2200, y: 400 }
