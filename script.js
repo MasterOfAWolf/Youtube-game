@@ -935,7 +935,7 @@ function updateCannonProjectiles() {
     // Enemy hit detection
     const hitBox = { x: p.x - p.size, y: p.y - p.size, width: p.size * 2, height: p.size * 2 };
     let hit = false;
-    const dmg = p.explosive ? 3 : 1;
+    const dmg = p.explosive ? 2 : 1;
     const kb  = { x: p.vx * 0.4, y: -3 };
 
     const enemyChecks = [
