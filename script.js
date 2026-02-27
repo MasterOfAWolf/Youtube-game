@@ -4531,6 +4531,11 @@ if (s.mode === "ground" || s.mode === "falling") {
     s.x += s.dx;
     s.y += s.dy;
 
+    if (s.y > 2200) {
+      s.health = 0;
+      s.y = 200;
+      s.x = Math.random() * world.width;
+    }
     // Collision detection
     let touching = { left: false, right: false, top: false, bottom: false };
 
