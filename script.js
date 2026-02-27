@@ -3238,7 +3238,7 @@ const waveConfigurations = {
         { type: "snail", count: 3, hp: 1 }
       ],
       spawnDelay: 50,
-      message: "🦇 From Above!"
+      message: "Wave 2: 🦇 From Above!"
     },
     {
       name: "Double Trouble",
@@ -3247,16 +3247,17 @@ const waveConfigurations = {
         { type: "turret", count: 1, hp: 2 }
       ],
       spawnDelay: 50,
-      message: "🌊 Wave 2: Double Trouble"
+      message: "🌊 Wave 3: Double Trouble"
     },
     {
       name: "Speed Demons",
       enemies: [
         { type: "snail", count: 2, hp: 1 },
+        { type: "bat", count: 2, hp: 2 },
         { type: "superSnail", count: { min: 1, max: 2 }, hp: 3 }
       ],
       spawnDelay: 45,
-      message: "🌊 Wave 3: Speed Demons"
+      message: "🌊 Wave 4: Speed Demons"
     },
     {
       name: "Mixed Assault",
@@ -3266,14 +3267,15 @@ const waveConfigurations = {
         { type: "turret", count: { min: 1, max: 2 }, hp: 2 }
       ],
       spawnDelay: 40,
-      message: "🌊 Wave 4: Mixed Assault"
+      message: "🌊 Wave 5: Mixed Assault"
     },
     {
       name: "Boss Wave",
       enemies: [
         { type: "snail", count: 4, hp: 2 }, // tougher snails
         { type: "superSnail", count: 3, hp: 4 },
-        { type: "turret", count: 2, hp: 3 }
+        { type: "turret", count: 2, hp: 3 },
+        { type: "bat", count: 2, hp: 2 }
       ],
       spawnDelay: 35,
       message: "⚔️ BOSS WAVE!"
@@ -3283,8 +3285,8 @@ const waveConfigurations = {
       name: "Random Wave",
       random: true,
       randomConfig: {
-        enemyPool: ["snail", "superSnail", "turret"],
-        totalEnemies: { min: 8, max: 12 },
+        enemyPool: ["snail", "superSnail", "turret", "bat"],
+        totalEnemies: { min: 10, max: 20},
         hpMultiplier: 1.2
       },
       spawnDelay: 35,
@@ -3404,7 +3406,7 @@ const waveConfigurations = {
       random: true,
       randomConfig: {
         enemyPool: ["snail", "superSnail", "turret"],
-        totalEnemies: { min: 20, max: 30 },
+        totalEnemies: { min: 20, max: 30},
         hpMultiplier: 1.5
       },
       spawnDelay: 25
