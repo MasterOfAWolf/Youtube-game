@@ -351,6 +351,26 @@ document.getElementById("btnPause").addEventListener("click", () => {
 
 // --- Mouse click to fire ---
 canvas.addEventListener("mousedown", (e) => {
+  if (levelUpPending) {
+  const cardW = 170;
+  const cardH = 200;
+  const gap = 24;
+  const totalW = levelUpCards.length * cardW + (levelUpCards.length - 1) * gap;
+  const startX = (canvas.width - totalW) / 2;
+  const cardY = (canvas.height - cardH) / 2 - 10;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  for (let i = 0; i < levelUpCards.length; i++) {
+    const cx = startX + i * (cardW + gap);
+    if (mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
+      chooseLevelUpCard(i);
+      return;
+    }
+  }
+  return; // don't fire cannon while card is up
+}
   if (!hasPotato || !gameRunning || gamePaused || gameOver) return;
   if (e.button === 0) firePotatoCannon();
 });
@@ -751,6 +771,155 @@ function drawBackground() {
       ctx.drawImage(bgTile, x * tileW, y * tileH, tileW, tileH);
     }
   }
+}
+
+function drawOrbiters() {
+  for (const orb of playerUpgrades.orbiters) {
+    if (orb.screenX === undefined) continue;
+
+    ctx.save();
+    ctx.shadowColor = "#adf";
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "#8fc";
+    ctx.beginPath();
+    ctx.arc(orb.screenX, orb.screenY, orb.size, 0, Math.PI * 2);
+    ctx.fill();
+
+    // inner highlight
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.beginPath();
+    ctx.arc(orb.screenX - orb.size * 0.3, orb.screenY - orb.size * 0.3, orb.size * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawXPBar() {
+  const barW = 200;
+  const barH = 10;
+  const bx = Math.floor((canvas.width - barW) / 2);
+  const by = canvas.height - 18;
+
+  // Background
+  ctx.fillStyle = "#222";
+  ctx.fillRect(bx, by, barW, barH);
+
+  // Fill
+  const pct = Math.min(xp / xpToNext, 1);
+  const fillW = Math.floor(pct * barW);
+  const gradient = ctx.createLinearGradient(bx, by, bx + barW, by);
+  gradient.addColorStop(0, "#7b2fd4");
+  gradient.addColorStop(1, "#d46de8");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(bx, by, fillW, barH);
+
+  // Border
+  ctx.strokeStyle = "#555";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx, by, barW, barH);
+
+  // Level label
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 12px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(`LV ${xpLevel}`, canvas.width / 2, by - 3);
+  ctx.textAlign = "left";
+}
+
+function drawLevelUpScreen() {
+  if (!levelUpPending) return;
+
+  // Dim background
+  ctx.fillStyle = "rgba(0,0,0,0.72)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Title
+  ctx.fillStyle = "#f0d060";
+  ctx.font = "bold 32px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(`LEVEL ${xpLevel}!`, canvas.width / 2, 80);
+
+  ctx.fillStyle = "#ccc";
+  ctx.font = "16px Arial";
+  ctx.fillText("Choose an upgrade", canvas.width / 2, 112);
+
+  // Cards
+  const cardW = 170;
+  const cardH = 200;
+  const gap = 24;
+  const totalW = levelUpCards.length * cardW + (levelUpCards.length - 1) * gap;
+  const startX = (canvas.width - totalW) / 2;
+  const cardY = (canvas.height - cardH) / 2 - 10;
+
+  for (let i = 0; i < levelUpCards.length; i++) {
+    const card = levelUpCards[i];
+    const cx = startX + i * (cardW + gap);
+    const isSelected = (i === levelUpSelectedIndex);
+
+    // Card shadow / glow when selected
+    ctx.save();
+    if (isSelected) {
+      ctx.shadowColor = "#f0d060";
+      ctx.shadowBlur = 22;
+    }
+
+    // Card background
+    ctx.fillStyle = isSelected ? "#2a1e4a" : "#1a1428";
+    ctx.beginPath();
+    ctx.roundRect(cx, cardY, cardW, cardH, 12);
+    ctx.fill();
+
+    // Card border
+    ctx.strokeStyle = isSelected ? "#f0d060" : "#5a4878";
+    ctx.lineWidth = isSelected ? 3 : 1.5;
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Icon
+    ctx.font = "44px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(card.icon, cx + cardW / 2, cardY + 60);
+
+    // Name
+    ctx.fillStyle = isSelected ? "#f0d060" : "#e8e0f8";
+    ctx.font = `bold 16px Arial`;
+    ctx.fillText(card.name, cx + cardW / 2, cardY + 92);
+
+    // Description (word-wrap at ~22 chars)
+    ctx.fillStyle = "#a090c0";
+    ctx.font = "13px Arial";
+    const words = card.desc.split(" ");
+    let line = "";
+    let lineY = cardY + 116;
+    for (const word of words) {
+      const test = line + (line ? " " : "") + word;
+      if (ctx.measureText(test).width > cardW - 16) {
+        ctx.fillText(line, cx + cardW / 2, lineY);
+        line = word;
+        lineY += 18;
+      } else {
+        line = test;
+      }
+    }
+    if (line) ctx.fillText(line, cx + cardW / 2, lineY);
+
+    // "Click to choose" hint on selected
+    if (isSelected) {
+      ctx.fillStyle = "#f0d060";
+      ctx.font = "12px Arial";
+      ctx.fillText("[ Click or Enter ]", cx + cardW / 2, cardY + cardH - 14);
+    }
+  }
+
+  ctx.textAlign = "left";
+
+  // Keyboard nav hint
+  ctx.fillStyle = "#666";
+  ctx.font = "12px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("← → to browse   1 / 2 / 3 to pick instantly", canvas.width / 2, cardY + cardH + 28);
+  ctx.textAlign = "left";
 }
 
 // Draw lighting layer
@@ -3198,6 +3367,145 @@ function updateEnemyHitFlashes() {
 
 // === ADVANCED WAVE SYSTEM ===
 
+let xp = 0;
+let xpLevel = 1;
+let xpToNext = 60; // XP needed for first level-up
+
+// Active passive upgrades the player has collected
+const playerUpgrades = {
+  orbiters: [],         // orbiting projectiles
+  homingEnabled: false, // periodic homing shot
+  homingTimer: 0,
+  dashDamageEnabled: false,
+  extraJumpsMax: 0,     // double-jump charges
+  extraJumpsLeft: 0,
+};
+
+// Level-up UI state
+let levelUpPending = false;
+let levelUpCards = [];       // 3 cards offered this level-up
+let levelUpSelectedIndex = 0;
+
+// XP rewards per enemy type
+const XP_TABLE = {
+  snail:      8,
+  superSnail: 20,
+  bat:        12,
+  yeti:       50,
+  snowman:    25,
+  turret:     15,
+  chair:      10,
+};
+
+// Full upgrade pool — each entry is one possible card
+const UPGRADE_POOL = [
+  {
+    id: "speed1",
+    name: "Swift Boots",
+    desc: "+25% move speed",
+    icon: "👟",
+    apply() { player.speed *= 1.25; }
+  },
+  {
+    id: "jump1",
+    name: "Spring Legs",
+    desc: "+20% jump height",
+    icon: "🦵",
+    apply() { player.jumpPower *= 1.20; player.wallJumpPower *= 1.20; }
+  },
+  {
+    id: "dashCooldown",
+    name: "Slipstream",
+    desc: "Dash cooldown halved",
+    icon: "💨",
+    apply() { player.dashMaxCooldown = Math.max(10, Math.floor(player.dashMaxCooldown * 0.5)); }
+  },
+  {
+    id: "extraJump",
+    name: "Double Jump",
+    desc: "Gain an extra mid-air jump",
+    icon: "🌀",
+    apply() { playerUpgrades.extraJumpsMax++; playerUpgrades.extraJumpsLeft = playerUpgrades.extraJumpsMax; }
+  },
+  {
+    id: "swordSpeed",
+    name: "Blade Fury",
+    desc: "Sword swings 40% faster",
+    icon: "⚔️",
+    apply() { player.attackDuration = Math.max(4, Math.floor(player.attackDuration * 0.6)); }
+  },
+  {
+    id: "swordKnockback",
+    name: "Heavy Blade",
+    desc: "Double sword knockback",
+    icon: "🗡️",
+    apply() { player.attackKnockback *= 2; }
+  },
+  {
+    id: "orbiter",
+    name: "Stone Orbit",
+    desc: "A rock orbits you, damaging enemies",
+    icon: "🪨",
+    apply() {
+      playerUpgrades.orbiters.push({
+        angle: Math.random() * Math.PI * 2,
+        speed: 0.07,
+        radius: 52,
+        size: 10,
+        damage: 1,
+        hitCooldowns: new Map() // enemy → timer so it doesn't spam
+      });
+    }
+  },
+  {
+    id: "orbiter2",
+    name: "Twin Orbit",
+    desc: "A second orbiting rock joins you",
+    icon: "🌑",
+    apply() {
+      playerUpgrades.orbiters.push({
+        angle: Math.PI, // offset from first
+        speed: 0.07,
+        radius: 52,
+        size: 10,
+        damage: 1,
+        hitCooldowns: new Map()
+      });
+    }
+  },
+  {
+    id: "homing",
+    name: "Seeker Shot",
+    desc: "Auto-fires homing bolts at enemies",
+    icon: "🎯",
+    apply() { playerUpgrades.homingEnabled = true; playerUpgrades.homingTimer = 0; }
+  },
+  {
+    id: "dashDamage",
+    name: "Warp Strike",
+    desc: "Dashing through enemies damages them",
+    icon: "⚡",
+    apply() { playerUpgrades.dashDamageEnabled = true; }
+  },
+  {
+    id: "maxSpeed",
+    name: "Turbo",
+    desc: "+40% move speed",
+    icon: "🏃",
+    apply() { player.speed *= 1.40; }
+  },
+  {
+    id: "dashDistance",
+    name: "Hyperdash",
+    desc: "Dash distance +50%",
+    icon: "🔥",
+    apply() { player.dashSpeed *= 1.5; player.dashMaxDuration = Math.floor(player.dashMaxDuration * 1.5); }
+  },
+];
+
+// Track which upgrades the player already has (for de-duplication where needed)
+const ownedUpgradeIds = new Set();
+
 let waveSystem = {
   enabled: false,
   currentWave: 0,
@@ -3774,8 +4082,56 @@ function giveWaveReward() {
 function onEnemyKilled(enemyType) {
   if (!waveSystem.enabled) return;
   waveSystem.totalEnemiesKilled++;
+  const gained = XP_TABLE[enemyType] ?? 10;
+  grantXP(gained);
 }
 
+function grantXP(amount) {
+  xp += amount;
+
+  // Floating XP text — reuse the potato message system
+  potatoMessage = `+${amount} XP`;
+  potatoMessageTimer = 40;
+
+  if (xp >= xpToNext) {
+    xp -= xpToNext;
+    xpLevel++;
+    xpToNext = Math.floor(xpToNext * 1.45); // scale requirement up each level
+    triggerLevelUp();
+  }
+}
+
+function triggerLevelUp() {
+  levelUpPending = true;
+  gamePaused = true; // freeze game while choosing
+
+  // Pick 3 unique upgrades at random
+  // Infinitely-stackable ones (orbiters, speed, etc.) are always available;
+  // one-shot ones are excluded if already owned.
+  const oneShot = new Set(["homing", "dashDamage", "extraJump"]);
+
+  const available = UPGRADE_POOL.filter(u => {
+    if (oneShot.has(u.id) && ownedUpgradeIds.has(u.id)) return false;
+    return true;
+  });
+
+  // Shuffle and take 3
+  const shuffled = available.sort(() => Math.random() - 0.5);
+  levelUpCards = shuffled.slice(0, Math.min(3, shuffled.length));
+  levelUpSelectedIndex = 0;
+}
+
+function chooseLevelUpCard(index) {
+  const card = levelUpCards[index];
+  if (!card) return;
+
+  card.apply();
+  ownedUpgradeIds.add(card.id);
+
+  levelUpPending = false;
+  levelUpCards = [];
+  gamePaused = false;
+}
 // Draw wave UI
 function drawWaveUI() {
   if (!waveSystem.enabled || gameOver) return;
@@ -3912,6 +4268,20 @@ function resetGameState() {
   gameRunning = false;
   player.attacking = false;
 
+ xp = 0;
+xpLevel = 1;
+xpToNext = 60;
+levelUpPending = false;
+levelUpCards = [];
+levelUpSelectedIndex = 0;
+playerUpgrades.orbiters = [];
+playerUpgrades.homingEnabled = false;
+playerUpgrades.homingTimer = 0;
+playerUpgrades.dashDamageEnabled = false;
+playerUpgrades.extraJumpsMax = 0;
+playerUpgrades.extraJumpsLeft = 0;
+ownedUpgradeIds.clear();
+  
   generatedTiles = [];
   enemies = [];
   fireballs = [];
@@ -5355,7 +5725,22 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("keydown", (e) => {
   keys[e.key] = true;
-  
+
+  if (levelUpPending) {
+  if (e.key === "ArrowLeft" || e.key === "a") {
+    levelUpSelectedIndex = (levelUpSelectedIndex - 1 + levelUpCards.length) % levelUpCards.length;
+  }
+  if (e.key === "ArrowRight" || e.key === "d") {
+    levelUpSelectedIndex = (levelUpSelectedIndex + 1) % levelUpCards.length;
+  }
+  if (e.key === "Enter" || e.key === " ") {
+    chooseLevelUpCard(levelUpSelectedIndex);
+  }
+  if (e.key === "1") chooseLevelUpCard(0);
+  if (e.key === "2") chooseLevelUpCard(1);
+  if (e.key === "3") chooseLevelUpCard(2);
+}
+
   if ((e.key === "r" || e.key === "R") && gameOver) {
   resetGame();
   triggerGameOver();
@@ -5774,8 +6159,8 @@ function drawChairs() {
 
 // --- UPDATE PLAYER ---
 function updatePlayer() {
-  if (gameOver) return;
-
+  if (gameOver || levelUpPending) return;
+  
   if (player.attackTimer > 0) {
     player.attackTimer--;
   }
@@ -5824,15 +6209,23 @@ if (!player.dashActive) {
 
 
   // Jumping
-if ((keys["ArrowUp"] || keys["w"] || keys[" "]) && player.onGround) {
+if ((keys["ArrowUp"] || keys["w"] || keys[" "]) && (player.onGround || player.isOnLadder)) {
   player.dy = -player.jumpPower;
   player.onGround = false;
-}
-  // Wall jump
- else if ((keys["ArrowUp"] || keys["w"] || keys[" "]) && player.onWall) {
+  player._jumpHeld = true;
+} else if ((keys["ArrowUp"] || keys["w"] || keys[" "]) && player.onWall) {
   player.dy = -player.wallJumpPower;
   player.wallJumpBoost = 60 * -player.wallDir;
   player.onWall = false;
+  player._jumpHeld = true;
+} else if ((keys["ArrowUp"] || keys["w"] || keys[" "]) && !player._jumpHeld &&
+           !player.onGround && !player.onWall && playerUpgrades.extraJumpsLeft > 0) {
+  // Double / extra jump
+  player.dy = -player.jumpPower * 0.9;
+  playerUpgrades.extraJumpsLeft--;
+  player._jumpHeld = true;
+} else if (!(keys["ArrowUp"] || keys["w"] || keys[" "])) {
+  player._jumpHeld = false;
 }
 
 //Sword
@@ -6066,6 +6459,9 @@ player.prevOnGround = player.onGround;
 
 // Reset air dash when grounded
   if (player.onGround) player.dashUsedInAir = false;
+  if (player.onGround) {
+  playerUpgrades.extraJumpsLeft = playerUpgrades.extraJumpsMax;
+}
   
   // --- Lose life if player falls off-screen ---
   if (player.y > world.height + 200) { // extra margin below screen
@@ -6352,6 +6748,19 @@ function resetWorld() {
   player.speed *= 1;
   player.jumpPower *= 1;
 
+  xp = 0;
+xpLevel = 1;
+xpToNext = 60;
+levelUpPending = false;
+levelUpCards = [];
+levelUpSelectedIndex = 0;
+playerUpgrades.orbiters = [];
+playerUpgrades.homingEnabled = false;
+playerUpgrades.homingTimer = 0;
+playerUpgrades.dashDamageEnabled = false;
+playerUpgrades.extraJumpsMax = 0;
+playerUpgrades.extraJumpsLeft = 0;
+ownedUpgradeIds.clear();
   cannonProjectiles = [];
   explosions = [];
   cannonCooldown = 0;
@@ -6371,6 +6780,135 @@ function resetWorld() {
   // Current map's wave configuration
   currentMapWaves: null
 };
+}
+
+function updateOrbiters() {
+  if (!playerUpgrades.orbiters.length) return;
+
+  const cx = player.x + player.width / 2;
+  const cy = player.y + player.height / 2;
+
+  const allEnemies = [
+    ...snails.map(e => ({ e, list: snails, key: 'snail' })),
+    ...SuperSnails.map(e => ({ e, list: SuperSnails, key: 'superSnail' })),
+    ...yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
+    ...snowmen.map(e => ({ e, list: snowmen, key: 'snowman' })),
+    ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
+    ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
+  ];
+
+  for (const orb of playerUpgrades.orbiters) {
+    orb.angle += orb.speed;
+
+    const ox = cx + Math.cos(orb.angle) * orb.radius;
+    const oy = cy + Math.sin(orb.angle) * orb.radius;
+    orb.screenX = ox;
+    orb.screenY = oy;
+
+    const hitBox = { x: ox - orb.size, y: oy - orb.size, width: orb.size * 2, height: orb.size * 2 };
+
+    // Tick existing cooldowns
+    for (const [enemy, timer] of orb.hitCooldowns) {
+      if (timer <= 1) orb.hitCooldowns.delete(enemy);
+      else orb.hitCooldowns.set(enemy, timer - 1);
+    }
+
+    for (const { e, list, key } of allEnemies) {
+      if (orb.hitCooldowns.has(e)) continue;
+      if (!isColliding(hitBox, e)) continue;
+
+      damageEnemy(e, orb.damage, { x: (e.x - cx) * 0.1, y: -3 });
+      orb.hitCooldowns.set(e, 40); // 40-frame cooldown before hitting same enemy again
+
+      if (e.hp <= 0) {
+        if (list) {
+          const idx = list.indexOf(e);
+          if (idx > -1) { list.splice(idx, 1); onEnemyKilled(key); }
+        } else if (key === 'yeti') {
+          e.alive = false; onEnemyKilled('yeti');
+        }
+      }
+    }
+  }
+}
+
+function updateHomingShot() {
+  if (!playerUpgrades.homingEnabled) return;
+
+  playerUpgrades.homingTimer--;
+  if (playerUpgrades.homingTimer > 0) return;
+  playerUpgrades.homingTimer = 120; // fire every 2 seconds
+
+  // Find closest enemy
+  let closest = null;
+  let closestDist = Infinity;
+
+  const cx = player.x + player.width / 2;
+  const cy = player.y + player.height / 2;
+
+  const candidates = [
+    ...snails, ...SuperSnails,
+    ...yetis.filter(y => y.alive),
+    ...snowmen, ...turrets, ...chairs
+  ];
+
+  for (const e of candidates) {
+    const ex = (e.x || 0) + (e.width || 0) / 2;
+    const ey = (e.y || 0) + (e.height || 0) / 2;
+    const d = Math.hypot(ex - cx, ey - cy);
+    if (d < closestDist) { closestDist = d; closest = e; }
+  }
+
+  if (!closest || closestDist > 700) return;
+
+  const tx = closest.x + (closest.width || 0) / 2;
+  const ty = closest.y + (closest.height || 0) / 2;
+  const speed = 9;
+  const dx = tx - cx;
+  const dy = ty - cy;
+  const dist = Math.hypot(dx, dy) || 1;
+
+  cannonProjectiles.push({
+    x: cx,
+    y: cy,
+    vx: (dx / dist) * speed,
+    vy: (dy / dist) * speed,
+    size: 7,
+    explosive: false,
+    alive: true,
+    trail: [],
+    homing: true,
+    homingTarget: closest
+  });
+}
+
+function updateDashDamage() {
+  if (!playerUpgrades.dashDamageEnabled || !player.dashActive) return;
+
+  const hitBox = { x: player.x, y: player.y, width: player.width, height: player.height };
+
+  const groups = [
+    { list: snails,      key: 'snail' },
+    { list: SuperSnails, key: 'superSnail' },
+    { list: snowmen,     key: 'snowman' },
+    { list: chairs,      key: 'chair' },
+    { list: turrets,     key: 'turret' },
+  ];
+
+  for (const { list, key } of groups) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (!isColliding(hitBox, list[i])) continue;
+      damageEnemy(list[i], 2, { x: player.facing * 5, y: -4 });
+      if (list[i].hp <= 0) { list.splice(i, 1); onEnemyKilled(key); }
+    }
+  }
+
+  for (const y of yetis) {
+    if (!y.alive) continue;
+    if (!isColliding(hitBox, y)) continue;
+    damageEnemy(y, 2, { x: player.facing * 5, y: -4 });
+    if (y.hp <= 0) { y.alive = false; onEnemyKilled('yeti'); }
+  }
 }
 
 // --- CAMERA MODULE ---
@@ -7060,7 +7598,7 @@ if (player.attackCharging) {
   drawBats();
   drawSpecialBoxes();
   drawPlayerSword();
-  
+  drawOrbiters();
   // Dash afterimage trail
 if (player.dashActive || player.dashDuration > 0) {
   const alpha = (player.dashDuration / player.dashMaxDuration) * 0.5;
@@ -7146,6 +7684,9 @@ if (player.dashCooldown > 0) {
       ctx.restore();
 
   drawCannonCrosshair();
+  drawXPBar();
+drawLevelUpScreen();
+  
   if (devMapView) {
   drawDevRulers(devScale);
 }
@@ -7206,6 +7747,9 @@ function gameLoop(currentTime) {
     updateSnails();
     updateChairs();
     updateSuperSnails();
+    updateOrbiters();
+updateHomingShot();
+updateDashDamage();
     updateCamera();
     updateSnow();
     updateLights();
