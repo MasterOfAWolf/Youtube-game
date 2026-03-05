@@ -2340,14 +2340,15 @@ function drawOffScreenIndicators() {
   ctx.save();
   
   // Get all alive enemies
-  const allEnemies = [
-    ...snails.map(s => ({ ...s, type: 'snail' })),
-    ...SuperSnails.map(s => ({ ...s, type: 'superSnail' })),
-    ...bats.map(b => ({ ...b, type: 'bat' })),
-    ...yetis.filter(y => y.alive).map(y => ({ ...y, type: 'yeti' })),
-    ...snowmen.map(s => ({ ...s, type: 'snowman' })),
-    ...turrets.map(t => ({ ...t, type: 'turret' }))
-  ].filter(e => e.hp > 0 || e.alive);
+const allEnemies = [
+    ...snails.map(e => ({ e, list: snails, key: 'snail' })),
+    ...SuperSnails.map(e => ({ e, list: SuperSnails, key: 'superSnail' })),
+    ...yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
+    ...snowmen.map(e => ({ e, list: snowmen, key: 'snowman' })),
+    ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
+    ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
+    ...bats.map(e => ({ e, list: bats, key: 'bat' })),
+  ];
   
   for (let enemy of allEnemies) {
     const enemyScreenX = enemy.x - camera.x;
@@ -4259,8 +4260,13 @@ function resetGameState() {
   player.dy = 0;
   
   player.jumpPower = 11;
-  player.wallJumpPower = 11;
-  player.speed = 3
+player.wallJumpPower = 11;
+player.speed = 3;
+player.dashSpeed = 14;
+player.dashMaxDuration = 12;
+player.attackDuration = 20;
+player.attackKnockback = 2;
+  
   // Reset lives & flags
   playerLives = maxLives;
   gameOver = false;
@@ -7684,8 +7690,9 @@ if (player.dashCooldown > 0) {
       ctx.restore();
 
   drawCannonCrosshair();
-  drawXPBar();
-drawLevelUpScreen();
+
+  if (waveSystem.enabled) drawXPBar();
+  if (waveSystem.enabled || levelUpPending) drawLevelUpScreen();
   
   if (devMapView) {
   drawDevRulers(devScale);
