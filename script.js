@@ -1302,94 +1302,82 @@ function drawPotatoCannon() {
       const frac = j / p.trail.length;
       const alpha = frac * 0.55;
       const sz = p.size * frac * 0.65;
-      ctx.fillStyle = p.homing
-        ? `rgba(80,200,255,${alpha})`
-        : p.explosive ? `rgba(255,110,0,${alpha})` : `rgba(160,100,40,${alpha})`;
+      // WHIMSICAL CHANGE: Swapped rgba(80,200,255) for a vibrant magenta/purple trail
+      ctx.fillStyle = p.homing ? `rgba(223,139,254,${alpha})` : p.explosive ? `rgba(255,110,0,${alpha})` : `rgba(160,100,40,${alpha})`;
       ctx.beginPath();
       ctx.arc(p.trail[j].x, p.trail[j].y, Math.max(sz, 1), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.save();
-    if (p.homing) { ctx.shadowColor = "#44ccff"; ctx.shadowBlur = 14; ctx.fillStyle = "#88eeff"; }
-    else if (p.explosive) { ctx.shadowColor = "#ff5500"; ctx.shadowBlur = 18; ctx.fillStyle = "#ff8800"; }
-    else { ctx.fillStyle = "#b58b4a"; }
+    if (p.homing) {
+      // WHIMSICAL CHANGE: Magical violet glow and neon pink core
+      ctx.shadowColor = "#8E44AD";
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = "#fa1593";
+    } else if (p.explosive) {
+      ctx.shadowColor = "#ff5500";
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = "#ff8800";
+    } else {
+      ctx.fillStyle = "#b58b4a";
+    }
     const s = p.size;
-    ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = p.homing ? "#ccf8ff" : p.explosive ? "#ffdd88" : "#d4aa6a";
-    ctx.beginPath(); ctx.arc(p.x - s * 0.3, p.y - s * 0.3, s * 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
+    ctx.fill();
+    // WHIMSICAL CHANGE: Lavender highlight
+    ctx.fillStyle = p.homing ? "#df8bfe" : p.explosive ? "#ffdd88" : "#d4aa6a";
+    ctx.beginPath();
+    ctx.arc(p.x - s * 0.3, p.y - s * 0.3, s * 0.4, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
-
   if (!hasPotato) return; // barrel only draws with potato
-
-  const cx     = player.x + player.width  / 2;
-  const cy     = player.y + player.height / 2;
-  const baked  = potatoState === "baked";
-
-  // --- Draw cannon barrel ---
+  const cx = player.x + player.width / 2;
+  const cy = player.y + player.height / 2;
+  const baked = potatoState === "baked"; // --- Draw cannon barrel ---
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.rotate(cannonAimAngle);
-
-  // Barrel body
+  ctx.rotate(cannonAimAngle); // Barrel body
   ctx.fillStyle = baked ? "#6b3a1f" : "#5a3820";
-  ctx.fillRect(2, -5, 28, 10);
-
-  // Metal bands
+  ctx.fillRect(2, -5, 28, 10); // Metal bands
   ctx.fillStyle = baked ? "#9c5522" : "#7a5030";
-  ctx.fillRect(4,  -5, 4, 10);
-  ctx.fillRect(18, -5, 4, 10);
-
-  // Muzzle
+  ctx.fillRect(4, -5, 4, 10);
+  ctx.fillRect(18, -5, 4, 10); // Muzzle
   ctx.fillStyle = baked ? "#ff7722" : "#4a2e18";
-  ctx.fillRect(27, -6, 5, 12);
-
-  // Baked: fiery glow around barrel
+  ctx.fillRect(27, -6, 5, 12); // Baked: fiery glow around barrel
   if (baked) {
-    ctx.shadowColor  = "#ff6600";
-    ctx.shadowBlur   = 14;
-    ctx.strokeStyle  = "#ffaa44";
-    ctx.lineWidth    = 1.5;
+    ctx.shadowColor = "#ff6600";
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = "#ffaa44";
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(2, -5, 28, 10);
   }
-
-  ctx.restore();
-
-  // --- Draw projectiles ---
+  ctx.restore(); // --- Draw projectiles ---
   for (const p of cannonProjectiles) {
-    if (!p.alive) continue;
-
-    // Trail
+    if (!p.alive) continue; // Trail
     for (let j = 0; j < p.trail.length; j++) {
-      const frac  = j / p.trail.length;
+      const frac = j / p.trail.length;
       const alpha = frac * 0.55;
-      const sz    = p.size * frac * 0.65;
-      ctx.fillStyle = p.explosive
-        ? `rgba(255,110,0,${alpha})`
-        : `rgba(160,100,40,${alpha})`;
+      const sz = p.size * frac * 0.65;
+      ctx.fillStyle = p.explosive ? `rgba(255,110,0,${alpha})` : `rgba(160,100,40,${alpha})`;
       ctx.beginPath();
       ctx.arc(p.trail[j].x, p.trail[j].y, Math.max(sz, 1), 0, Math.PI * 2);
       ctx.fill();
-    }
-
-    // Main ball (rectangle sprite placeholder)
+    } // Main ball (rectangle sprite placeholder)
     ctx.save();
     if (p.explosive) {
       ctx.shadowColor = "#ff5500";
-      ctx.shadowBlur  = 18;
+      ctx.shadowBlur = 18;
     }
-    ctx.fillStyle = p.explosive ? "#ff8800" : "#b58b4a";
-    // Draw as small rectangle (swap for sprite when asset is ready)
+    ctx.fillStyle = p.explosive ? "#ff8800" : "#b58b4a"; // Draw as small rectangle (swap for sprite when asset is ready)
     const s = p.size;
-    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2);
-
-    // Inner highlight
+    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2); // Inner highlight
     ctx.fillStyle = p.explosive ? "#ffdd88" : "#d4aa6a";
     ctx.fillRect(p.x - s + 2, p.y - s + 2, s - 2, s - 2);
-
     ctx.restore();
   }
-
+}
   // --- Draw explosions ---
   for (const e of explosions) {
     const alpha = e.timer / e.maxTimer;
