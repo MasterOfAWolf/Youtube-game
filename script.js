@@ -349,6 +349,24 @@ document.getElementById("btnPause").addEventListener("click", () => {
   togglePause();
 });
 
+canvas.addEventListener("mousemove", (e) => {
+  if (!levelUpPending) return;
+  const cardW = 170, cardH = 200, gap = 24;
+  const totalW = levelUpCards.length * cardW + (levelUpCards.length - 1) * gap;
+  const startX = (canvas.width - totalW) / 2;
+  const cardY = (canvas.height - cardH) / 2 - 10;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  for (let i = 0; i < levelUpCards.length; i++) {
+    const cx = startX + i * (cardW + gap);
+    if (mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
+      levelUpSelectedIndex = i;
+      return;
+    }
+  }
+});
+
 // --- Mouse click to fire ---
 canvas.addEventListener("mousedown", (e) => {
   if (levelUpPending) {
@@ -1086,9 +1104,28 @@ function updateCannonProjectiles() {
     if (p.trail.length > 9) p.trail.shift();
 
     // Physics
-    p.x  += p.vx;
-    p.y  += p.vy;
-    p.vy += 0.25;  // light gravity
+// Physics
+    p.x += p.vx;
+    p.y += p.vy;
+
+    if (p.homing && p.homingTarget) {
+      const t = p.homingTarget;
+      const alive = t.hp > 0 && (t.alive !== false);
+      if (alive) {
+        const tx = t.x + (t.width  || 0) / 2;
+        const ty = t.y + (t.height || 0) / 2;
+        const dx = tx - p.x, dy = ty - p.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        p.vx += (dx / dist) * 0.35;
+        p.vy += (dy / dist) * 0.35;
+        const spd = Math.hypot(p.vx, p.vy);
+        if (spd > 10) { p.vx = p.vx / spd * 10; p.vy = p.vy / spd * 10; }
+      } else {
+        p.vy += 0.25; // target gone, fall normally
+      }
+    } else {
+      p.vy += 0.25; // normal gravity
+    }
 
     // World bounds
     if (p.x < 0 || p.x > world.width || p.y > world.height + 300) {
@@ -1258,7 +1295,32 @@ function updateExplosions() {
 }
 
 function drawPotatoCannon() {
-  if (!hasPotato) return;
+  // Always draw projectiles — homing shots fire even without the potato
+  for (const p of cannonProjectiles) {
+    if (!p.alive) continue;
+    for (let j = 0; j < p.trail.length; j++) {
+      const frac = j / p.trail.length;
+      const alpha = frac * 0.55;
+      const sz = p.size * frac * 0.65;
+      ctx.fillStyle = p.homing
+        ? `rgba(80,200,255,${alpha})`
+        : p.explosive ? `rgba(255,110,0,${alpha})` : `rgba(160,100,40,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(p.trail[j].x, p.trail[j].y, Math.max(sz, 1), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.save();
+    if (p.homing) { ctx.shadowColor = "#44ccff"; ctx.shadowBlur = 14; ctx.fillStyle = "#88eeff"; }
+    else if (p.explosive) { ctx.shadowColor = "#ff5500"; ctx.shadowBlur = 18; ctx.fillStyle = "#ff8800"; }
+    else { ctx.fillStyle = "#b58b4a"; }
+    const s = p.size;
+    ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = p.homing ? "#ccf8ff" : p.explosive ? "#ffdd88" : "#d4aa6a";
+    ctx.beginPath(); ctx.arc(p.x - s * 0.3, p.y - s * 0.3, s * 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  if (!hasPotato) return; // barrel only draws with potato
 
   const cx     = player.x + player.width  / 2;
   const cy     = player.y + player.height / 2;
@@ -7763,8 +7825,8 @@ updateDashDamage();
     spawnSnow();
     drawIcicles();
     drawOven();
-    draw();
   }
+    draw();
   }
   requestAnimationFrame(gameLoop);
 }
