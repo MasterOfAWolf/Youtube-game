@@ -3478,6 +3478,23 @@ const XP_TABLE = {
 // Full upgrade pool — each entry is one possible card
 const UPGRADE_POOL = [
   {
+  id: "potato",
+  name: "Potato Cannon",
+  desc: "Gain the 🥔 — aim and fire with mouse/joystick",
+  icon: "🥔",
+  apply() {
+    hasPotato = true;
+    potatoState = "raw";
+    potato.collected = true;
+    potatoMessage = "The potato accepts you.";
+    potatoMessageTimer = 180;
+    potatoHUDLine = "🥔 something feels different";
+    camera.x += (Math.random() - 0.5) * 13;
+    camera.y += (Math.random() - 0.5) * 15;
+    syncJoystickVisibility();
+  }
+},
+  {
     id: "speed1",
     name: "Swift Boots",
     desc: "+25% move speed",
@@ -4199,11 +4216,13 @@ function triggerLevelUp() {
   // Pick 3 unique upgrades at random
   // Infinitely-stackable ones (orbiters, speed, etc.) are always available;
   // one-shot ones are excluded if already owned.
-  const oneShot = new Set(["homing", "dashDamage", "extraJump"]);
+  const oneShot = new Set(["homing", "dashDamage", "extraJump", "potato"]);
 
   const available = UPGRADE_POOL.filter(u => {
     if (oneShot.has(u.id) && ownedUpgradeIds.has(u.id)) return false;
     return true;
+      if (u.id === "orbiter2" && !ownedUpgradeIds.has("orbiter")) return false;
+  return true;
   });
 
   // Shuffle and take 3
@@ -4384,7 +4403,7 @@ ownedUpgradeIds.clear();
   fireballs = [];
   timeElapsed = 0;
  hasPotato = false;
-  potato.collected = false;
+  potato.collected = true;
 
   cannonProjectiles = [];
   explosions = [];
@@ -4923,7 +4942,7 @@ potato = {
   width: 28,
   height: 22,
   wobble: 0,
-  collected: false,
+  collected: true,
   active: true
 };
 
@@ -5473,7 +5492,7 @@ function resetGame() {
   syncJoystickVisibility();
   // --- POTATO RESET ---
   hasPotato = false;
-  potato.collected = false;
+  potato.collected = true;
 
   potatoMessage = "";
   potatoMessageTimer = 0;
