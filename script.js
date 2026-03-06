@@ -5447,6 +5447,8 @@ let playerLives = maxLives;
 
 // Function to handle losing a life
 function loseLife() {
+  if (playerUpgrades.dashDamageEnabled && player.dashActive) return;
+  
   playerLives--;
 
   if (hasPotato) {
