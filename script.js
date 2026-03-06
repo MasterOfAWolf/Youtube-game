@@ -1303,19 +1303,19 @@ function drawPotatoCannon() {
       const alpha = frac * 0.55;
       const sz = p.size * frac * 0.65;
       ctx.fillStyle = p.homing
-        ? `rgba(80,200,255,${alpha})`
+        ? `rgba(223,139,254,${alpha})`
         : p.explosive ? `rgba(255,110,0,${alpha})` : `rgba(160,100,40,${alpha})`;
       ctx.beginPath();
       ctx.arc(p.trail[j].x, p.trail[j].y, Math.max(sz, 1), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.save();
-    if (p.homing) { ctx.shadowColor = "#44ccff"; ctx.shadowBlur = 14; ctx.fillStyle = "#88eeff"; }
+    if (p.homing) {ctx.shadowColor = "#8E44AD"; ctx.shadowBlur = 14; ctx.fillStyle = "#fa1593";}
     else if (p.explosive) { ctx.shadowColor = "#ff5500"; ctx.shadowBlur = 18; ctx.fillStyle = "#ff8800"; }
     else { ctx.fillStyle = "#b58b4a"; }
     const s = p.size;
     ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = p.homing ? "#ccf8ff" : p.explosive ? "#ffdd88" : "#d4aa6a";
+    ctx.fillStyle = p.homing ? "#df8bfe" : p.explosive ? "#ffdd88" : "#d4aa6a";
     ctx.beginPath(); ctx.arc(p.x - s * 0.3, p.y - s * 0.3, s * 0.4, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
