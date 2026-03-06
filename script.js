@@ -1389,6 +1389,7 @@ function drawPotatoCannon() {
 
     ctx.restore();
   }
+}
 
 // HUD crosshair — draw in screen-space (after ctx.restore for camera)
 function drawCannonCrosshair() {
