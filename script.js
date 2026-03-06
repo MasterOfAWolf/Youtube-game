@@ -7349,6 +7349,7 @@ function updateOrbiters() {
     ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
     ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
     ...tables.map(e => ({ e, list: tables, key: 'table' })),
+    ...bats.map(e => ({ e, list: bats, key: 'bat' })),
   ];
 
   for (const orb of playerUpgrades.orbiters) {
@@ -7403,7 +7404,7 @@ function updateHomingShot() {
   const candidates = [
     ...snails, ...SuperSnails,
     ...yetis.filter(y => y.alive),
-    ...snowmen, ...turrets, ...chairs, ...tables
+    ...snowmen, ...turrets, ...chairs, ...tables, ...bats
   ];
 
   for (const e of candidates) {
