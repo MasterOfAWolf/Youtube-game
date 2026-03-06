@@ -70,6 +70,8 @@ let icicles = [];
 let yetis = [];
 let snowballs = [];
 let turrets = [];
+let tables = [];
+let initialTables = [];
 let seesaws = [];
 let potatoMessage = "";
 let potatoMessageTimer = 0;
@@ -1196,6 +1198,17 @@ function updateCannonProjectiles() {
         hit = true; break;
       }
     }
+    // Tables — flip them when hit!
+    if (!hit) for (let j = tables.length - 1; j >= 0; j--) {
+      const t = tables[j];
+      if (isColliding(hitBox, t)) {
+        damageEnemy(t, dmg, { x: p.vx * 0.4, y: -5 });
+        if (!t.flipping) triggerTableFlip(t, p.vx * 0.6);
+        if (t.hp <= 0) { tables.splice(j, 1); onEnemyKilled('table'); }
+        if (p.explosive) createExplosion(p.x, p.y);
+        hit = true; break;
+      }
+    }
     // Boxes — knock them away
     if (!hit) for (const b of boxes) {
       if (isColliding(hitBox, b)) {
@@ -1271,6 +1284,19 @@ function createExplosion(x, y) {
       c.dx += (dx / dist) * force;
       c.dy -= (1 - dist / R) * 9;
       if (c.hp <= 0) { chairs.splice(j, 1); onEnemyKilled('chair'); }
+    }
+  }
+  // Tables caught in explosion: flip them spectacularly
+  for (let j = tables.length - 1; j >= 0; j--) {
+    const t = tables[j];
+    const dx   = (t.x + t.width/2)  - x;
+    const dy   = (t.y + t.height/2) - y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < R) {
+      const force = (1 - dist / R) * 16;
+      damageEnemy(t, 3, { x: (dx / dist) * force * 0.3, y: -6 });
+      if (!t.flipping) triggerTableFlip(t, (dx / (dist||1)) * force * 0.5);
+      if (t.hp <= 0) { tables.splice(j, 1); onEnemyKilled('table'); }
     }
   }
   // Screen shake + VHS glitch
@@ -1861,6 +1887,14 @@ snails.push(
   }
 );
 
+// === TABLES — placed on wide platforms in Level 1 ===
+tables.push(
+  createTable(420, 540),   // on the main floor — early encounter
+  createTable(1100, 660),  // on a mid-air ledge
+  createTable(1780, 790),  // right side
+  createTable(700, 1740),  // lower route
+);
+
 }
 
 function loadMap_Level2() {
@@ -1872,6 +1906,8 @@ function loadMap_Level2() {
   SuperSnails = [];
   spikes = [];
   ladders = [];
+  chairs = [];
+  tables = [];
   addMapBounds();
 
   /* ==================== LEVEL 2: THE TOWER ====================
@@ -2181,6 +2217,7 @@ function loadMap_Level3() {
   SuperSnails = [];
   spikes = [];
   icicles = [];
+  tables = [];
 
 walls.push({ x: 0, y: 0, width: 2800, height: 30, ice: true },
 { x: 0, y: 0, width: 30, height: 2100, ice: true },
@@ -2369,28 +2406,30 @@ const ENEMY_COLORS = {
   bat: "#6b4c8a",     // purple
   yeti: "#eef",       // white
   snowman: "#fff",    // white
-  turret: "#f44"      // red
+  turret: "#f44",     // red
+  table: "#c8922a"    // oak brown
 };
 
 function drawOffScreenIndicators() {
   if (!waveSystem.enabled || !waveSystem.waveActive) return;
   
   ctx.save();
-
-    // Get all alive enemies
-const OffscreenEnemies = [
+  
+  // Get all alive enemies
+const allEnemies = [
     ...snails.map(e => ({ e, list: snails, key: 'snail' })),
     ...SuperSnails.map(e => ({ e, list: SuperSnails, key: 'superSnail' })),
     ...yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
     ...snowmen.map(e => ({ e, list: snowmen, key: 'snowman' })),
     ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
     ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
+    ...tables.map(e => ({ e, list: tables, key: 'table' })),
     ...bats.map(e => ({ e, list: bats, key: 'bat' })),
   ];
   
-  for (let enemy of OffscreenEnemies) {
-    const enemyScreenX = enemy.x - camera.x;
-    const enemyScreenY = enemy.y - camera.y;
+  for (let enemy of allEnemies) {
+    const enemyScreenX = enemy.e.x - camera.x;
+    const enemyScreenY = enemy.e.y - camera.y;
     
     // Check if enemy is off-screen
     const offScreen = 
@@ -2402,20 +2441,19 @@ const OffscreenEnemies = [
     if (!offScreen) continue;
     
     // Calculate arrow position at screen edge
-    let arrowX, arrowY;
     const margin = 30;
     
     // Clamp to screen edges
-    arrowX = Math.max(margin, Math.min(canvas.width - margin, enemyScreenX));
-    arrowY = Math.max(margin, Math.min(canvas.height - margin, enemyScreenY));
+    const arrowX = Math.max(margin, Math.min(canvas.width - margin, enemyScreenX));
+    const arrowY = Math.max(margin, Math.min(canvas.height - margin, enemyScreenY));
     
-    // Calculate angle to enemy
+    // Calculate angle from arrow position toward the enemy
     const dx = enemyScreenX - arrowX;
     const dy = enemyScreenY - arrowY;
     const angle = Math.atan2(dy, dx);
     
     // Draw arrow
-    const color = ENEMY_COLORS[enemy.type] || "#fff";
+    const color = ENEMY_COLORS[enemy.key] || "#fff";
     
     ctx.save();
     ctx.translate(arrowX, arrowY);
@@ -2442,10 +2480,10 @@ const OffscreenEnemies = [
     
     ctx.restore();
     
-    // Distance text (optional)
+    // Distance text
     const distance = Math.sqrt(
-      Math.pow(enemy.x - player.x, 2) + 
-      Math.pow(enemy.y - player.y, 2)
+      Math.pow(enemy.e.x - player.x, 2) + 
+      Math.pow(enemy.e.y - player.y, 2)
     );
     
     ctx.fillStyle = color;
@@ -3391,7 +3429,7 @@ function drawEnemyHealthBars() {
 
 // Update hit flash effect
 function updateEnemyHitFlashes() {
-  for (let s of [...snails, ...SuperSnails, ...snowmen]) {
+  for (let s of [...snails, ...SuperSnails, ...snowmen, ...tables]) {
     if (s.hitFlash > 0) s.hitFlash--;
   }
   
@@ -3434,6 +3472,7 @@ const XP_TABLE = {
   snowman:    25,
   turret:     15,
   chair:      10,
+  table:      18,
 };
 
 // Full upgrade pool — each entry is one possible card
@@ -3598,7 +3637,7 @@ const waveConfigurations = {
       enemies: [
         { type: "snail", count: 2, hp: 1 },
         { type: "bat", count: 2, hp: 2 },
-        { type: "superSnail", count: { min: 1, max: 2 }, hp: 3 }
+        { type: "table", count: 1, hp: 4 }
       ],
       spawnDelay: 45,
       message: "🌊 Wave 4: Speed Demons"
@@ -3608,7 +3647,8 @@ const waveConfigurations = {
       enemies: [
         { type: "snail", count: { min: 3, max: 5 }, hp: 1 },
         { type: "superSnail", count: 2, hp: 3 },
-        { type: "turret", count: { min: 1, max: 2 }, hp: 2 }
+        { type: "turret", count: { min: 1, max: 2 }, hp: 2 },
+        { type: "table", count: 1, hp: 5 }
       ],
       spawnDelay: 40,
       message: "🌊 Wave 5: Mixed Assault"
@@ -3619,7 +3659,8 @@ const waveConfigurations = {
         { type: "snail", count: 4, hp: 2 }, // tougher snails
         { type: "superSnail", count: 3, hp: 4 },
         { type: "turret", count: 2, hp: 3 },
-        { type: "bat", count: 2, hp: 2 }
+        { type: "bat", count: 2, hp: 2 },
+        { type: "table", count: 2, hp: 5 }
       ],
       spawnDelay: 35,
       message: "⚔️ BOSS WAVE!"
@@ -3629,7 +3670,7 @@ const waveConfigurations = {
       name: "Random Wave",
       random: true,
       randomConfig: {
-        enemyPool: ["snail", "superSnail", "turret", "bat"],
+        enemyPool: ["snail", "superSnail", "turret", "bat", "table"],
         totalEnemies: { min: 10, max: 20},
         hpMultiplier: 1.2
       },
@@ -3775,7 +3816,8 @@ function generateRandomWave(config) {
       superSnail: 3,
       turret: 2,
       yeti: 5,
-      snowman: 4
+      snowman: 4,
+      table: 4
     };
     
     enemies.push({
@@ -3814,6 +3856,7 @@ function startWaveMode(levelNumber) {
   snowmen = [];
   turrets = [];
   bats = [];
+  tables = [];
   
   potatoMessage = "🌊 WAVE MODE STARTING...";
   potatoMessageTimer = 120;
@@ -4011,6 +4054,14 @@ function spawnEnemy(type, hp) {
     case 'bat':
     spawnBat(pos.x, pos.y, hp || 2);
     break;
+
+    case 'table': {
+      const newTable = createTable(pos.x, pos.y);
+      newTable.hp    = hp || 4;
+      newTable.maxHp = hp || 4;
+      tables.push(newTable);
+      break;
+    }
       
     case 'snowman':
       if (isChristmasMap()) {
@@ -4081,6 +4132,7 @@ function updateWaveSystem() {
     aliveCount += snowmen.filter(s => s.hp > 0).length;
     aliveCount += turrets.filter(t => t.hp > 0).length;
     aliveCount += bats.filter(b => b.hp > 0).length;
+    aliveCount += tables.filter(t => t.hp > 0).length;
     if (aliveCount === 0) {
       waveSystem.waveActive = false;
       waveSystem.waveTimer = waveSystem.timeBetweenWaves;
@@ -4190,6 +4242,7 @@ function drawWaveUI() {
     aliveCount += snowmen.filter(s => s.hp > 0).length;
     aliveCount += turrets.filter(t => t.hp > 0).length;
     aliveCount += bats.filter(b => b.hp > 0).length;
+    aliveCount += tables.filter(t => t.hp > 0).length;
     
     ctx.font = "18px Arial";
     ctx.fillText(`Enemies: ${aliveCount}`, canvas.width - 20, 55);
@@ -4343,6 +4396,7 @@ ownedUpgradeIds.clear();
   potatoState = "none";
   // "none" | "raw" | "baked"
   if (initialChairs && initialChairs.length) chairs = initialChairs.map(c => ({ ...c }));
+  if (initialTables && initialTables.length) tables = initialTables.map(t => ({ ...t }));
   if (initialBoxes && initialBoxes.length) boxes = initialBoxes.map(b => ({ ...b }));
   if (initialSnails && initialSnails.length) snails = initialSnails.map(s => ({ ...s }));
   if (initialSuperSnails && initialSuperSnails.length) SuperSnails = initialSuperSnails.map(s => ({ ...s }));
@@ -4440,6 +4494,7 @@ function saveInitialState() {
   initialSpikes = spikes.map(s => ({ ...s }));
   initialLadders = ladders.map(l => ({ ...l }));
   initialChairs = chairs.map(c => ({ ...c }));
+  initialTables = tables.map(t => ({ ...t }));
   
   
 }
@@ -6011,7 +6066,418 @@ function tryDash() {
   if (!player.onGround) player.dashUsedInAir = true;
 }
 
-// === CHAIR MODULE ===
+// === TABLE MODULE ===
+// Tables are heavy furniture enemies that patrol, can be stood on,
+// and enter a dramatic FLIP STATE when damaged — spinning through the
+// air and slamming down to deal area-of-effect damage.
+
+function createTable(x, y) {
+  return {
+    x, y,
+    width: 64,
+    height: 36,          // tabletop height; legs hang below
+    dx: 0,
+    dy: 0,
+    dir: Math.random() > 0.5 ? 1 : -1,
+    speed: 0.7 + Math.random() * 0.4,
+    onGround: false,
+    hp: 4,
+    maxHp: 4,
+    hitFlash: 0,
+    knockbackTimer: 0,
+    knockbackDx: 0,
+    knockbackDy: 0,
+
+    // FLIP STATE
+    flipping: false,
+    flipAngle: 0,             // current rotation (radians)
+    flipAngularVel: 0,        // spin speed
+    flipVx: 0,                // horizontal velocity while airborne during flip
+    flipVy: 0,                // vertical velocity while airborne during flip
+    flipDamageCooldown: 0,    // prevents dealing damage every frame
+
+    // SLAM STATE
+    slamming: false,          // true when falling fast after a flip
+    slamDamageDealt: false,   // so slam only fires once per landing
+
+    // Visual detail
+    woodGrain: Math.floor(Math.random() * 3),  // 0-2 grain style
+    clothColor: null,         // some tables have tablecloths
+  };
+}
+
+function triggerTableFlip(t, launchDx) {
+  if (t.flipping) return;            // already mid-air
+  t.flipping = true;
+  t.slamDamageDealt = false;
+  t.flipAngle = 0;
+  t.flipAngularVel = (Math.random() > 0.5 ? 1 : -1) * (0.15 + Math.random() * 0.12);
+  t.flipVx  = (launchDx || t.dir * t.speed) * 2.2;
+  t.flipVy  = -(8 + Math.random() * 5);  // dramatic upward launch
+  t.dy = t.flipVy;
+  t.dx = t.flipVx;
+}
+
+function updateTables() {
+  for (let t of tables) {
+    if (t.hitFlash  > 0) t.hitFlash--;
+    if (t.flipDamageCooldown > 0) t.flipDamageCooldown--;
+
+    // --- KNOCKBACK (not flipping) ---
+    if (!t.flipping && t.knockbackTimer > 0) {
+      t.x += t.knockbackDx;
+      t.y += t.knockbackDy;
+      t.knockbackDx *= 0.80;
+      t.knockbackDy *= 0.80;
+      t.knockbackTimer--;
+      continue;
+    }
+
+    // =====================================================
+    //  FLIP STATE — table is airborne & spinning
+    // =====================================================
+    if (t.flipping) {
+      // Gravity
+      t.flipVy += gravity * 1.1;
+      t.flipVy = Math.min(t.flipVy, 18);
+      t.x += t.flipVx;
+      t.y += t.flipVy;
+      t.flipAngle += t.flipAngularVel;
+
+      // Slow horizontal spin drag
+      t.flipVx *= 0.97;
+
+      // Deal damage to enemies within the table's spinning hitbox
+      if (t.flipDamageCooldown <= 0) {
+        const spinR = (t.width * 0.6);
+        const cx = t.x + t.width / 2;
+        const cy = t.y + t.height / 2;
+        const flipHit = { x: cx - spinR, y: cy - spinR, width: spinR*2, height: spinR*2 };
+
+        // Hurt snails
+        for (let i = snails.length - 1; i >= 0; i--) {
+          const s = snails[i];
+          if (isColliding(flipHit, s)) {
+            damageEnemy(s, 1, { x: (s.x - cx)*0.15, y: -4 });
+            if (s.hp <= 0) { snails.splice(i, 1); onEnemyKilled('snail'); }
+          }
+        }
+        // Hurt SuperSnails
+        for (let i = SuperSnails.length - 1; i >= 0; i--) {
+          const s = SuperSnails[i];
+          if (isColliding(flipHit, s)) {
+            damageEnemy(s, 1, { x: (s.x - cx)*0.15, y: -4 });
+            if (s.hp <= 0) { SuperSnails.splice(i, 1); onEnemyKilled('superSnail'); }
+          }
+        }
+        // Hurt turrets
+        for (let i = turrets.length - 1; i >= 0; i--) {
+          if (isColliding(flipHit, turrets[i])) {
+            damageEnemy(turrets[i], 1, {x:0,y:0});
+            if (turrets[i].hp <= 0) { turrets.splice(i, 1); onEnemyKilled('turret'); }
+          }
+        }
+        // Hurt chairs
+        for (let i = chairs.length - 1; i >= 0; i--) {
+          const c = chairs[i];
+          if (isColliding(flipHit, c)) {
+            damageEnemy(c, 1, { x:(c.x-cx)*0.2, y:-5 });
+            c.dx += (c.x-cx)*0.12;
+            c.dy -= 3;
+            if (c.hp <= 0) { chairs.splice(i, 1); onEnemyKilled('chair'); }
+          }
+        }
+        // Hurt player
+        if (isColliding(flipHit, player)) {
+          loseLife();
+        }
+        // Knock boxes
+        for (const b of boxes) {
+          if (isColliding(flipHit, b)) {
+            b.dx += (b.x - cx) * 0.18;
+            b.dy -= 5;
+          }
+        }
+        t.flipDamageCooldown = 18;
+      }
+
+      // World bounds — bounce off side walls
+      if (t.x < 0 || t.x + t.width > world.width) {
+        t.flipVx *= -0.6;
+        t.x = Math.max(0, Math.min(t.x, world.width - t.width));
+      }
+
+      // --- LANDING: check floor collision ---
+      let landed = false;
+      for (let wall of walls) {
+        if (!isColliding(t, wall)) continue;
+        const oy = Math.min(t.y + t.height - wall.y, wall.y + wall.height - t.y);
+        const ox = Math.min(t.x + t.width  - wall.x, wall.x + wall.width  - t.x);
+        if (oy <= ox) {
+          if (t.y + t.height / 2 < wall.y + wall.height / 2) {
+            // Landing on top of wall
+            t.y -= oy;
+            t.flipVy = 0;
+            landed = true;
+          } else {
+            t.y += oy;
+            t.flipVy = Math.abs(t.flipVy) * 0.4;
+          }
+        } else {
+          t.x += t.x < wall.x ? -ox : ox;
+          t.flipVx *= -0.5;
+        }
+      }
+
+      if (landed) {
+        // SLAM EFFECT — if landing hard enough
+        if (!t.slamDamageDealt && Math.abs(t.flipVy) > 5) {
+          const slamR = 100;
+          const cx = t.x + t.width / 2;
+          const cy = t.y + t.height;
+          // Slam particle burst
+          for (let i = 0; i < 8; i++) {
+            snowParticles.push({
+              x: cx + (Math.random()-0.5)*t.width,
+              y: cy,
+              speed: 1 + Math.random()*2,
+              size: 2 + Math.random()*3,
+              drift: (Math.random()-0.5)*2,
+              life: 25,
+              color: "#c8922a"
+            });
+          }
+          // Slam shockwave damage
+          for (let i = snails.length - 1; i >= 0; i--) {
+            const s = snails[i];
+            if (Math.hypot(s.x+s.width/2 - cx, s.y+s.height/2 - cy) < slamR) {
+              damageEnemy(s, 2, { x:(s.x-cx)*0.1, y:-6 });
+              if (s.hp <= 0) { snails.splice(i, 1); onEnemyKilled('snail'); }
+            }
+          }
+          for (let i = SuperSnails.length - 1; i >= 0; i--) {
+            const s = SuperSnails[i];
+            if (Math.hypot(s.x+s.width/2 - cx, s.y+s.height/2 - cy) < slamR) {
+              damageEnemy(s, 2, { x:(s.x-cx)*0.1, y:-6 });
+              if (s.hp <= 0) { SuperSnails.splice(i, 1); onEnemyKilled('superSnail'); }
+            }
+          }
+          for (let i = chairs.length - 1; i >= 0; i--) {
+            const c = chairs[i];
+            if (Math.hypot(c.x+c.width/2 - cx, c.y+c.height/2 - cy) < slamR) {
+              damageEnemy(c, 2, { x:(c.x-cx)*0.15, y:-7 });
+              c.dx += (c.x-cx)*0.15; c.dy -= 6;
+              if (c.hp <= 0) { chairs.splice(i, 1); onEnemyKilled('chair'); }
+            }
+          }
+          // Slam hurts player too if they're under it
+          if (Math.hypot(player.x+player.width/2 - cx, player.y+player.height/2 - cy) < slamR * 0.6) {
+            loseLife();
+          }
+          // Screen shake
+          camera.x += (Math.random()-0.5)*12;
+          camera.y += (Math.random()-0.5)*12;
+          triggerVHSGlitch();
+          if (hasPotato) {
+            potatoMessage = "🥔 the furniture demands respect";
+            potatoMessageTimer = 100;
+          }
+          t.slamDamageDealt = true;
+        }
+
+        // Settle the table
+        t.flipping = false;
+        t.flipAngle = 0;
+        t.flipAngularVel = 0;
+        t.flipVx = 0;
+        t.flipVy = 0;
+        t.onGround = true;
+        t.dx = 0;
+        t.dy = 0;
+        t.dir = Math.random() > 0.5 ? 1 : -1; // face a random direction after landing
+      }
+      continue; // skip normal AI while flipping
+    }
+
+    // =====================================================
+    //  NORMAL STATE — patrol on the ground
+    // =====================================================
+    t.dy += gravity;
+    if (t.dy > 12) t.dy = 12;
+
+    t.dx = t.dir * t.speed;
+    t.x += t.dx;
+    t.y += t.dy;
+    t.onGround = false;
+
+    // Wall collisions
+    for (let wall of walls) {
+      if (!isColliding(t, wall)) continue;
+      const ox = Math.min(t.x + t.width - wall.x, wall.x + wall.width - t.x);
+      const oy = Math.min(t.y + t.height - wall.y, wall.y + wall.height - t.y);
+
+      if (ox < oy) {
+        t.x += t.x < wall.x ? -ox : ox;
+        t.dir *= -1;
+        t.dx = 0;
+      } else {
+        if (t.y < wall.y) {
+          t.y -= oy;
+          t.dy = 0;
+          t.onGround = true;
+        } else {
+          t.y += oy;
+          t.dy = 0;
+        }
+      }
+    }
+
+    // Edge detection — don't walk off ledges
+    if (t.onGround) {
+      const frontX = t.dir > 0 ? t.x + t.width + 2 : t.x - 2;
+      const frontY = t.y + t.height + 4;
+      let groundAhead = false;
+      for (let wall of walls) {
+        if (frontX > wall.x && frontX < wall.x + wall.width &&
+            frontY > wall.y && frontY < wall.y + wall.height) {
+          groundAhead = true; break;
+        }
+      }
+      if (!groundAhead) t.dir *= -1;
+    }
+
+    // --- TABLE vs PLAYER collision ---
+    if (isColliding(t, player)) {
+      const playerFeet = player.y + player.height;
+      const tableTop   = t.y + 6;   // a little tolerance at the surface
+
+      const landingFromAbove = playerFeet <= tableTop + 10 && player.dy >= 0;
+      if (landingFromAbove) {
+        // Ride the table — it's a platform!
+        player.y = t.y - player.height;
+        player.dy = 0;
+        player.onGround = true;
+        player.x += t.dx;
+      } else {
+        // Walked into the legs — FLIP the table and hurt player
+        loseLife();
+        triggerTableFlip(t, player.dx * 0.5);
+      }
+    }
+
+    // --- TABLE shoves BOXES ---
+    for (let box of boxes) {
+      if (!isColliding(t, box)) continue;
+      const ox = Math.min(t.x+t.width-box.x, box.x+box.width-t.x);
+      const oy = Math.min(t.y+t.height-box.y, box.y+box.height-t.y);
+      if (ox < oy) {
+        box.x += t.x < box.x ? ox : -ox;
+        box.dx = t.dx * 1.1;
+      } else {
+        if (t.y < box.y) { box.y += oy; box.dy = 0; }
+      }
+    }
+  }
+}
+
+function drawTables() {
+  for (let t of tables) {
+    ctx.save();
+
+    const cx = t.x + t.width / 2;
+    const cy = t.y + t.height / 2;
+
+    if (t.hitFlash > 0) ctx.filter = "brightness(8)";
+
+    if (t.flipping) {
+      ctx.translate(cx, cy);
+      ctx.rotate(t.flipAngle);
+      ctx.translate(-t.width/2, -t.height/2);
+    } else {
+      ctx.translate(t.x, t.y);
+    }
+
+    const W = t.width;
+    const H = t.height;
+    const LEG_W = 7;
+    const LEG_H = 24;
+    const TOP_H = 10;
+
+    // ---- Legs (drawn below the tabletop) ----
+    const legColor = isChristmasMap() ? "#5c3317" : "#7b4b18";
+    ctx.fillStyle = legColor;
+    // Left leg
+    ctx.fillRect(4, TOP_H, LEG_W, LEG_H);
+    // Right leg
+    ctx.fillRect(W - 4 - LEG_W, TOP_H, LEG_W, LEG_H);
+    // Stretcher (horizontal brace between legs)
+    ctx.fillRect(4, TOP_H + LEG_H - 6, W - 8, 5);
+
+    // ---- Tabletop ----
+    const topColor = isChristmasMap() ? "#c0392b" : "#c8922a";
+    ctx.fillStyle = topColor;
+    ctx.fillRect(0, 0, W, TOP_H);
+
+    // Wood grain lines on tabletop
+    ctx.strokeStyle = "rgba(0,0,0,0.18)";
+    ctx.lineWidth = 1;
+    if (t.woodGrain === 0) {
+      for (let gx = 10; gx < W; gx += 12) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, TOP_H); ctx.stroke();
+      }
+    } else if (t.woodGrain === 1) {
+      ctx.beginPath(); ctx.moveTo(8, 3); ctx.lineTo(W-6, 3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(8, 7); ctx.lineTo(W-6, 7); ctx.stroke();
+    } else {
+      for (let gx = 0; gx < W; gx += 14) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx + 8, TOP_H); ctx.stroke();
+      }
+    }
+
+    // ---- Tabletop edge highlight ----
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.fillRect(0, 0, W, 2);
+
+    // ---- Tablecloth variant (Christmas) ----
+    if (isChristmasMap()) {
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.fillRect(0, 0, W, TOP_H);
+      // Red/white stripe
+      ctx.fillStyle = "rgba(200,50,50,0.45)";
+      for (let sx = 0; sx < W; sx += 12) {
+        ctx.fillRect(sx, 0, 6, TOP_H);
+      }
+    }
+
+    // ---- Health bar (only if damaged) ----
+    if (t.hp < t.maxHp) {
+      const barW = W;
+      const barH = 4;
+      ctx.fillStyle = "#300";
+      ctx.fillRect(0, -8, barW, barH);
+      const pct = t.hp / t.maxHp;
+      ctx.fillStyle = pct > 0.5 ? "#0f0" : pct > 0.25 ? "#ff0" : "#f00";
+      ctx.fillRect(0, -8, barW * pct, barH);
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, -8, barW, barH);
+    }
+
+    // ---- FLIP spin glow ----
+    if (t.flipping) {
+      ctx.globalCompositeOperation = 'lighter';
+      const grd = ctx.createRadialGradient(W/2, H/2, 2, W/2, H/2, W * 0.7);
+      grd.addColorStop(0, "rgba(255,180,50,0.35)");
+      grd.addColorStop(1, "rgba(255,100,0,0)");
+      ctx.fillStyle = grd;
+      ctx.fillRect(-10, -10, W+20, H+20);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    ctx.restore();
+  }
+}
+// === END TABLE MODULE ===
 function createChair(x, y) {
   return {
     x, y,
@@ -6763,6 +7229,27 @@ function updatePlayerSwordAttack() {
       player.attackHitObjects.add(c);
     }
   }
+  // Hit tables — sword triggers a flip!
+  for (let i = tables.length - 1; i >= 0; i--) {
+    let t = tables[i];
+    if (isColliding(attackBox, t) && !player.attackHitObjects.has(t)) {
+      const died = damageEnemy(t, 1, {
+        x: player.attackKnockback * 2 * Math.sign(t.x - player.x),
+        y: -player.attackKnockback * 1.5
+      });
+      // Always flip the table on sword hit regardless of HP
+      if (!t.flipping) triggerTableFlip(t, player.attackKnockback * player.facing);
+      if (died) {
+        tables.splice(i, 1);
+        onEnemyKilled('table');
+      }
+      if (hasPotato) {
+        potatoMessage = "🥔 respect the table flip";
+        potatoMessageTimer = 80;
+      }
+      player.attackHitObjects.add(t);
+    }
+  }
 }
 
 function resetWorld() {
@@ -6773,6 +7260,7 @@ function resetWorld() {
   snails = [];
   bats = [];
   chairs = [];
+  tables = [];
   SuperSnails = [];
   ladders = [];
   spikes = [];
@@ -6839,8 +7327,9 @@ function updateOrbiters() {
     ...snowmen.map(e => ({ e, list: snowmen, key: 'snowman' })),
     ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
     ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
+    ...tables.map(e => ({ e, list: tables, key: 'table' })),
   ];
-  
+
   for (const orb of playerUpgrades.orbiters) {
     orb.angle += orb.speed;
 
@@ -6893,7 +7382,7 @@ function updateHomingShot() {
   const candidates = [
     ...snails, ...SuperSnails,
     ...yetis.filter(y => y.alive),
-    ...snowmen, ...turrets, ...chairs
+    ...snowmen, ...turrets, ...chairs, ...tables
   ];
 
   for (const e of candidates) {
@@ -6937,6 +7426,7 @@ function updateDashDamage() {
     { list: snowmen,     key: 'snowman' },
     { list: chairs,      key: 'chair' },
     { list: turrets,     key: 'turret' },
+    { list: tables,      key: 'table' },
   ];
 
   for (const { list, key } of groups) {
@@ -7485,6 +7975,7 @@ function drawSnails() {
   drawBox(b);
 }
   drawChairs();
+  drawTables();
   drawSnails();
   drawSuperSnails();
   drawYetis();
@@ -7668,7 +8159,10 @@ if (player.dashActive || player.dashDuration > 0) {
   drawPotatoCannon();
   drawLighting();
   drawEnemyHealthBars();
-  ctx.restore(); // For HUD
+  ctx.restore(); // Restore camera transform for HUD
+
+  drawOffScreenIndicators();
+  
   // HUD / DEV OVERLAYS
 if (devMapView) {
   if (devShowGrid) {
@@ -7697,8 +8191,6 @@ if (player.dashCooldown > 0) {
   ctx.fillText("DASH used", 10, 60);
 }
 
-    drawOffScreenIndicators();
-  
   // --- POTATO HUD WHISPER ---
   ctx.fillStyle = "#ffcc66";
   ctx.font = "14px Arial";
@@ -7790,6 +8282,7 @@ function gameLoop(currentTime) {
     updateOvens(player);
     updateSnails();
     updateChairs();
+    updateTables();
     updateSuperSnails();
     updateOrbiters();
 updateHomingShot();
