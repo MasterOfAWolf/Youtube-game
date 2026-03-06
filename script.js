@@ -7668,7 +7668,7 @@ if (player.dashActive || player.dashDuration > 0) {
   drawPotatoCannon();
   drawLighting();
   drawEnemyHealthBars();
-  
+  ctx.restore(); // For HUD
   // HUD / DEV OVERLAYS
 if (devMapView) {
   if (devShowGrid) {
