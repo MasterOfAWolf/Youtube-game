@@ -7668,9 +7668,6 @@ if (player.dashActive || player.dashDuration > 0) {
   drawPotatoCannon();
   drawLighting();
   drawEnemyHealthBars();
-  ctx.restore(); // Restore camera transform for HUD
-
-  drawOffScreenIndicators();
   
   // HUD / DEV OVERLAYS
 if (devMapView) {
@@ -7700,6 +7697,8 @@ if (player.dashCooldown > 0) {
   ctx.fillText("DASH used", 10, 60);
 }
 
+    drawOffScreenIndicators();
+  
   // --- POTATO HUD WHISPER ---
   ctx.fillStyle = "#ffcc66";
   ctx.font = "14px Arial";
