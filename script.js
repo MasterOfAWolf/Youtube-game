@@ -173,6 +173,18 @@ const keyMap = {
   "f": "btnAttack"
 };
 
+  
+  // Get all alive enemies
+const allEnemies = [
+    ...snails.map(e => ({ e, list: snails, key: 'snail' })),
+    ...SuperSnails.map(e => ({ e, list: SuperSnails, key: 'superSnail' })),
+    ...yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
+    ...snowmen.map(e => ({ e, list: snowmen, key: 'snowman' })),
+    ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
+    ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
+    ...bats.map(e => ({ e, list: bats, key: 'bat' })),
+  ];
+
 document.addEventListener("keydown", e => {
   const btnId = keyMap[e.key];
   if (btnId) {
@@ -2376,17 +2388,6 @@ function drawOffScreenIndicators() {
   if (!waveSystem.enabled || !waveSystem.waveActive) return;
   
   ctx.save();
-  
-  // Get all alive enemies
-const allEnemies = [
-    ...snails.map(e => ({ e, list: snails, key: 'snail' })),
-    ...SuperSnails.map(e => ({ e, list: SuperSnails, key: 'superSnail' })),
-    ...yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
-    ...snowmen.map(e => ({ e, list: snowmen, key: 'snowman' })),
-    ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
-    ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
-    ...bats.map(e => ({ e, list: bats, key: 'bat' })),
-  ];
   
   for (let enemy of allEnemies) {
     const enemyScreenX = enemy.x - camera.x;
@@ -6831,15 +6832,6 @@ function updateOrbiters() {
 
   const cx = player.x + player.width / 2;
   const cy = player.y + player.height / 2;
-
-  const allEnemies = [
-    ...snails.map(e => ({ e, list: snails, key: 'snail' })),
-    ...SuperSnails.map(e => ({ e, list: SuperSnails, key: 'superSnail' })),
-    ...yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
-    ...snowmen.map(e => ({ e, list: snowmen, key: 'snowman' })),
-    ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
-    ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
-  ];
 
   for (const orb of playerUpgrades.orbiters) {
     orb.angle += orb.speed;
