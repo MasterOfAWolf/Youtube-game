@@ -7478,6 +7478,7 @@ function updateDashDamage() {
     { list: chairs,      key: 'chair' },
     { list: turrets,     key: 'turret' },
     { list: tables,      key: 'table' },
+    { list: bats,      key: 'bat' },
   ];
 
   for (const { list, key } of groups) {
