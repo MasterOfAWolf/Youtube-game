@@ -320,6 +320,35 @@ attackBtn.addEventListener("touchend", e => {
   releaseAttack();
 });
 
+canvas.addEventListener("touchstart", (e) => {
+  if (!levelUpPending) return;
+  e.preventDefault();
+
+  const cardW = 170;
+  const cardH = 200;
+  const gap = 24;
+  const totalW = levelUpCards.length * cardW + (levelUpCards.length - 1) * gap;
+  const startX = (canvas.width - totalW) / 2;
+  const cardY = (canvas.height - cardH) / 2 - 10;
+  const rect = canvas.getBoundingClientRect();
+
+  // Scale touch coords to canvas coords (handles CSS scaling)
+  const scaleX = canvas.width  / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const touch = e.changedTouches[0];
+  const mx = (touch.clientX - rect.left) * scaleX;
+  const my = (touch.clientY - rect.top)  * scaleY;
+
+  for (let i = 0; i < levelUpCards.length; i++) {
+    const cx = startX + i * (cardW + gap);
+    if (mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
+      levelUpSelectedIndex = i;
+      chooseLevelUpCard(i);
+      return;
+    }
+  }
+}, { passive: false });
+
 attackBtn.addEventListener("touchcancel", releaseAttack);
 
 // Mouse support (CodePen desktop testing)
@@ -3594,7 +3623,7 @@ const UPGRADE_POOL = [
     name: "Hyperdash",
     desc: "Dash distance +50%",
     icon: "🔥",
-    apply() { player.dashSpeed *= 1.5; player.dashMaxDuration = Math.floor(player.dashMaxDuration * 1.5); }
+    apply() { player.dashSpeed *= 1.25; player.dashMaxDuration = Math.floor(player.dashMaxDuration * 1.25); }
   },
 ];
 
