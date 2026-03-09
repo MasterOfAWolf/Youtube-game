@@ -1122,9 +1122,10 @@ function firePotatoCannon() {
     alive:     true,
     trail:     []
   });
-
-  cannonCooldown = CANNON_COOLDOWN_FRAMES;
-
+  
+  cannonCooldown = playerUpgrades.cannonRapidEnabled
+  ? Math.floor(CANNON_COOLDOWN_FRAMES / 2)
+  : CANNON_COOLDOWN_FRAMES;
   // Tiny recoil
   player.dx -= Math.cos(cannonAimAngle) * 1.5;
   player.dy -= Math.sin(cannonAimAngle) * 0.8;
@@ -1195,12 +1196,15 @@ function updateCannonProjectiles() {
         const e = list[j];
         if (isColliding(hitBox, e)) {
           damageEnemy(e, dmg, kb);
-          if (e.hp <= 0) { list.splice(j, 1); onEnemyKilled(key); }
-          hit = true; break;
+          if (p.homing && playerUpgrades.homingExplosive && hit) {
+  createExplosion(p.x, p.y);}
+             if (e.hp <= 0) { list.splice(j, 1); onEnemyKilled(key); }
+             hit = true; break;
         }
       }
     }
 
+    
     // Yetis
     if (!hit) for (const y of yetis) {
       if (!y.alive) continue;
@@ -3490,10 +3494,15 @@ const playerUpgrades = {
   homingEnabled: false, // periodic homing shot
   homingTimer: 0,
   dashDamageEnabled: false,
+  homingRate: 1,          // ← new: multiplier for fire rate
+  homingExplosive: false, // ← new
   dashInvulEnabled: false,      // ← new: Ghost Dash upgrade
   dashHitEnemies: new Set(),    // ← new: tracks who was hit this dash
   extraJumpsMax: 0,     // double-jump charges
   extraJumpsLeft: 0,
+  swordVampEnabled: false,  // ← new
+  cannonBounceEnabled: false, // ← new
+  cannonRapidEnabled: false,  // ← new
 };
 
 // Level-up UI state
@@ -3640,6 +3649,80 @@ const UPGRADE_POOL = [
     desc: "Dash distance +50%",
     icon: "🔥",
     apply() { player.dashSpeed *= 1.25; player.dashMaxDuration = Math.floor(player.dashMaxDuration * 1.25); }
+  },
+  // === SWORD BRANCH ===
+  {
+    id: "swordRange",
+    name: "Long Reach",
+    desc: "Sword radius +50%",
+    icon: "🔱",
+    apply() { /* radius is calculated from a const — store a multiplier */
+      playerUpgrades.swordRangeMulti = (playerUpgrades.swordRangeMulti || 1) * 1.5;
+    }
+  },
+  {
+    id: "swordVamp",
+    name: "Soul Blade",
+    desc: "Killing with the sword restores 1 life (once per wave)",
+    icon: "🩸",
+    apply() { playerUpgrades.swordVampEnabled = true; playerUpgrades.swordVampUsed = false; }
+  },
+
+  // === ORBIT BRANCH ===
+  {
+    id: "orbiter3",
+    name: "Triple Orbit",
+    desc: "A third orbiting rock joins you",
+    icon: "🌕",
+    apply() {
+      playerUpgrades.orbiters.push({
+        angle: Math.PI * 4 / 3,
+        speed: 0.07,
+        radius: 52,
+        size: 10,
+        damage: 1,
+        hitCooldowns: new Map()
+      });
+    }
+  },
+  {
+    id: "orbiterFast",
+    name: "Rapid Orbit",
+    desc: "All orbiting rocks spin twice as fast",
+    icon: "💫",
+    apply() { for (const o of playerUpgrades.orbiters) o.speed *= 2; playerUpgrades.orbitSpeedBonus = 2; }
+  },
+
+  // === HOMING BRANCH ===
+  {
+    id: "homingRate",
+    name: "Missile Barrage",
+    desc: "Seeker Shot fires twice as often",
+    icon: "🚀",
+    apply() { playerUpgrades.homingRate = (playerUpgrades.homingRate || 1) * 2; }
+  },
+  {
+    id: "homingExplosive",
+    name: "Seeker Bomb",
+    desc: "Homing bolts explode on impact",
+    icon: "💥",
+    apply() { playerUpgrades.homingExplosive = true; }
+  },
+
+  // === CANNON BRANCH ===
+  {
+    id: "cannonRapid",
+    name: "Rapid Fire",
+    desc: "Cannon fires twice as fast",
+    icon: "🔫",
+    apply() { playerUpgrades.cannonRapidEnabled = true; }
+  },
+  {
+    id: "cannonBounce",
+    name: "Ricochet",
+    desc: "Cannon shots bounce off walls once",
+    icon: "↩️",
+    apply() { playerUpgrades.cannonBounceEnabled = true; }
   },
 ];
 
@@ -3929,7 +4012,8 @@ function startNextWave() {
   waveSystem.currentWave++;
   waveSystem.waveActive = true;
   waveSystem.waveTimer = 0;
-  
+
+  playerUpgrades.swordVampUsed = false;
   // Get wave config
   let waveIndex = Math.min(waveSystem.currentWave - 1, waveSystem.currentMapWaves.length - 1);
   let waveConfig = waveSystem.currentMapWaves[waveIndex];
@@ -4264,12 +4348,25 @@ function triggerLevelUp() {
   // Pick 3 unique upgrades at random
   // Infinitely-stackable ones (orbiters, speed, etc.) are always available;
   // one-shot ones are excluded if already owned.
-  const oneShot = new Set(["homing", "dashDamage", "extraJump", "potato"]);
+const oneShot = new Set([
+  "homing", "dashDamage", "extraJump", "potato",
+  "dashInvul", "swordVamp", "homingExplosive",
+  "cannonRapid", "cannonBounce", "orbiterFast"
+]);
 
- const available = UPGRADE_POOL.filter(u => {
+const available = UPGRADE_POOL.filter(u => {
   if (oneShot.has(u.id) && ownedUpgradeIds.has(u.id)) return false;
-  if (u.id === "orbiter2" && !ownedUpgradeIds.has("orbiter")) return false;
-  if (u.id === "dashDamage" && !ownedUpgradeIds.has("dashInvul")) return false;
+  // Branching requirements
+  if (u.id === "orbiter2"       && !ownedUpgradeIds.has("orbiter"))    return false;
+  if (u.id === "orbiter3"       && !ownedUpgradeIds.has("orbiter2"))   return false;
+  if (u.id === "orbiterFast"    && !ownedUpgradeIds.has("orbiter"))    return false;
+  if (u.id === "dashDamage"     && !ownedUpgradeIds.has("dashInvul"))  return false;
+  if (u.id === "swordRange"     && !ownedUpgradeIds.has("swordSpeed") && !ownedUpgradeIds.has("swordKnockback")) return false;
+  if (u.id === "swordVamp"      && !ownedUpgradeIds.has("swordKnockback")) return false;
+  if (u.id === "homingRate"     && !ownedUpgradeIds.has("homing"))     return false;
+  if (u.id === "homingExplosive"&& !ownedUpgradeIds.has("homing"))     return false;
+  if (u.id === "cannonRapid"    && !ownedUpgradeIds.has("potato"))     return false;
+  if (u.id === "cannonBounce"   && !ownedUpgradeIds.has("potato"))     return false;
   return true;
 });
 
@@ -5956,13 +6053,24 @@ document.addEventListener("keyup", e => {
 
 function togglePause() {
   if (!gameRunning) return;
-
   gamePaused = !gamePaused;
-
   const menu = document.getElementById("pauseMenu");
 
   if (gamePaused) {
     menu.classList.remove("hidden");
+
+    // Build upgrade list
+    const listEl = document.getElementById("upgradeListItems");
+    if (ownedUpgradeIds.size === 0) {
+      listEl.innerHTML = "None yet";
+    } else {
+      const lines = [];
+      for (const id of ownedUpgradeIds) {
+        const upgrade = UPGRADE_POOL.find(u => u.id === id);
+        if (upgrade) lines.push(`${upgrade.icon} <b>${upgrade.name}</b> — ${upgrade.desc}`);
+      }
+      listEl.innerHTML = lines.join("<br>");
+    }
   } else {
     menu.classList.add("hidden");
   }
@@ -7029,7 +7137,7 @@ function drawPlayerSword() {
   
   const pivotX = player.x + player.width / 2;
   const pivotY = player.y + player.height / 2;
-  const radius = 60;
+  const radius = 60 * (playerUpgrades.swordRangeMulti || 1);
   
   const tipX = pivotX + Math.cos(angle) * radius * player.facing;
   const tipY = pivotY + Math.sin(angle) * radius;
@@ -7090,7 +7198,7 @@ function updatePlayerSwordAttack() {
   
   const pivotX = player.x + player.width / 2;
   const pivotY = player.y + player.height / 2;
-  const radius = 60;
+  const radius = 60 * (playerUpgrades.swordRangeMulti || 1);
   
   const tipX = pivotX + Math.cos(angle) * radius * player.facing;
   const tipY = pivotY + Math.sin(angle) * radius;
@@ -7281,6 +7389,13 @@ function updatePlayerSwordAttack() {
       player.attackHitObjects.add(t);
     }
   }
+  // After onEnemyKilled() calls in the sword section, add:
+if (playerUpgrades.swordVampEnabled && !playerUpgrades.swordVampUsed && playerLives < maxLives) {
+  playerLives++;
+  playerUpgrades.swordVampUsed = true;
+  potatoMessage = "🩸 soul absorbed";
+  potatoMessageTimer = 90;
+ }
 }
 
 function resetWorld() {
@@ -7403,7 +7518,7 @@ function updateHomingShot() {
 
   playerUpgrades.homingTimer--;
   if (playerUpgrades.homingTimer > 0) return;
-  playerUpgrades.homingTimer = 120; // fire every 2 seconds
+  playerUpgrades.homingTimer = Math.floor(120 / (playerUpgrades.homingRate || 1));
 
   // Find closest enemy
   let closest = null;
