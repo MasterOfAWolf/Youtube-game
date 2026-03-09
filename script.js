@@ -11,6 +11,13 @@ const FRAME_DURATION = 1000 / TARGET_FPS; // ~16.67ms per frame
 let lastFrameTime = 0;
 let deltaTime = 0;
 
+const tableFrames = [];
+for (let i = 0; i < 4; i++) {
+  const img = new Image();
+  img.src = `Assets/Sprites/table-frame-${i}.png`; // rename to match your actual filenames
+  tableFrames.push(img);
+}
+
 const bgTile = new Image();
 bgTile.src = "Assets/Tiles/Cobblestone BG.png";
 
@@ -4103,6 +4110,9 @@ function spawnEnemy(type, hp) {
 
     case 'table': {
       const newTable = createTable(pos.x, pos.y);
+      frame: 0,
+      frameTimer: 0,
+      frameSpeed: 8,  // lower = faster animation
       newTable.hp    = hp || 4;
       newTable.maxHp = hp || 4;
       tables.push(newTable);
@@ -6396,6 +6406,15 @@ function updateTables() {
       if (!groundAhead) t.dir *= -1;
     }
 
+
+    // Animate walking frames
+if (t.onGround) {
+  t.frameTimer++;
+  if (t.frameTimer >= t.frameSpeed) {
+    t.frameTimer = 0;
+    t.frame = (t.frame + 1) % tableFrames.length;
+  }
+}
     // --- TABLE vs PLAYER collision ---
     if (isColliding(t, player)) {
       const playerFeet = player.y + player.height;
@@ -6434,97 +6453,48 @@ function drawTables() {
   for (let t of tables) {
     ctx.save();
 
-    const cx = t.x + t.width / 2;
-    const cy = t.y + t.height / 2;
+const cx = t.x + t.width / 2;
+const cy = t.y + t.height / 2;
 
-    if (t.hitFlash > 0) ctx.filter = "brightness(8)";
+if (t.hitFlash > 0) ctx.filter = "brightness(8)";
 
-    if (t.flipping) {
-      ctx.translate(cx, cy);
-      ctx.rotate(t.flipAngle);
-      ctx.translate(-t.width/2, -t.height/2);
+if (t.flipping) {
+  // Frozen on frame 0 while airborne
+  const img = tableFrames[0];
+  if (img && img.complete) {
+    ctx.translate(cx, cy);
+    ctx.rotate(t.flipAngle);
+    ctx.drawImage(img, -t.width / 2 - 10, -t.height / 2 - 10, t.width + 20, t.height + 20);
+  }
+} else {
+  // Walking animation — flip sprite based on direction
+  const img = tableFrames[t.frame];
+  if (img && img.complete) {
+    if (t.dir < 0) {
+      ctx.translate(t.x + t.width, t.y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, -10, -10, t.width + 20, t.height + 20);
     } else {
-      ctx.translate(t.x, t.y);
+      ctx.drawImage(img, t.x - 10, t.y - 10, t.width + 20, t.height + 20);
     }
+  }
+}
 
-    const W = t.width;
-    const H = t.height;
-    const LEG_W = 7;
-    const LEG_H = 24;
-    const TOP_H = 10;
+// Health bar (only if damaged)
+  const barW = t.width;
+  const barH = 4;
+  const barX = t.flipping ? cx - t.width / 2 : t.x;
+  const barY = t.flipping ? cy - t.height / 2 - 8 : t.y - 8;
+  ctx.fillStyle = "#300";
+  ctx.fillRect(barX, barY, barW, barH);
+  const pct = t.hp / t.maxHp;
+  ctx.fillStyle = pct > 0.5 ? "#0f0" : pct > 0.25 ? "#ff0" : "#f00";
+  ctx.fillRect(barX, barY, barW * pct, barH);
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
 
-    // ---- Legs (drawn below the tabletop) ----
-    const legColor = isChristmasMap() ? "#5c3317" : "#7b4b18";
-    ctx.fillStyle = legColor;
-    // Left leg
-    ctx.fillRect(4, TOP_H, LEG_W, LEG_H);
-    // Right leg
-    ctx.fillRect(W - 4 - LEG_W, TOP_H, LEG_W, LEG_H);
-    // Stretcher (horizontal brace between legs)
-    ctx.fillRect(4, TOP_H + LEG_H - 6, W - 8, 5);
-
-    // ---- Tabletop ----
-    const topColor = isChristmasMap() ? "#c0392b" : "#c8922a";
-    ctx.fillStyle = topColor;
-    ctx.fillRect(0, 0, W, TOP_H);
-
-    // Wood grain lines on tabletop
-    ctx.strokeStyle = "rgba(0,0,0,0.18)";
-    ctx.lineWidth = 1;
-    if (t.woodGrain === 0) {
-      for (let gx = 10; gx < W; gx += 12) {
-        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, TOP_H); ctx.stroke();
-      }
-    } else if (t.woodGrain === 1) {
-      ctx.beginPath(); ctx.moveTo(8, 3); ctx.lineTo(W-6, 3); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(8, 7); ctx.lineTo(W-6, 7); ctx.stroke();
-    } else {
-      for (let gx = 0; gx < W; gx += 14) {
-        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx + 8, TOP_H); ctx.stroke();
-      }
-    }
-
-    // ---- Tabletop edge highlight ----
-    ctx.fillStyle = "rgba(255,255,255,0.25)";
-    ctx.fillRect(0, 0, W, 2);
-
-    // ---- Tablecloth variant (Christmas) ----
-    if (isChristmasMap()) {
-      ctx.fillStyle = "rgba(255,255,255,0.3)";
-      ctx.fillRect(0, 0, W, TOP_H);
-      // Red/white stripe
-      ctx.fillStyle = "rgba(200,50,50,0.45)";
-      for (let sx = 0; sx < W; sx += 12) {
-        ctx.fillRect(sx, 0, 6, TOP_H);
-      }
-    }
-
-    // ---- Health bar (only if damaged) ----
-    if (t.hp < t.maxHp) {
-      const barW = W;
-      const barH = 4;
-      ctx.fillStyle = "#300";
-      ctx.fillRect(0, -8, barW, barH);
-      const pct = t.hp / t.maxHp;
-      ctx.fillStyle = pct > 0.5 ? "#0f0" : pct > 0.25 ? "#ff0" : "#f00";
-      ctx.fillRect(0, -8, barW * pct, barH);
-      ctx.strokeStyle = "#000";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(0, -8, barW, barH);
-    }
-
-    // ---- FLIP spin glow ----
-    if (t.flipping) {
-      ctx.globalCompositeOperation = 'lighter';
-      const grd = ctx.createRadialGradient(W/2, H/2, 2, W/2, H/2, W * 0.7);
-      grd.addColorStop(0, "rgba(255,180,50,0.35)");
-      grd.addColorStop(1, "rgba(255,100,0,0)");
-      ctx.fillStyle = grd;
-      ctx.fillRect(-10, -10, W+20, H+20);
-      ctx.globalCompositeOperation = 'source-over';
-    }
-
-    ctx.restore();
+ctx.restore();
   }
 }
 // === END TABLE MODULE ===
