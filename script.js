@@ -4108,16 +4108,16 @@ function spawnEnemy(type, hp) {
     spawnBat(pos.x, pos.y, hp || 2);
     break;
 
-    case 'table': {
-      const newTable = createTable(pos.x, pos.y);
-      frame: 0,
-      frameTimer: 0,
-      frameSpeed: 8,  // lower = faster animation
-      newTable.hp    = hp || 4;
-      newTable.maxHp = hp || 4;
-      tables.push(newTable);
-      break;
-    }
+case 'table': {
+  const newTable = createTable(pos.x, pos.y);
+  newTable.frame = 0;
+  newTable.frameTimer = 0;
+  newTable.frameSpeed = 8;
+  newTable.hp    = hp || 4;
+  newTable.maxHp = hp || 4;
+  tables.push(newTable);
+  break;
+}
       
     case 'snowman':
       if (isChristmasMap()) {
@@ -4257,12 +4257,11 @@ function triggerLevelUp() {
   // one-shot ones are excluded if already owned.
   const oneShot = new Set(["homing", "dashDamage", "extraJump", "potato"]);
 
-  const available = UPGRADE_POOL.filter(u => {
-    if (oneShot.has(u.id) && ownedUpgradeIds.has(u.id)) return false;
-    return true;
-      if (u.id === "orbiter2" && !ownedUpgradeIds.has("orbiter")) return false;
+ const available = UPGRADE_POOL.filter(u => {
+  if (oneShot.has(u.id) && ownedUpgradeIds.has(u.id)) return false;
+  if (u.id === "orbiter2" && !ownedUpgradeIds.has("orbiter")) return false;
   return true;
-  });
+});
 
   // Shuffle and take 3
   const shuffled = available.sort(() => Math.random() - 0.5);
