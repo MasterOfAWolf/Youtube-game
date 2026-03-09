@@ -3490,6 +3490,8 @@ const playerUpgrades = {
   homingEnabled: false, // periodic homing shot
   homingTimer: 0,
   dashDamageEnabled: false,
+  dashInvulEnabled: false,      // ← new: Ghost Dash upgrade
+  dashHitEnemies: new Set(),    // ← new: tracks who was hit this dash
   extraJumpsMax: 0,     // double-jump charges
   extraJumpsLeft: 0,
 };
@@ -3513,6 +3515,13 @@ const XP_TABLE = {
 
 // Full upgrade pool — each entry is one possible card
 const UPGRADE_POOL = [
+  {
+  id: "dashInvul",
+  name: "Ghost Dash",
+  desc: "Become invulnerable while dashing",
+  icon: "👻",
+  apply() { playerUpgrades.dashInvulEnabled = true; }
+},
   {
   id: "potato",
   name: "Potato Cannon",
@@ -4260,6 +4269,7 @@ function triggerLevelUp() {
  const available = UPGRADE_POOL.filter(u => {
   if (oneShot.has(u.id) && ownedUpgradeIds.has(u.id)) return false;
   if (u.id === "orbiter2" && !ownedUpgradeIds.has("orbiter")) return false;
+  if (u.id === "dashDamage" && !ownedUpgradeIds.has("dashInvul")) return false;
   return true;
 });
 
@@ -5485,7 +5495,7 @@ let playerLives = maxLives;
 
 // Function to handle losing a life
 function loseLife() {
-  if (playerUpgrades.dashDamageEnabled && player.dashActive) return;
+ if (playerUpgrades.dashInvulEnabled && player.dashActive) return;
   
   playerLives--;
 
@@ -6119,8 +6129,9 @@ function tryDash() {
   player.dashActive = true;
   player.dashDuration = player.dashMaxDuration;
   player.dashCooldown = player.dashMaxCooldown;
-  player.dy = player.wallSliding ? 0 : player.dy * 0.2; // kill vertical on dash
+  player.dy = player.wallSliding ? 0 : player.dy * 0.2;
   player.dx = player.facing * player.dashSpeed;
+  playerUpgrades.dashHitEnemies.clear(); // ← clear per-dash hit registry
 
   if (!player.onGround) player.dashUsedInAir = true;
 }
@@ -7439,6 +7450,8 @@ function updateDashDamage() {
   if (!playerUpgrades.dashDamageEnabled || !player.dashActive) return;
 
   const hitBox = { x: player.x, y: player.y, width: player.width, height: player.height };
+  const hitSet = playerUpgrades.dashHitEnemies;
+  const knockback = { x: player.facing * 9, y: -5 };
 
   const groups = [
     { list: snails,      key: 'snail' },
@@ -7447,21 +7460,25 @@ function updateDashDamage() {
     { list: chairs,      key: 'chair' },
     { list: turrets,     key: 'turret' },
     { list: tables,      key: 'table' },
-    { list: bats,      key: 'bat' },
+    { list: bats,        key: 'bat' },
   ];
 
   for (const { list, key } of groups) {
     for (let i = list.length - 1; i >= 0; i--) {
-      if (!isColliding(hitBox, list[i])) continue;
-      damageEnemy(list[i], 2, { x: player.facing * 5, y: -4 });
-      if (list[i].hp <= 0) { list.splice(i, 1); onEnemyKilled(key); }
+      const e = list[i];
+      if (hitSet.has(e)) continue;          // already hit this dash
+      if (!isColliding(hitBox, e)) continue;
+      damageEnemy(e, 2, knockback);
+      hitSet.add(e);                        // mark so it won't be hit again
+      if (e.hp <= 0) { list.splice(i, 1); onEnemyKilled(key); }
     }
   }
 
   for (const y of yetis) {
-    if (!y.alive) continue;
+    if (!y.alive || hitSet.has(y)) continue;
     if (!isColliding(hitBox, y)) continue;
-    damageEnemy(y, 2, { x: player.facing * 5, y: -4 });
+    damageEnemy(y, 2, knockback);
+    hitSet.add(y);
     if (y.hp <= 0) { y.alive = false; onEnemyKilled('yeti'); }
   }
 }
