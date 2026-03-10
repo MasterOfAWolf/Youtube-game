@@ -47,6 +47,24 @@ for (let i = 0; i < 5; i++) {
   chairFrames.push(img);
 }
 
+const tutorialState = {
+  active: false,
+  completedZones: new Set(),
+  currentMessage: '',
+  messageColor: '#ffd54f',
+  messageTimer: 0,
+  completionShown: false,
+  pulseTimer: 0,
+  arrowBob: 0,
+  zoneSigns: [],
+  groundPaintings: [],
+  museumLabels: [],
+  checkpointArrows: [],
+  zoneDividers: [],
+};
+
+const TUTORIAL_TRIGGERS = [];
+
 let wasOff = true; 
 let lightingEnabled = true;
 let lights = [];
@@ -1666,6 +1684,7 @@ function openControls() {
 function loadLevel(level) {
   resetWorld(); // clear previous map junk
   currentLevel = level;
+  if (level === 0) loadMap_Tutorial();
   if (level === 1) loadMap_Level1();
   if (level === 2) loadMap_Level2();
   if (level === 3) loadMap_Level3();
@@ -1673,6 +1692,19 @@ function loadLevel(level) {
 
   initializeLevelLights();
   saveInitialState(); // allow reset after death
+}
+
+function startTutorial() {
+  hideAllMenus();
+  document.getElementById('game').style.display = 'block';
+  stopGameLoop();
+  resetGameState();
+  tutorialState.active = true;
+  tutorialState.completedZones.clear();
+  tutorialState.completionShown = false;
+  tutorialState.currentMessage = '';
+  tutorialState.messageTimer = 0;
+  startLevel(0);
 }
 
 function addMapBounds() {
@@ -1688,7 +1720,105 @@ function addMapBounds() {
   // Right wall
   walls.push({ x: MAP_WIDTH - WALL_THICKNESS, y: 0, width: 1000, height: MAP_HEIGHT });
 }
+function loadMap_Tutorial() {
+  TUTORIAL_TRIGGERS.length = 0;
+  tutorialState.zoneSigns = [];
+  tutorialState.groundPaintings = [];
+  tutorialState.museumLabels = [];
+  tutorialState.checkpointArrows = [];
+  tutorialState.zoneDividers = [];
 
+  const FLOOR = 530;
+  const WT = 20;
+  addMapBounds();
+
+  // === ZONE 1: MOVEMENT ===
+  walls.push({ x: 60, y: FLOOR, width: 400, height: WT });
+  tutorialState.groundPaintings.push({ wx: 80, wy: FLOOR - 8, text: '← A / D →', font: 'bold 14px monospace', color: '#4fc3f7' });
+  tutorialState.zoneSigns.push({ wx: 90, wy: FLOOR - 140, title: '[ ZONE 1 ] MOVEMENT', lines: ['Press A/D or ← → to walk'], color: '#4fc3f7', width: 220 });
+  tutorialState.zoneDividers.push({ wx: 460, wy: FLOOR - 260, height: 270, color: '#4fc3f7' });
+  TUTORIAL_TRIGGERS.push({ x: 350, y: FLOOR - 200, w: 80, h: 200, zoneId: 'move', message: '✅ Zone 1 Done! — You can MOVE!', color: '#4fc3f7' });
+
+  // === ZONE 2: JUMP ===
+  walls.push({ x: 500, y: FLOOR, width: 60, height: WT });
+  walls.push({ x: 580, y: FLOOR - 90, width: 80, height: WT });
+  walls.push({ x: 680, y: FLOOR - 170, width: 80, height: WT });
+  walls.push({ x: 760, y: FLOOR, width: 60, height: WT });
+  tutorialState.zoneSigns.push({ wx: 505, wy: FLOOR - 120, title: '[ ZONE 2 ] JUMP', lines: ['Press W or ↑ to jump!', 'Hop across the platforms.'], color: '#81c784', width: 220 });
+  tutorialState.zoneDividers.push({ wx: 820, wy: FLOOR - 260, height: 270, color: '#81c784' });
+  TUTORIAL_TRIGGERS.push({ x: 760, y: FLOOR - 200, w: 60, h: 200, zoneId: 'jump', message: '✅ Zone 2 Done! — You can JUMP!', color: '#81c784' });
+
+  // === ZONE 3: WALL JUMP ===
+  walls.push({ x: 860, y: FLOOR, width: 40, height: WT });
+  walls.push({ x: 860, y: FLOOR - 360, width: 20, height: 340 });
+  walls.push({ x: 1040, y: FLOOR - 360, width: 20, height: 340 });
+  walls.push({ x: 860, y: FLOOR - 380, width: 220, height: WT });
+  walls.push({ x: 1060, y: FLOOR, width: 40, height: WT });
+  ladders.push({ x: 872, y: FLOOR - 380, width: 24, height: 380 }); // escape ladder
+  tutorialState.zoneSigns.push({ wx: 862, wy: FLOOR - 490, title: '[ ZONE 3 ] WALL JUMP', lines: ['Hold INTO a wall to slide.', 'Press W to wall jump!', 'Bounce up between the walls!'], color: '#ffb74d', width: 230 });
+  tutorialState.zoneDividers.push({ wx: 1100, wy: FLOOR - 260, height: 270, color: '#ffb74d' });
+  tutorialState.checkpointArrows.push({ wx: 940, wy: FLOOR - 180, dir: 'up', color: '#ffb74d' });
+  TUTORIAL_TRIGGERS.push({ x: 920, y: FLOOR - 380, w: 80, h: 40, zoneId: 'walljump', message: '✅ Zone 3 Done! — WALL JUMP mastered!', color: '#ffb74d' });
+
+  // === ZONE 4: DASH ===
+  walls.push({ x: 1140, y: FLOOR, width: 100, height: WT });
+  walls.push({ x: 1390, y: FLOOR, width: 80, height: WT }); // gap of 150px — requires dash
+  tutorialState.groundPaintings.push({ wx: 1145, wy: FLOOR - 8, text: '→ DASH the gap!', font: 'bold 12px monospace', color: '#00e5ff' });
+  tutorialState.zoneSigns.push({ wx: 1142, wy: FLOOR - 130, title: '[ ZONE 4 ] DASH', lines: ['Press SHIFT to dash!', 'One free air-dash per jump.', 'Cross the huge gap!'], color: '#00e5ff', width: 230 });
+  tutorialState.zoneDividers.push({ wx: 1470, wy: FLOOR - 260, height: 270, color: '#00e5ff' });
+  tutorialState.checkpointArrows.push({ wx: 1200, wy: FLOOR - 60, dir: 'right', color: '#00e5ff' });
+  TUTORIAL_TRIGGERS.push({ x: 1390, y: FLOOR - 200, w: 80, h: 200, zoneId: 'dash', message: '✅ Zone 4 Done! — You can DASH!', color: '#00e5ff' });
+
+  // === ZONE 5: SWORD ===
+  walls.push({ x: 1490, y: FLOOR, width: 240, height: WT });
+  snails.push({ x: 1560, y: FLOOR - 28, width: 28, height: 20, dx: 0, dy: 0, dir: 1, speed: 0.2, gravity: 0.6, chaseRange: 80, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
+  snails.push({ x: 1640, y: FLOOR - 28, width: 28, height: 20, dx: 0, dy: 0, dir: -1, speed: 0.2, gravity: 0.6, chaseRange: 80, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
+  tutorialState.zoneSigns.push({ wx: 1492, wy: FLOOR - 150, title: '[ ZONE 5 ] SWORD', lines: ['Hold F to CHARGE.', 'Release F to SWING!', 'More charge = more knockback.'], color: '#f06292', width: 240 });
+  tutorialState.zoneDividers.push({ wx: 1730, wy: FLOOR - 260, height: 270, color: '#f06292' });
+  TUTORIAL_TRIGGERS.push({ x: 1700, y: FLOOR - 200, w: 40, h: 200, zoneId: 'sword', message: '✅ Zone 5 Done! — SWORD learned!', color: '#f06292' });
+
+  // === ZONE 6: ENEMY MUSEUM ===
+  walls.push({ x: 1770, y: FLOOR, width: 480, height: WT });
+  const museum = [
+    { x: 1790, label: '🐌 SNAIL',       desc: ['Ground patroller.', 'Chases you.'],           color: '#69f0ae' },
+    { x: 1870, label: '💚 SUPER SNAIL', desc: ['Wall-climber!', 'Can jump + ceiling-crawl.'], color: '#00e676' },
+    { x: 1950, label: '🦇 BAT',         desc: ['Flies at you.', 'Sword from any angle.'],     color: '#b39ddb' },
+    { x: 2030, label: '🔴 TURRET',      desc: ['Stationary gunner.', 'Destroy it to stop it!'],color: '#ef5350' },
+    { x: 2110, label: '⛄ SNOWMAN',     desc: ['Emits slow field.', 'Stay back or use 🥔!'],   color: '#e0f7fa' },
+    { x: 2190, label: '🦣 YETI',        desc: ['Boss-tier tank.', 'Throws snowballs!'],        color: '#e0e0e0' },
+  ];
+  for (const m of museum) {
+    walls.push({ x: m.x, y: FLOOR - 45, width: 50, height: 45 }); // pedestal
+    tutorialState.museumLabels.push({ wx: m.x, wy: FLOOR - 45, label: m.label, desc: m.desc, color: m.color, width: 50 });
+  }
+  // Display enemies (invincible, immobile)
+  snails.push({ x: 1795, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0, dir: 1, speed: 0, gravity: 0, chaseRange: 0, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: 9999, maxHp: 9999, hitFlash: 0, frame: 0, frameTimer: 0 });
+  SuperSnails.push({ x: 1875, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0, speed: 0, gravity: 0, dir: 1, jumpPower: 0, mode: 'ground', knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, jumpTimer: 999999, lastWallSide: null, prevMode: 'ground', hp: 9999, maxHp: 9999, hitFlash: 0 });
+  turrets.push({ x: 2035, y: FLOOR - 77, cooldown: 999999, fireRate: 999999, hp: 9999, maxHp: 9999, armed: false });
+  snowmen.push({ x: 2112, y: FLOOR - 83, width: 26, height: 38, speed: 0, slowRadius: 0, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [], hp: 9999, maxHp: 9999, hitFlash: 0 });
+  yetis.push({ x: 2192, y: FLOOR - 114, width: 48, height: 64, dx: 0, dy: 0, dead: false, speed: 0, chaseRange: 0, hp: 9999, alive: true, throwCooldown: 999999, facing: 1, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, maxHp: 9999, hitFlash: 0 });
+  tutorialState.zoneSigns.push({ wx: 1772, wy: FLOOR - 220, title: '[ ZONE 6 ] ENEMY MUSEUM', lines: ['Read the labels to know your foes!'], color: '#ce93d8', width: 260 });
+  tutorialState.zoneDividers.push({ wx: 2250, wy: FLOOR - 260, height: 270, color: '#ce93d8' });
+  TUTORIAL_TRIGGERS.push({ x: 2220, y: FLOOR - 200, w: 40, h: 200, zoneId: 'museum', message: '✅ Zone 6 Done! — ENEMIES identified!', color: '#ce93d8' });
+
+  // === ZONE 7: HAZARDS ===
+  walls.push({ x: 2290, y: FLOOR, width: 220, height: WT });
+  spikes.push({ x: 2360, y: FLOOR - 26, width: 40, height: 26 });
+  spikes.push({ x: 2410, y: FLOOR - 26, width: 40, height: 26 });
+  walls.push({ x: 2355, y: FLOOR - 100, width: 100, height: 14, moving: true, dir: 1, speed: 1.5, startX: 2355, range: 80 });
+  turrets.push({ x: 2475, y: FLOOR - 32, cooldown: 0, fireRate: 140, hp: 3, maxHp: 3, armed: true });
+  tutorialState.zoneSigns.push({ wx: 2292, wy: FLOOR - 200, title: '[ ZONE 7 ] HAZARDS', lines: ['RED = instant death!', 'Use the moving platform.', 'Destroy the turret!'], color: '#ef9a9a', width: 240 });
+  tutorialState.zoneDividers.push({ wx: 2520, wy: FLOOR - 260, height: 270, color: '#ef9a9a' });
+  TUTORIAL_TRIGGERS.push({ x: 2495, y: FLOOR - 200, w: 40, h: 200, zoneId: 'hazards', message: '✅ Zone 7 Done! — HAZARDS survived!', color: '#ef9a9a' });
+
+  // === ZONE 8: POTATO CANNON ===
+  walls.push({ x: 2560, y: FLOOR, width: 220, height: WT });
+  potato.x = 2600; potato.y = FLOOR - 30; potato.collected = false; potato.active = true;
+  hasPotato = false;
+  ovens.push({ x: 2710, y: FLOOR - 60, width: 40, height: 50, active: true, baked: false, glow: 0 });
+  snails.push({ x: 2675, y: FLOOR - 28, width: 28, height: 20, dx: 0, dy: 0, dir: -1, speed: 0.4, gravity: 0.6, chaseRange: 200, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: 3, maxHp: 3, hitFlash: 0, frame: 0, frameTimer: 0 });
+  tutorialState.zoneSigns.push({ wx: 2562, wy: FLOOR - 2
+    
 function loadMap_Level1() {
 
   /* ------------------ WORLD BOUNDS ------------------ */
@@ -3018,6 +3148,44 @@ function createBat(x, y, hp = 2) {
   };
 }
 
+function updateTutorial() {
+  tutorialState.pulseTimer += 0.04;
+  tutorialState.arrowBob = Math.sin(tutorialState.pulseTimer * 2) * 6;
+
+  // Potato pickup notification
+  if (hasPotato && !tutorialState.completedZones.has('potato_pickup')) {
+    tutorialState.completedZones.add('potato_pickup');
+    tutorialState.currentMessage = '🥔 POTATO acquired! Click to fire!';
+    tutorialState.messageColor = '#ffd54f';
+    tutorialState.messageTimer = 150;
+  }
+
+  // Zone triggers
+  const pr = { x: player.x, y: player.y, width: player.width, height: player.height };
+  for (const t of TUTORIAL_TRIGGERS) {
+    if (tutorialState.completedZones.has(t.zoneId)) continue;
+    if (
+      pr.x < t.x + t.w && pr.x + pr.width  > t.x &&
+      pr.y < t.y + t.h && pr.y + pr.height > t.y
+    ) {
+      tutorialState.completedZones.add(t.zoneId);
+      tutorialState.currentMessage = t.message;
+      tutorialState.messageColor   = t.color;
+      tutorialState.messageTimer   = 180;
+
+      const required = ['move','jump','walljump','dash','sword','museum','hazards','potato'];
+      if (!tutorialState.completionShown && required.every(z => tutorialState.completedZones.has(z))) {
+        tutorialState.completionShown = true;
+        setTimeout(() => {
+          tutorialState.currentMessage = '🎉 TUTORIAL COMPLETE! You are ready!';
+          tutorialState.messageColor   = '#ffd54f';
+          tutorialState.messageTimer   = 360;
+        }, 3000);
+      }
+    }
+  }
+}
+  
 function updateBats() {
   for (let i = bats.length - 1; i >= 0; i--) {
     let bat = bats[i];
@@ -3153,6 +3321,193 @@ function updateBats() {
   }
 }
 
+function drawTutorialWorld() {
+  // Zone dividers
+  for (const d of tutorialState.zoneDividers) {
+    const sx = d.wx - camera.x, sy = d.wy - camera.y;
+    if (sx < -20 || sx > canvas.width + 20) continue;
+    ctx.save();
+    ctx.globalAlpha = 0.4 + 0.1 * Math.sin(tutorialState.pulseTimer);
+    ctx.strokeStyle = d.color;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx, sy + d.height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Floating arrows
+  for (const arr of tutorialState.checkpointArrows) {
+    const sx = arr.wx - camera.x;
+    const sy = arr.wy - camera.y + tutorialState.arrowBob;
+    if (sx < -40 || sx > canvas.width + 40) continue;
+    ctx.save();
+    ctx.fillStyle = arr.color;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (arr.dir === 'right') {
+      ctx.moveTo(sx + 20, sy);     ctx.lineTo(sx, sy - 10);
+      ctx.lineTo(sx + 8, sy - 10); ctx.lineTo(sx + 8, sy - 18);
+      ctx.lineTo(sx + 14, sy - 18);ctx.lineTo(sx + 14, sy - 10);
+      ctx.lineTo(sx + 20, sy - 10);
+    } else if (arr.dir === 'up') {
+      ctx.moveTo(sx, sy - 20);     ctx.lineTo(sx - 10, sy);
+      ctx.lineTo(sx - 10, sy - 8); ctx.lineTo(sx - 18, sy - 8);
+      ctx.lineTo(sx - 18, sy - 14);ctx.lineTo(sx - 10, sy - 14);
+      ctx.lineTo(sx - 10, sy - 20);
+    }
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Ground text
+  for (const p of tutorialState.groundPaintings) {
+    const sx = p.wx - camera.x, sy = p.wy - camera.y;
+    if (sx < -300 || sx > canvas.width + 300) continue;
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = p.color;
+    ctx.font = p.font;
+    ctx.fillText(p.text, sx, sy);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Signs
+  for (const sign of tutorialState.zoneSigns) {
+    const pad = 10, lineH = 15;
+    const totalH = 28 + sign.lines.length * lineH + pad;
+    const sx = sign.wx - camera.x;
+    const sy = sign.wy - camera.y - totalH - 30;
+    if (sx < -(sign.width + 20) || sx > canvas.width + 20) continue;
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,5,15,0.92)';
+    ctx.strokeStyle = sign.color;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = sign.color; ctx.shadowBlur = 8;
+    ctx.fillRect(sx, sy, sign.width, totalH);
+    ctx.strokeRect(sx, sy, sign.width, totalH);
+    ctx.shadowBlur = 0;
+    // Pole
+    ctx.fillStyle = '#7a5c1e';
+    ctx.fillRect(sx + sign.width / 2 - 3, sy + totalH, 6, 35);
+    // Title bar
+    ctx.fillStyle = sign.color;
+    ctx.fillRect(sx, sy, sign.width, 20);
+    ctx.fillStyle = '#0a0a14';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(sign.title, sx + sign.width / 2, sy + 14);
+    // Body
+    ctx.fillStyle = '#ddd'; ctx.font = '10px monospace';
+    for (let i = 0; i < sign.lines.length; i++) {
+      ctx.fillText(sign.lines[i], sx + sign.width / 2, sy + 32 + i * lineH);
+    }
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+
+  // Museum labels
+  for (const ml of tutorialState.museumLabels) {
+    const sx = ml.wx - camera.x, sy = ml.wy - camera.y;
+    if (sx < -100 || sx > canvas.width + 80) continue;
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,5,20,0.9)';
+    ctx.strokeStyle = ml.color; ctx.lineWidth = 1.5;
+    ctx.fillRect(sx, sy, ml.width, 45);
+    ctx.strokeRect(sx, sy, ml.width, 45);
+    ctx.fillStyle = ml.color;
+    ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(ml.label, sx + ml.width / 2, sy + 12);
+    ctx.fillStyle = '#aaa'; ctx.font = '7px monospace';
+    const lines = ml.desc.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i], sx + ml.width / 2, sy + 24 + i * 10);
+    }
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+}
+
+function drawTutorialHUD() {
+  const ZONES = ['move','jump','walljump','dash','sword','museum','hazards','potato'];
+  const done  = ZONES.filter(z => tutorialState.completedZones.has(z)).length;
+  const frac  = done / ZONES.length;
+  const BAR_W = 320, BAR_X = (canvas.width - BAR_W) / 2, BAR_Y = 8;
+
+  ctx.save();
+
+  // Track BG
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(BAR_X - 2, BAR_Y - 2, BAR_W + 4, 24);
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(BAR_X, 0, BAR_X + BAR_W, 0);
+  grad.addColorStop(0,    '#4fc3f7');
+  grad.addColorStop(0.28, '#81c784');
+  grad.addColorStop(0.42, '#ffb74d');
+  grad.addColorStop(0.56, '#00e5ff');
+  grad.addColorStop(0.70, '#f06292');
+  grad.addColorStop(0.84, '#ce93d8');
+  grad.addColorStop(1,    '#ffd54f');
+  ctx.fillStyle = grad;
+  ctx.fillRect(BAR_X, BAR_Y, BAR_W * frac, 20);
+
+  // Dividers
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1;
+  for (let i = 1; i < ZONES.length; i++) {
+    const sx = BAR_X + (BAR_W / ZONES.length) * i;
+    ctx.beginPath(); ctx.moveTo(sx, BAR_Y); ctx.lineTo(sx, BAR_Y + 20); ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.strokeRect(BAR_X, BAR_Y, BAR_W, 20);
+
+  // Label
+  ctx.fillStyle = frac === 1 ? '#ffd54f' : '#fff';
+  ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(
+    frac === 1 ? '🎉 TRAINING DOJO COMPLETE!' : `TRAINING DOJO — ${done} / ${ZONES.length} Zones`,
+    canvas.width / 2, BAR_Y + 14
+  );
+
+  // Zone completion banner
+  if (tutorialState.messageTimer > 0) {
+    const alpha = Math.min(1, tutorialState.messageTimer / 40);
+    const MSG_W = 500, MSG_X = (canvas.width - MSG_W) / 2, MSG_Y = canvas.height / 2 - 55;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,0.88)';
+    ctx.strokeStyle = tutorialState.messageColor;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = tutorialState.messageColor; ctx.shadowBlur = 14;
+    ctx.fillRect(MSG_X, MSG_Y, MSG_W, 44);
+    ctx.strokeRect(MSG_X, MSG_Y, MSG_W, 44);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = tutorialState.messageColor;
+    ctx.font = 'bold 17px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(tutorialState.currentMessage, canvas.width / 2, MSG_Y + 28);
+    ctx.globalAlpha = 1;
+    tutorialState.messageTimer--;
+  }
+
+  // Bottom hint bar
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(0, canvas.height - 22, canvas.width, 22);
+  ctx.fillStyle = '#aaa'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(
+    'MOVE: A/D   JUMP: W   DASH: Shift   SWORD: Hold F → Release   CANNON: Mouse + Click',
+    canvas.width / 2, canvas.height - 7
+  );
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+  
 function drawBats() {
   for (let bat of bats) {
     ctx.save();
@@ -4255,6 +4610,7 @@ function createSpawnEffect(x, y) {
 
 // Update wave system
 function updateWaveSystem() {
+  if (tutorialActive) return;
   if (!waveSystem.enabled) return;
   
   // Process spawn queue
@@ -8439,6 +8795,7 @@ function gameLoop(currentTime) {
     updateChairs();
     updateTables();
     updateSuperSnails();
+    if (tutorialActive) updateTutorial();
     updateOrbiters();
 updateHomingShot();
 updateDashDamage();
