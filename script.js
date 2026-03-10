@@ -1845,7 +1845,7 @@ function addMapBounds() {
   turrets.push({ x: 2058, y: FLOOR - 77, cooldown: 999999, fireRate: 999999,
     hp: 999, maxHp: 999, armed: false });
   snowmen.push({ x: 2145, y: FLOOR - 83, width: 26, height: 38, speed: 0,
-    slowRadius: 0, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [],
+    slowRadius: 140, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [],
     hp: 999, maxHp: 999, hitFlash: 0 });
   yetis.push({ x: 2212, y: FLOOR - 114, width: 48, height: 64, dx: 0, dy: 0,
     dead: false, speed: 0, chaseRange: 0, hp: 999, alive: true,
