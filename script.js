@@ -70,6 +70,7 @@ let lightingEnabled = true;
 let lights = [];
 let gameRunning = false;
 let gamePaused = false;
+let tutorialActive = false;
 let currentMap = 1;
 let currentLevel = 1;
 let lastTimestamp = 0;
