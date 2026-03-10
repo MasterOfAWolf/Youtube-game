@@ -8673,7 +8673,8 @@ if (player.dashActive || player.dashDuration > 0) {
   ctx.restore(); // Restore camera transform for HUD
 
   drawOffScreenIndicators();
-  
+
+  if (tutorialActive) drawTutorialWorld();
   // HUD / DEV OVERLAYS
 if (devMapView) {
   if (devShowGrid) {
@@ -8745,6 +8746,8 @@ if (player.dashCooldown > 0) {
     ctx.font = "16px monospace";
     ctx.fillText("DEV MAP VIEW (M)", 20, 30);
   }
+
+  if (tutorialActive) drawTutorialHUD();
 }
 
 saveInitialState();
