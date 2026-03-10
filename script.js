@@ -1701,11 +1701,13 @@ function startTutorial() {
   stopGameLoop();
   resetGameState();
   tutorialState.active = true;
+  tutorialActive = true;
   tutorialState.completedZones.clear();
   tutorialState.completionShown = false;
   tutorialState.currentMessage = '';
   tutorialState.messageTimer = 0;
   startLevel(0);
+  
 }
 
 function addMapBounds() {
