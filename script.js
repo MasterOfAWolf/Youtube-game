@@ -1533,14 +1533,14 @@ function drawSnowAura(s) {
 
   // --- AURA RING ---
   ctx.beginPath();
-  ctx.arc(cx, cy, Math.max(0, radius), 0, Math.PI * 2);
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(220,240,255,0.45)";
   ctx.lineWidth = 3;
   ctx.stroke();
 
   // subtle glow
   ctx.beginPath();
-  ctx.arc(cx, cy, Math.max(0, radius), 0, Math.PI * 2);
+  ctx.arc(cx, cy, R - 2, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(255,255,255,0.2)";
   ctx.lineWidth = 1;
   ctx.stroke();
