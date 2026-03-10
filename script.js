@@ -1719,105 +1719,196 @@ function addMapBounds() {
 
   // Right wall
   walls.push({ x: MAP_WIDTH - WALL_THICKNESS, y: 0, width: 1000, height: MAP_HEIGHT });
-}
-function loadMap_Tutorial() {
+}function loadMap_Tutorial() {
   TUTORIAL_TRIGGERS.length = 0;
-  tutorialState.zoneSigns = [];
+  tutorialState.zoneSigns       = [];
   tutorialState.groundPaintings = [];
-  tutorialState.museumLabels = [];
-  tutorialState.checkpointArrows = [];
-  tutorialState.zoneDividers = [];
+  tutorialState.zoneDividers    = [];
+  tutorialState.checkpointArrows= [];
+  tutorialState.museumLabels    = [];
 
   const FLOOR = 530;
-  const WT = 20;
+  const WT    = 20;
+
   addMapBounds();
 
-  // === ZONE 1: MOVEMENT ===
+  // ── ZONE 1: MOVEMENT ──────────────────────────
   walls.push({ x: 60, y: FLOOR, width: 400, height: WT });
-  tutorialState.groundPaintings.push({ wx: 80, wy: FLOOR - 8, text: '← A / D →', font: 'bold 14px monospace', color: '#4fc3f7' });
-  tutorialState.zoneSigns.push({ wx: 90, wy: FLOOR - 140, title: '[ ZONE 1 ] MOVEMENT', lines: ['Press A/D or ← → to walk'], color: '#4fc3f7', width: 220 });
+  tutorialState.groundPaintings.push(
+    { wx: 80, wy: FLOOR - 8, text: '← A / D / ARROWS →', font: 'bold 14px monospace', color: '#4fc3f7' }
+  );
+  tutorialState.zoneSigns.push({
+    wx: 90, wy: FLOOR - 140, title: '[ ZONE 1 ]  MOVEMENT',
+    lines: ['Press A / D or ← → to MOVE', 'Walk to the right!'],
+    color: '#4fc3f7', width: 240
+  });
   tutorialState.zoneDividers.push({ wx: 460, wy: FLOOR - 260, height: 270, color: '#4fc3f7' });
-  TUTORIAL_TRIGGERS.push({ x: 350, y: FLOOR - 200, w: 80, h: 200, zoneId: 'move', message: '✅ Zone 1 Done! — You can MOVE!', color: '#4fc3f7' });
+  tutorialState.checkpointArrows.push({ wx: 420, wy: FLOOR - 60, dir: 'right', color: '#4fc3f7' });
+  TUTORIAL_TRIGGERS.push({ x: 350, y: FLOOR - 200, w: 80, h: 200,
+    zoneId: 'move', message: '✅ Zone 1 — You can MOVE!', color: '#4fc3f7' });
 
-  // === ZONE 2: JUMP ===
-  walls.push({ x: 500, y: FLOOR, width: 60, height: WT });
-  walls.push({ x: 580, y: FLOOR - 90, width: 80, height: WT });
-  walls.push({ x: 680, y: FLOOR - 170, width: 80, height: WT });
-  walls.push({ x: 760, y: FLOOR, width: 60, height: WT });
-  tutorialState.zoneSigns.push({ wx: 505, wy: FLOOR - 120, title: '[ ZONE 2 ] JUMP', lines: ['Press W or ↑ to jump!', 'Hop across the platforms.'], color: '#81c784', width: 220 });
+  // ── ZONE 2: JUMPING ───────────────────────────
+  walls.push({ x: 500, y: FLOOR,       width: 60,  height: WT });
+  walls.push({ x: 580, y: FLOOR - 90,  width: 80,  height: WT });
+  walls.push({ x: 680, y: FLOOR - 170, width: 80,  height: WT });
+  walls.push({ x: 760, y: FLOOR,       width: 60,  height: WT });
+  tutorialState.groundPaintings.push(
+    { wx: 510, wy: FLOOR - 8, text: 'JUMP →', font: 'bold 13px monospace', color: '#81c784' }
+  );
+  tutorialState.zoneSigns.push({
+    wx: 510, wy: FLOOR - 120, title: '[ ZONE 2 ]  JUMPING',
+    lines: ['Press W / ↑ to JUMP', 'Make it across the platforms!'],
+    color: '#81c784', width: 230
+  });
   tutorialState.zoneDividers.push({ wx: 820, wy: FLOOR - 260, height: 270, color: '#81c784' });
-  TUTORIAL_TRIGGERS.push({ x: 760, y: FLOOR - 200, w: 60, h: 200, zoneId: 'jump', message: '✅ Zone 2 Done! — You can JUMP!', color: '#81c784' });
+  tutorialState.checkpointArrows.push({ wx: 790, wy: FLOOR - 60, dir: 'right', color: '#81c784' });
+  TUTORIAL_TRIGGERS.push({ x: 760, y: FLOOR - 200, w: 60, h: 200,
+    zoneId: 'jump', message: '✅ Zone 2 — You can JUMP!', color: '#81c784' });
 
-  // === ZONE 3: WALL JUMP ===
-  walls.push({ x: 860, y: FLOOR, width: 40, height: WT });
-  walls.push({ x: 860, y: FLOOR - 360, width: 20, height: 340 });
-  walls.push({ x: 1040, y: FLOOR - 360, width: 20, height: 340 });
-  walls.push({ x: 860, y: FLOOR - 380, width: 220, height: WT });
-  walls.push({ x: 1060, y: FLOOR, width: 40, height: WT });
+  // ── ZONE 3: WALL JUMP ─────────────────────────
+  walls.push({ x: 860,  y: FLOOR,        width: 40,  height: WT });
+  walls.push({ x: 860,  y: FLOOR - 360,  width: 20,  height: 340 });
+  walls.push({ x: 1040, y: FLOOR - 360,  width: 20,  height: 340 });
+  walls.push({ x: 860,  y: FLOOR - 380,  width: 220, height: WT });
+  walls.push({ x: 1060, y: FLOOR,        width: 40,  height: WT });
   ladders.push({ x: 872, y: FLOOR - 380, width: 24, height: 380 }); // escape ladder
-  tutorialState.zoneSigns.push({ wx: 862, wy: FLOOR - 490, title: '[ ZONE 3 ] WALL JUMP', lines: ['Hold INTO a wall to slide.', 'Press W to wall jump!', 'Bounce up between the walls!'], color: '#ffb74d', width: 230 });
+  tutorialState.zoneSigns.push({
+    wx: 862, wy: FLOOR - 490, title: '[ ZONE 3 ]  WALL JUMP',
+    lines: ['Hold INTO a wall to SLIDE.', 'Press W to WALL JUMP!', 'Bounce between the walls!'],
+    color: '#ffb74d', width: 230
+  });
   tutorialState.zoneDividers.push({ wx: 1100, wy: FLOOR - 260, height: 270, color: '#ffb74d' });
   tutorialState.checkpointArrows.push({ wx: 940, wy: FLOOR - 180, dir: 'up', color: '#ffb74d' });
-  TUTORIAL_TRIGGERS.push({ x: 920, y: FLOOR - 380, w: 80, h: 40, zoneId: 'walljump', message: '✅ Zone 3 Done! — WALL JUMP mastered!', color: '#ffb74d' });
+  TUTORIAL_TRIGGERS.push({ x: 920, y: FLOOR - 380, w: 80, h: 40,
+    zoneId: 'walljump', message: '✅ Zone 3 — WALL JUMP mastered!', color: '#ffb74d' });
 
-  // === ZONE 4: DASH ===
+  // ── ZONE 4: DASH ──────────────────────────────
   walls.push({ x: 1140, y: FLOOR, width: 100, height: WT });
-  walls.push({ x: 1390, y: FLOOR, width: 80, height: WT }); // gap of 150px — requires dash
-  tutorialState.groundPaintings.push({ wx: 1145, wy: FLOOR - 8, text: '→ DASH the gap!', font: 'bold 12px monospace', color: '#00e5ff' });
-  tutorialState.zoneSigns.push({ wx: 1142, wy: FLOOR - 130, title: '[ ZONE 4 ] DASH', lines: ['Press SHIFT to dash!', 'One free air-dash per jump.', 'Cross the huge gap!'], color: '#00e5ff', width: 230 });
+  walls.push({ x: 1390, y: FLOOR, width: 80,  height: WT }); // gap between = 150px, needs dash
+  tutorialState.groundPaintings.push(
+    { wx: 1142, wy: FLOOR - 8, text: '→ DASH!', font: 'bold 13px monospace', color: '#00e5ff' }
+  );
+  tutorialState.zoneSigns.push({
+    wx: 1142, wy: FLOOR - 130, title: '[ ZONE 4 ]  DASH',
+    lines: ['Press SHIFT to DASH!', 'One free air-dash per jump.', 'Cross the gap!'],
+    color: '#00e5ff', width: 230
+  });
   tutorialState.zoneDividers.push({ wx: 1470, wy: FLOOR - 260, height: 270, color: '#00e5ff' });
-  tutorialState.checkpointArrows.push({ wx: 1200, wy: FLOOR - 60, dir: 'right', color: '#00e5ff' });
-  TUTORIAL_TRIGGERS.push({ x: 1390, y: FLOOR - 200, w: 80, h: 200, zoneId: 'dash', message: '✅ Zone 4 Done! — You can DASH!', color: '#00e5ff' });
+  tutorialState.checkpointArrows.push({ wx: 1220, wy: FLOOR - 60, dir: 'right', color: '#00e5ff' });
+  TUTORIAL_TRIGGERS.push({ x: 1390, y: FLOOR - 200, w: 80, h: 200,
+    zoneId: 'dash', message: '✅ Zone 4 — You can DASH!', color: '#00e5ff' });
 
-  // === ZONE 5: SWORD ===
-  walls.push({ x: 1490, y: FLOOR, width: 240, height: WT });
-  snails.push({ x: 1560, y: FLOOR - 28, width: 28, height: 20, dx: 0, dy: 0, dir: 1, speed: 0.2, gravity: 0.6, chaseRange: 80, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
-  snails.push({ x: 1640, y: FLOOR - 28, width: 28, height: 20, dx: 0, dy: 0, dir: -1, speed: 0.2, gravity: 0.6, chaseRange: 80, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
-  tutorialState.zoneSigns.push({ wx: 1492, wy: FLOOR - 150, title: '[ ZONE 5 ] SWORD', lines: ['Hold F to CHARGE.', 'Release F to SWING!', 'More charge = more knockback.'], color: '#f06292', width: 240 });
-  tutorialState.zoneDividers.push({ wx: 1730, wy: FLOOR - 260, height: 270, color: '#f06292' });
-  TUTORIAL_TRIGGERS.push({ x: 1700, y: FLOOR - 200, w: 40, h: 200, zoneId: 'sword', message: '✅ Zone 5 Done! — SWORD learned!', color: '#f06292' });
+  // ── ZONE 5: SWORD ─────────────────────────────
+  walls.push({ x: 1490, y: FLOOR, width: 230, height: WT });
+  snails.push({ x: 1560, y: FLOOR - 28, width: 28, height: 20,
+    dx: 0, dy: 0, dir: 1, speed: 0.2, gravity: 0.6, chaseRange: 80,
+    knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
+    hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
+  snails.push({ x: 1640, y: FLOOR - 28, width: 28, height: 20,
+    dx: 0, dy: 0, dir: -1, speed: 0.2, gravity: 0.6, chaseRange: 80,
+    knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
+    hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
+  tutorialState.zoneSigns.push({
+    wx: 1492, wy: FLOOR - 150, title: '[ ZONE 5 ]  SWORD',
+    lines: ['Hold F to CHARGE.', 'Release F to SWING!', 'More charge = more KNOCKBACK.'],
+    color: '#f06292', width: 245
+  });
+  tutorialState.zoneDividers.push({ wx: 1720, wy: FLOOR - 260, height: 270, color: '#f06292' });
+  TUTORIAL_TRIGGERS.push({ x: 1700, y: FLOOR - 200, w: 40, h: 200,
+    zoneId: 'sword', message: '✅ Zone 5 — SWORD ATTACKS learned!', color: '#f06292' });
 
-  // === ZONE 6: ENEMY MUSEUM ===
-  walls.push({ x: 1770, y: FLOOR, width: 480, height: WT });
+  // ── ZONE 6: ENEMY MUSEUM ──────────────────────
+  walls.push({ x: 1760, y: FLOOR, width: 490, height: WT });
   const museum = [
-    { x: 1790, label: '🐌 SNAIL',       desc: ['Ground patroller.', 'Chases you.'],           color: '#69f0ae' },
-    { x: 1870, label: '💚 SUPER SNAIL', desc: ['Wall-climber!', 'Can jump + ceiling-crawl.'], color: '#00e676' },
-    { x: 1950, label: '🦇 BAT',         desc: ['Flies at you.', 'Sword from any angle.'],     color: '#b39ddb' },
-    { x: 2030, label: '🔴 TURRET',      desc: ['Stationary gunner.', 'Destroy it to stop it!'],color: '#ef5350' },
-    { x: 2110, label: '⛄ SNOWMAN',     desc: ['Emits slow field.', 'Stay back or use 🥔!'],   color: '#e0f7fa' },
-    { x: 2190, label: '🦣 YETI',        desc: ['Boss-tier tank.', 'Throws snowballs!'],        color: '#e0e0e0' },
+    { x: 1785, label: '🐌 SNAIL',       desc: 'Ground patroller.\nChases, bounces off walls.',  color: '#69f0ae' },
+    { x: 1870, label: '💚 SUPER SNAIL', desc: 'Wall-climber! Jumps\nand crawls ceilings.',       color: '#00e676' },
+    { x: 1960, label: '🦇 BAT',         desc: 'Flies at you.\nSword it from any angle.',         color: '#b39ddb' },
+    { x: 2050, label: '🔴 TURRET',      desc: 'Fires fireballs in range.\nDestroy it with sword!', color: '#ef5350' },
+    { x: 2140, label: '⛄ SNOWMAN',     desc: 'Emits a SLOW FIELD.\nStay back or use potato!',  color: '#e0f7fa' },
+    { x: 2210, label: '🦣 YETI',        desc: 'Boss-tier. Throws\nsnowballs. Very tanky.',       color: '#e0e0e0' },
   ];
-  for (const m of museum) {
-    walls.push({ x: m.x, y: FLOOR - 45, width: 50, height: 45 }); // pedestal
-    tutorialState.museumLabels.push({ wx: m.x, wy: FLOOR - 45, label: m.label, desc: m.desc, color: m.color, width: 50 });
+  for (const me of museum) {
+    walls.push({ x: me.x, y: FLOOR - 45, width: 50, height: 45 });
+    tutorialState.museumLabels.push({ wx: me.x, wy: FLOOR - 45, label: me.label, desc: me.desc, color: me.color, width: 50 });
   }
-  // Display enemies (invincible, immobile)
-  snails.push({ x: 1795, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0, dir: 1, speed: 0, gravity: 0, chaseRange: 0, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: 9999, maxHp: 9999, hitFlash: 0, frame: 0, frameTimer: 0 });
-  SuperSnails.push({ x: 1875, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0, speed: 0, gravity: 0, dir: 1, jumpPower: 0, mode: 'ground', knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, jumpTimer: 999999, lastWallSide: null, prevMode: 'ground', hp: 9999, maxHp: 9999, hitFlash: 0 });
-  turrets.push({ x: 2035, y: FLOOR - 77, cooldown: 999999, fireRate: 999999, hp: 9999, maxHp: 9999, armed: false });
-  snowmen.push({ x: 2112, y: FLOOR - 83, width: 26, height: 38, speed: 0, slowRadius: 0, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [], hp: 9999, maxHp: 9999, hitFlash: 0 });
-  yetis.push({ x: 2192, y: FLOOR - 114, width: 48, height: 64, dx: 0, dy: 0, dead: false, speed: 0, chaseRange: 0, hp: 9999, alive: true, throwCooldown: 999999, facing: 1, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, maxHp: 9999, hitFlash: 0 });
-  tutorialState.zoneSigns.push({ wx: 1772, wy: FLOOR - 220, title: '[ ZONE 6 ] ENEMY MUSEUM', lines: ['Read the labels to know your foes!'], color: '#ce93d8', width: 260 });
-  tutorialState.zoneDividers.push({ wx: 2250, wy: FLOOR - 260, height: 270, color: '#ce93d8' });
-  TUTORIAL_TRIGGERS.push({ x: 2220, y: FLOOR - 200, w: 40, h: 200, zoneId: 'museum', message: '✅ Zone 6 Done! — ENEMIES identified!', color: '#ce93d8' });
+  // Display enemies — zero speed, very high HP so they can't be killed
+  snails.push({ x: 1790, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0, dir: 1,
+    speed: 0, gravity: 0, chaseRange: 0, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
+    hp: 999, maxHp: 999, hitFlash: 0, frame: 0, frameTimer: 0 });
+  SuperSnails.push({ x: 1875, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0,
+    speed: 0, gravity: 0, dir: 1, jumpPower: 0, mode: 'ground',
+    knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
+    jumpTimer: 99999, lastWallSide: null, prevMode: 'ground', hp: 999, maxHp: 999, hitFlash: 0 });
+  bats.push({ x: 1965, y: FLOOR - 115, width: 28, height: 20, dx: 0, dy: 0,
+    hp: 999, maxHp: 999, hitFlash: 0 });
+  turrets.push({ x: 2058, y: FLOOR - 77, cooldown: 999999, fireRate: 999999,
+    hp: 999, maxHp: 999, armed: false });
+  snowmen.push({ x: 2145, y: FLOOR - 83, width: 26, height: 38, speed: 0,
+    slowRadius: 0, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [],
+    hp: 999, maxHp: 999, hitFlash: 0 });
+  yetis.push({ x: 2212, y: FLOOR - 114, width: 48, height: 64, dx: 0, dy: 0,
+    dead: false, speed: 0, chaseRange: 0, hp: 999, alive: true,
+    throwCooldown: 999999, facing: 1, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
+    maxHp: 999, hitFlash: 0 });
+  tutorialState.zoneSigns.push({
+    wx: 1762, wy: FLOOR - 230, title: '[ ZONE 6 ]  ENEMY MUSEUM',
+    lines: ['These are your foes.', 'Read the labels!'],
+    color: '#ce93d8', width: 260
+  });
+  tutorialState.zoneDividers.push({ wx: 2260, wy: FLOOR - 260, height: 270, color: '#ce93d8' });
+  TUTORIAL_TRIGGERS.push({ x: 2230, y: FLOOR - 200, w: 40, h: 200,
+    zoneId: 'museum', message: '✅ Zone 6 — ENEMIES identified!', color: '#ce93d8' });
 
-  // === ZONE 7: HAZARDS ===
-  walls.push({ x: 2290, y: FLOOR, width: 220, height: WT });
-  spikes.push({ x: 2360, y: FLOOR - 26, width: 40, height: 26 });
-  spikes.push({ x: 2410, y: FLOOR - 26, width: 40, height: 26 });
-  walls.push({ x: 2355, y: FLOOR - 100, width: 100, height: 14, moving: true, dir: 1, speed: 1.5, startX: 2355, range: 80 });
-  turrets.push({ x: 2475, y: FLOOR - 32, cooldown: 0, fireRate: 140, hp: 3, maxHp: 3, armed: true });
-  tutorialState.zoneSigns.push({ wx: 2292, wy: FLOOR - 200, title: '[ ZONE 7 ] HAZARDS', lines: ['RED = instant death!', 'Use the moving platform.', 'Destroy the turret!'], color: '#ef9a9a', width: 240 });
-  tutorialState.zoneDividers.push({ wx: 2520, wy: FLOOR - 260, height: 270, color: '#ef9a9a' });
-  TUTORIAL_TRIGGERS.push({ x: 2495, y: FLOOR - 200, w: 40, h: 200, zoneId: 'hazards', message: '✅ Zone 7 Done! — HAZARDS survived!', color: '#ef9a9a' });
+  // ── ZONE 7: HAZARDS ───────────────────────────
+  walls.push({ x: 2300, y: FLOOR, width: 220, height: WT });
+  spikes.push({ x: 2365, y: FLOOR - 26, width: 40, height: 26 });
+  spikes.push({ x: 2415, y: FLOOR - 26, width: 40, height: 26 });
+  walls.push({ x: 2360, y: FLOOR - 100, width: 100, height: 14,
+    moving: true, dir: 1, speed: 1.5, startX: 2360, range: 80 });
+  turrets.push({ x: 2480, y: FLOOR - 32, cooldown: 0, fireRate: 140,
+    hp: 3, maxHp: 3, armed: true });
+  tutorialState.zoneSigns.push({
+    wx: 2302, wy: FLOOR - 200, title: '[ ZONE 7 ]  HAZARDS',
+    lines: ['RED SPIKES = instant death!', 'Ride the moving platform.', 'Destroy the turret!'],
+    color: '#ef9a9a', width: 252
+  });
+  tutorialState.zoneDividers.push({ wx: 2530, wy: FLOOR - 260, height: 270, color: '#ef9a9a' });
+  TUTORIAL_TRIGGERS.push({ x: 2500, y: FLOOR - 200, w: 40, h: 200,
+    zoneId: 'hazards', message: '✅ Zone 7 — HAZARDS survived!', color: '#ef9a9a' });
 
-  // === ZONE 8: POTATO CANNON ===
-  walls.push({ x: 2560, y: FLOOR, width: 220, height: WT });
-  potato.x = 2600; potato.y = FLOOR - 30; potato.collected = false; potato.active = true;
+  // ── ZONE 8: POTATO CANNON ─────────────────────
+  walls.push({ x: 2560, y: FLOOR, width: 210, height: WT });
+  potato.x = 2600; potato.y = FLOOR - 30;
+  potato.collected = false;
   hasPotato = false;
   ovens.push({ x: 2710, y: FLOOR - 60, width: 40, height: 50, active: true, baked: false, glow: 0 });
-  snails.push({ x: 2675, y: FLOOR - 28, width: 28, height: 20, dx: 0, dy: 0, dir: -1, speed: 0.4, gravity: 0.6, chaseRange: 200, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: 3, maxHp: 3, hitFlash: 0, frame: 0, frameTimer: 0 });
-  tutorialState.zoneSigns.push({ wx: 2562, wy: FLOOR - 2
+  snails.push({ x: 2680, y: FLOOR - 28, width: 28, height: 20,
+    dx: 0, dy: 0, dir: -1, speed: 0.4, gravity: 0.6, chaseRange: 200,
+    knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
+    hp: 3, maxHp: 3, hitFlash: 0, frame: 0, frameTimer: 0 });
+  tutorialState.zoneSigns.push({
+    wx: 2562, wy: FLOOR - 210, title: '[ ZONE 8 ]  POTATO CANNON 🥔',
+    lines: ['Pick up the POTATO.', 'AIM with MOUSE, CLICK to fire.', 'Walk into the OVEN to BAKE', 'for EXPLOSIVE shots!'],
+    color: '#ffd54f', width: 265
+  });
+  TUTORIAL_TRIGGERS.push({ x: 2760, y: FLOOR - 200, w: 40, h: 200,
+    zoneId: 'potato', message: '🥔 Zone 8 — Tutorial COMPLETE!', color: '#ffd54f' });
+
+  // ── SHARED INFRASTRUCTURE ─────────────────────
+  ladders.push({ x: 62, y: FLOOR, width: 30, height: 1550 }); // left recovery
+
+  // Zone lighting
+  const zColors  = ['#4fc3f7','#81c784','#ffb74d','#00e5ff','#f06292','#ce93d8','#ef9a9a','#ffd54f'];
+  const zCenters = [260, 630, 950, 1270, 1600, 1990, 2410, 2660];
+  for (let i = 0; i < 8; i++) {
+    lights.push({ x: zCenters[i], y: FLOOR - 20, radius: 280, intensity: 0.75,
+      color: zColors[i], baseRadius: 280, baseIntensity: 0.75,
+      flickerSpeed: 0.3 + i * 0.08, flickerAmount: 0.08 });
+  }
+
+  player.x = 100;
+  player.y = FLOOR - 50;
+}
     
 function loadMap_Level1() {
 
