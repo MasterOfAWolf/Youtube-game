@@ -7052,17 +7052,18 @@ if (t.flipping) {
   // Walking animation — flip sprite based on direction
   const img = tableFrames[t.frame];
   if (img && img.complete) {
-    if (t.dir < 0) {
+    if (t.dir > 0) {
       ctx.translate(t.x + t.width, t.y);
       ctx.scale(-1, 1);
-      ctx.drawImage(img, -10, -10, t.width + 20, t.height + 20);
+      ctx.drawImage(img, -10, 0, t.width + 20, t.height + 20);
     } else {
-      ctx.drawImage(img, t.x - 10, t.y - 10, t.width + 20, t.height + 20);
+      ctx.drawImage(img, t.x - 10, t.y, t.width + 20, t.height + 20);
     }
   }
 }
 
-// Health bar (only if damaged)
+    ctx.restore();
+    
   const barW = t.width;
   const barH = 4;
   const barX = t.flipping ? cx - t.width / 2 : t.x;
@@ -7075,8 +7076,6 @@ if (t.flipping) {
   ctx.strokeStyle = "#000";
   ctx.lineWidth = 1;
   ctx.strokeRect(barX, barY, barW, barH);
-
-ctx.restore();
   }
 }
 // === END TABLE MODULE ===
