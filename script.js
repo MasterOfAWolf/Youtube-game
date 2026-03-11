@@ -1723,7 +1723,9 @@ function addMapBounds() {
 
   // Right wall
   walls.push({ x: MAP_WIDTH - WALL_THICKNESS, y: 0, width: 1000, height: MAP_HEIGHT });
-}function loadMap_Tutorial() {
+}
+
+function loadMap_Tutorial() {
   TUTORIAL_TRIGGERS.length = 0;
   tutorialState.zoneSigns       = [];
   tutorialState.groundPaintings = [];
@@ -2640,6 +2642,7 @@ function startLevel(level) {
   resetGameState(); // reset player & flags
 
   loadLevel(level); // THIS is now the only loader
+  if (level === 0) tutorialActive = true;
   startMusic();
   gameRunning = true;
   gamePaused = false;
