@@ -114,6 +114,12 @@ let cannonCooldown = 0;       // prevents spray-firing
 const CANNON_COOLDOWN_FRAMES = 18;
 
 // === GAMEPAD MODULE ===
+const virtualCursor = {
+  x: 400, // screen space
+  y: 300,
+  radius: 80 // how far from player center it orbits
+};
+
 let gamepadIndex = null;
 
 window.addEventListener("gamepadconnected", (e) => {
@@ -625,17 +631,27 @@ keys["s"] = axisY > STICK_DEAD || gp.buttons[13]?.pressed; // down
   }
 
   // Potato cannon — right stick aim + right trigger (index 7) to fire
-  if (hasPotato) {
-    const rx = gp.axes[2];
-    const ry = gp.axes[3];
-    if (Math.hypot(rx, ry) > STICK_DEAD) {
-      cannonAimAngle = Math.atan2(ry, rx);
-      player.facing = rx > 0 ? 1 : -1;
-    }
-    if (gp.buttons[7]?.pressed && cannonCooldown <= 0) {
-      firePotatoCannon();
-    }
+if (hasPotato) {
+  const rx = gp.axes[2];
+  const ry = gp.axes[3];
+  if (Math.hypot(rx, ry) > STICK_DEAD) {
+    cannonAimAngle = Math.atan2(ry, rx);
+    player.facing = rx > 0 ? 1 : -1;
+
+    // move virtual cursor around player in screen space
+    const cx = player.x + player.width / 2 - camera.x;
+    const cy = player.y + player.height / 2 - camera.y;
+    virtualCursor.x = cx + Math.cos(cannonAimAngle) * virtualCursor.radius;
+    virtualCursor.y = cy + Math.sin(cannonAimAngle) * virtualCursor.radius;
+
+    // keep mouse in sync so drawCannonCrosshair works
+    mouse.x = virtualCursor.x;
+    mouse.y = virtualCursor.y;
   }
+  if (gp.buttons[7]?.pressed && cannonCooldown <= 0) {
+    firePotatoCannon();
+  }
+}
 
   // Pause — Start button (index 9)
   if (gp.buttons[9]?.pressed && !gp._pauseHeld) {
@@ -650,6 +666,68 @@ keys["s"] = axisY > STICK_DEAD || gp.buttons[13]?.pressed; // down
   }
 }
 
+// === GAMEPAD MENU NAVIGATION ===
+let menuNavCooldown = 0;
+let focusedButtonIndex = 0;
+
+function updateGamepadMenu() {
+  if (gamepadIndex === null) return;
+  const gp = navigator.getGamepads()[gamepadIndex];
+  if (!gp) return;
+
+  if (menuNavCooldown > 0) { menuNavCooldown--; return; }
+
+  // get all visible, focusable buttons in current visible menu
+  const buttons = Array.from(document.querySelectorAll(
+    '.menu:not(.hidden) button, #levelSelect:not(.hidden) button, ' +
+    '#waveSelect:not(.hidden) button, #freeSelect:not(.hidden) button, ' +
+    '#settings:not(.hidden) button, #credits:not(.hidden) button, ' +
+    '#controls:not(.hidden) button, #pauseMenu:not(.hidden) button'
+  ));
+  if (!buttons.length) return;
+
+  focusedButtonIndex = Math.max(0, Math.min(focusedButtonIndex, buttons.length - 1));
+
+  const axisY = gp.axes[1];
+  const DEAD  = 0.3;
+
+  // navigate down
+  if (axisY > DEAD || gp.buttons[13]?.pressed) {
+    focusedButtonIndex = (focusedButtonIndex + 1) % buttons.length;
+    menuNavCooldown = 18;
+  }
+  // navigate up
+  if (axisY < -DEAD || gp.buttons[12]?.pressed) {
+    focusedButtonIndex = (focusedButtonIndex - 1 + buttons.length) % buttons.length;
+    menuNavCooldown = 18;
+  }
+
+  // focus the button visually
+  buttons.forEach((b, i) => {
+    b.style.outline = i === focusedButtonIndex ? '3px solid #ffd54f' : '';
+    b.style.boxShadow = i === focusedButtonIndex ? '0 0 12px #ffd54f' : '';
+  });
+
+  // A to confirm
+  if (gp.buttons[0]?.pressed && !gp._menuConfirmHeld) {
+    buttons[focusedButtonIndex]?.click();
+    gp._menuConfirmHeld = true;
+    focusedButtonIndex = 0;
+  }
+  if (!gp.buttons[0]?.pressed) gp._menuConfirmHeld = false;
+
+  // B to go back
+  if (gp.buttons[1]?.pressed && !gp._menuBackHeld) {
+    const backBtn = document.querySelector(
+      '.menu:not(.hidden) .back-btn, #levelSelect:not(.hidden) .back-btn, ' +
+      '#waveSelect:not(.hidden) .back-btn, #freeSelect:not(.hidden) .back-btn, ' +
+      '#settings:not(.hidden) .back-btn, #pauseMenu:not(.hidden) .back-btn'
+    );
+    backBtn?.click();
+    gp._menuBackHeld = true;
+  }
+  if (!gp.buttons[1]?.pressed) gp._menuBackHeld = false;
+}
 const crtToggle = document.getElementById("crtToggle");
 
 crtToggle.addEventListener("change", () => {
@@ -8985,6 +9063,8 @@ function gameLoop(currentTime) {
     const excess = deltaTime % FRAME_DURATION;
     lastFrameTime = currentTime - excess;
 
+    updateGamepadMenu();
+    
   if (!gamePaused) {
     updateGamepad();
     updateWaveSystem();
