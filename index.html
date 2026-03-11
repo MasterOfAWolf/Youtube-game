@@ -72,25 +72,51 @@
 
 <div id="settings" class="hidden">
   <h2>Settings</h2>
-  <label>
-    Music:
-    <input type="checkbox" id="musicToggle" checked>
+
+  <h3>Graphics</h3>
+  <label><input type="checkbox" id="settingLighting" checked> Lighting & Shadows</label>
+  <label><input type="checkbox" id="crtToggle"> CRT Effect</label>
+  <label><input type="checkbox" id="pixelToggle"> Pixel Mode</label>
+  <label><input type="checkbox" id="settingParticles" checked> Particle Effects</label>
+  <label><input type="checkbox" id="settingHealthBars" checked> Enemy Health Bars</label>
+  <label><input type="checkbox" id="settingScreenShake" checked> Screen Shake</label>
+  <label><input type="checkbox" id="settingIndicators" checked> Off-Screen Indicators</label>
+
+  <h3>Audio</h3>
+  <label><input type="checkbox" id="musicToggle" checked> Music</label>
+  <label><input type="checkbox" id="settingSFX" checked> SFX</label>
+  <label>Music Volume
+    <input type="range" id="settingMusicVolume" min="0" max="1" step="0.05" value="0.5">
   </label>
-    <br><br>
-  <label>
-     Pixelated graphics:
-  <input type="checkbox" id="pixelToggle">
-</label>
-   <br><br>
-  <label>
-    CRT Mode:
-  <input type="checkbox" id="crtToggle">
-</label>
-<br><br>
-      Hide Touch Buttons:
-    <input type="checkbox" id="hideButtonsToggle">
+
+  <h3>Gameplay</h3>
+  <label><input type="checkbox" id="settingInvincible"> Invincibility</label>
+  <label><input type="checkbox" id="settingInfiniteLives"> Infinite Lives</label>
+  <label><input type="checkbox" id="settingInfiniteDash"> Infinite Dash</label>
+  <label><input type="checkbox" id="settingHitboxes"> Show Hitboxes</label>
+  <label>Player Speed
+    <input type="range" id="settingSpeed" min="0.5" max="3" step="0.1" value="1">
   </label>
-  <br><br>
+
+  <h3>Controls</h3>
+  <label><input type="checkbox" id="hideButtonsToggle"> Hide Touch Buttons</label>
+  <label><input type="checkbox" id="settingSwapJumpDash"> Swap Jump / Dash (Controller)</label>
+  <label><input type="checkbox" id="settingVibration" checked> Controller Vibration</label>
+  <label>Joystick Deadzone
+    <input type="range" id="settingDeadzone" min="0.05" max="0.5" step="0.05" value="0.2">
+  </label>
+
+  <h3>UI</h3>
+  <label><input type="checkbox" id="settingFPS"> Show FPS</label>
+  <label><input type="checkbox" id="settingCoords"> Show Coordinates</label>
+  <label><input type="checkbox" id="settingMinimap"> Minimap</label>
+  <label><input type="checkbox" id="settingTooltips" checked> Tutorial Tooltips</label>
+
+  <h3>Accessibility</h3>
+  <label><input type="checkbox" id="settingReducedMotion"> Reduced Motion</label>
+  <label><input type="checkbox" id="settingHighContrast"> High Contrast</label>
+  <label><input type="checkbox" id="settingLargeHUD"> Large HUD Text</label>
+
   <button class="back-btn" onclick="backToMenu()">Back</button>
 </div>
 
