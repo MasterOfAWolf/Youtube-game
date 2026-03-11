@@ -50,6 +50,42 @@ for (let i = 0; i < 5; i++) {
   chairFrames.push(img);
 }
 
+const settings = {
+  // Graphics
+  lighting: true,
+  particles: true,
+  enemyHealthBars: true,
+  screenShake: true,
+  offScreenIndicators: true,
+
+  // Audio
+  sfxEnabled: true,
+  musicVolume: 0.5,
+
+  // Gameplay
+  invincible: false,
+  infiniteLives: false,
+  infiniteDash: false,
+  showHitboxes: false,
+  speedMultiplier: 1,
+
+  // Controls
+  swapJumpDash: false,
+  vibration: true,
+  joystickDeadzone: 0.2,
+
+  // UI
+  showFPS: false,
+  showCoords: false,
+  showMinimap: false,
+  tutorialTooltips: true,
+
+  // Accessibility
+  reducedMotion: false,
+  highContrast: false,
+  largeHUD: false,
+};
+
 const tutorialState = {
   active: false,
   completedZones: new Set(),
@@ -209,6 +245,77 @@ document.getElementById("musicToggle").addEventListener("change", function () {
   } else {
     bgMusic.pause();
   }
+});
+
+// === SETTINGS LISTENERS ===
+document.getElementById("settingLighting").addEventListener("change", function() {
+  settings.lighting = this.checked;
+  lightingEnabled = this.checked;
+});
+document.getElementById("settingParticles").addEventListener("change", function() {
+  settings.particles = this.checked;
+});
+document.getElementById("settingHealthBars").addEventListener("change", function() {
+  settings.enemyHealthBars = this.checked;
+});
+document.getElementById("settingScreenShake").addEventListener("change", function() {
+  settings.screenShake = this.checked;
+});
+document.getElementById("settingIndicators").addEventListener("change", function() {
+  settings.offScreenIndicators = this.checked;
+});
+document.getElementById("settingSFX").addEventListener("change", function() {
+  settings.sfxEnabled = this.checked;
+});
+document.getElementById("settingMusicVolume").addEventListener("input", function() {
+  settings.musicVolume = parseFloat(this.value);
+  bgMusic.volume = settings.musicVolume;
+});
+document.getElementById("settingInvincible").addEventListener("change", function() {
+  settings.invincible = this.checked;
+});
+document.getElementById("settingInfiniteLives").addEventListener("change", function() {
+  settings.infiniteLives = this.checked;
+});
+document.getElementById("settingInfiniteDash").addEventListener("change", function() {
+  settings.infiniteDash = this.checked;
+});
+document.getElementById("settingHitboxes").addEventListener("change", function() {
+  settings.showHitboxes = this.checked;
+});
+document.getElementById("settingSpeed").addEventListener("input", function() {
+  settings.speedMultiplier = parseFloat(this.value);
+});
+document.getElementById("settingSwapJumpDash").addEventListener("change", function() {
+  settings.swapJumpDash = this.checked;
+});
+document.getElementById("settingVibration").addEventListener("change", function() {
+  settings.vibration = this.checked;
+});
+document.getElementById("settingDeadzone").addEventListener("input", function() {
+  settings.joystickDeadzone = parseFloat(this.value);
+});
+document.getElementById("settingFPS").addEventListener("change", function() {
+  settings.showFPS = this.checked;
+});
+document.getElementById("settingCoords").addEventListener("change", function() {
+  settings.showCoords = this.checked;
+});
+document.getElementById("settingMinimap").addEventListener("change", function() {
+  settings.showMinimap = this.checked;
+});
+document.getElementById("settingTooltips").addEventListener("change", function() {
+  settings.tutorialTooltips = this.checked;
+});
+document.getElementById("settingReducedMotion").addEventListener("change", function() {
+  settings.reducedMotion = this.checked;
+});
+document.getElementById("settingHighContrast").addEventListener("change", function() {
+  settings.highContrast = this.checked;
+  document.body.classList.toggle("high-contrast", this.checked);
+});
+document.getElementById("settingLargeHUD").addEventListener("change", function() {
+  settings.largeHUD = this.checked;
 });
 // Map keys to buttons
 const keyMap = {
@@ -596,7 +703,7 @@ function updateGamepad() {
   const gp = navigator.getGamepads()[gamepadIndex];
   if (!gp) return;
 
-  const STICK_DEAD = 0.2; // deadzone
+  const STICK_DEAD = settings.joystickDeadzone; // deadzone
 
   // Left stick / D-pad — movement
   const axisX = gp.axes[0];
@@ -606,14 +713,20 @@ function updateGamepad() {
   const axisY = gp.axes[1];
 keys["s"] = axisY > STICK_DEAD || gp.buttons[13]?.pressed; // down
   
-  // Jump — A button (index 0)
+  /* Jump — A button (index 0)
   keys["w"] = gp.buttons[0]?.pressed;
   
   // Dash — Right bumper (index 5) or Left bumper (index 4)
   if (gp.buttons[5]?.pressed || gp.buttons[4]?.pressed) {
     tryDash();
-  }
+  }*/
 
+  const jumpBtn  = settings.swapJumpDash ? 5 : 0;
+const dashBtn  = settings.swapJumpDash ? 0 : 5;
+keys["w"] = gp.buttons[jumpBtn]?.pressed;
+if (gp.buttons[dashBtn]?.pressed) tryDash();
+
+  
   if (gameOver && gp.buttons[1]?.pressed && !gp._menuBackHeld) {
   keys["r"] = true;
   gp._menuBackHeld = true;
@@ -713,48 +826,61 @@ if (levelUpPending) {
   
   // Settings navigation
 if (!document.getElementById("settings").classList.contains("hidden")) {
-  const toggles = Array.from(document.querySelectorAll("#settings input[type='checkbox']"));
-  
-  // use focusedButtonIndex to track which toggle is highlighted
-  focusedButtonIndex = Math.max(0, Math.min(focusedButtonIndex, toggles.length - 1));
-  
+  const inputs = Array.from(document.querySelectorAll(
+    "#settings input[type='checkbox'], #settings input[type='range']"
+  ));
+
+  focusedButtonIndex = Math.max(0, Math.min(focusedButtonIndex, inputs.length - 1));
+  const current = inputs[focusedButtonIndex];
+
   const axisY = gp.axes[1];
   if (axisY > 0.3 && !gp._settingsDownHeld) {
-    focusedButtonIndex = (focusedButtonIndex + 1) % toggles.length;
+    focusedButtonIndex = (focusedButtonIndex + 1) % inputs.length;
     menuNavCooldown = 18;
     gp._settingsDownHeld = true;
   }
   if (axisY < -0.3 && !gp._settingsUpHeld) {
-    focusedButtonIndex = (focusedButtonIndex - 1 + toggles.length) % toggles.length;
+    focusedButtonIndex = (focusedButtonIndex - 1 + inputs.length) % inputs.length;
     menuNavCooldown = 18;
     gp._settingsUpHeld = true;
   }
   if (Math.abs(axisY) < 0.3) { gp._settingsDownHeld = false; gp._settingsUpHeld = false; }
 
-  // highlight focused toggle's label
-  toggles.forEach((t, i) => {
+  // highlight
+  inputs.forEach((t, i) => {
     const label = t.closest("label") || t.parentElement;
     label.style.outline   = i === focusedButtonIndex ? '2px solid #ffd54f' : '';
     label.style.boxShadow = i === focusedButtonIndex ? '0 0 10px #ffd54f' : '';
   });
 
-  // A to toggle
-  if (gp.buttons[0]?.pressed && !gp._menuConfirmHeld) {
-    const t = toggles[focusedButtonIndex];
-    t.checked = !t.checked;
-    t.dispatchEvent(new Event("change")); // fire the change listener
+  // A = toggle checkbox
+  if (current?.type === "checkbox" && gp.buttons[0]?.pressed && !gp._menuConfirmHeld) {
+    current.checked = !current.checked;
+    current.dispatchEvent(new Event("change"));
     gp._menuConfirmHeld = true;
   }
   if (!gp.buttons[0]?.pressed) gp._menuConfirmHeld = false;
 
-  // B to go back
+  // left/right stick = adjust slider
+  if (current?.type === "range") {
+    const axisX = gp.axes[0];
+    if (Math.abs(axisX) > 0.2) {
+      const step = parseFloat(current.step) || 0.1;
+      current.value = Math.max(
+        parseFloat(current.min),
+        Math.min(parseFloat(current.max), parseFloat(current.value) + axisX * step * 0.5)
+      );
+      current.dispatchEvent(new Event("input"));
+    }
+  }
+
   if (gp.buttons[1]?.pressed && !gp._menuBackHeld) {
     document.querySelector("#settings .back-btn")?.click();
     gp._menuBackHeld = true;
   }
   if (!gp.buttons[1]?.pressed) gp._menuBackHeld = false;
 
-  return; // skip regular button nav
+  return;
 }
   // get all visible, focusable buttons in current visible menu
 const buttons = Array.from(document.querySelectorAll(
@@ -999,6 +1125,45 @@ function lineSegmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
   const ub = (((x2 - x1) * (y1 - y3)) - ((y2 - y1) * (x1 - x3))) / denom;
   
   return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
+}
+
+function drawMinimap() {
+  const MW = 160, MH = 90;
+  const MX = canvas.width - MW - 10, MY = 10;
+  const scaleX = MW / world.width, scaleY = MH / world.height;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.strokeStyle = "#555";
+  ctx.lineWidth = 1;
+  ctx.fillRect(MX, MY, MW, MH);
+  ctx.strokeRect(MX, MY, MW, MH);
+
+  // Walls
+  ctx.fillStyle = "#666";
+  for (const w of walls) {
+    ctx.fillRect(MX + w.x * scaleX, MY + w.y * scaleY, w.width * scaleX, w.height * scaleY);
+  }
+
+  // Enemies
+  ctx.fillStyle = "#f44";
+  for (const e of [...snails, ...SuperSnails, ...bats, ...turrets, ...snowmen]) {
+    ctx.fillRect(MX + e.x * scaleX - 1, MY + e.y * scaleY - 1, 3, 3);
+  }
+
+  // Player
+  ctx.fillStyle = "#0f0";
+  ctx.fillRect(MX + player.x * scaleX - 2, MY + player.y * scaleY - 2, 4, 4);
+
+  // Camera viewport box
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(
+    MX + camera.x * scaleX, MY + camera.y * scaleY,
+    camera.width * scaleX, camera.height * scaleY
+  );
+
+  ctx.restore();
 }
 
 // Cast shadows from a light source
@@ -2959,7 +3124,7 @@ const ENEMY_COLORS = {
 
 function drawOffScreenIndicators() {
   if (!waveSystem.enabled || !waveSystem.waveActive) return;
-  
+  if (!settings.offScreenIndicators) return;
   ctx.save();
   
   // Get all alive enemies
@@ -4051,6 +4216,7 @@ function damageEnemy(enemy, damage, knockbackDir) {
 
 // Draw health bars for all enemies
 function drawEnemyHealthBars() {
+  if (!settings.enemyHealthBars) return;
   ctx.save();
   
   // Snails
@@ -6325,6 +6491,7 @@ let playerLives = maxLives;
 
 // Function to handle losing a life
 function loseLife() {
+  if (settings.invincible) return;
  if (playerUpgrades.dashInvulEnabled && player.dashActive) return;
   
   playerLives--;
@@ -6628,7 +6795,7 @@ function drawBox(b) {
 
 function spawnSnow() {
   if (!isChristmasMap()) return;
-
+ if (!settings.particles) return;
   if (snowParticles.length < 150) {
     snowParticles.push({
       x: Math.random() * world.width,
@@ -6964,8 +7131,10 @@ if (!hasPotato) {
 }
 
 function tryDash() {
-  if (player.dashCooldown > 0) return;
-  if (!player.onGround && player.dashUsedInAir) return;
+  if (!settings.infiniteDash) {
+    if (player.dashCooldown > 0) return;
+    if (!player.onGround && player.dashUsedInAir) return;
+  }
 
   player.dashActive = true;
   player.dashDuration = player.dashMaxDuration;
@@ -9125,6 +9294,45 @@ if (player.dashCooldown > 0) {
   }
 
   if (tutorialActive) drawTutorialHUD();
+
+  // FPS
+if (settings.showFPS) {
+  const fps = Math.round(1000 / (deltaTime || 16));
+  const hudFont = settings.largeHUD ? "16px monospace" : "12px monospace";
+  ctx.fillStyle = "#0f0";
+  ctx.font = hudFont;
+  ctx.fillText("FPS: " + fps, canvas.width - 80, 20);
+}
+
+// Coords
+if (settings.showCoords) {
+  ctx.fillStyle = "#0ff";
+  ctx.font = "12px monospace";
+  ctx.fillText(`x:${Math.round(player.x)} y:${Math.round(player.y)}`, canvas.width - 160, 36);
+}
+
+// Hitboxes
+if (settings.showHitboxes) {
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,0,0,0.7)";
+  ctx.lineWidth = 1;
+  const allObjs = [...snails, ...SuperSnails, ...bats, ...turrets,
+                   ...snowmen, ...yetis, ...chairs, ...tables, ...boxes, ...spikes];
+  for (const o of allObjs) ctx.strokeRect(o.x, o.y, o.width || 32, o.height || 32);
+  // player
+  ctx.strokeStyle = "rgba(0,255,0,0.9)";
+  ctx.strokeRect(player.x, player.y, player.width, player.height);
+  ctx.restore();
+}
+
+// Minimap
+if (settings.showMinimap) {
+  drawMinimap();
+}
+
+// Large HUD — scale up base font if enabled
+// (apply this wherever you draw HUD text e.g. lives, dash)
+const hudFontSize = settings.largeHUD ? "22px" : "18px";
 }
 
 saveInitialState();
