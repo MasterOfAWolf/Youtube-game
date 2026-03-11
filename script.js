@@ -677,13 +677,32 @@ function updateGamepadMenu() {
 
   if (menuNavCooldown > 0) { menuNavCooldown--; return; }
 
+  // Level up card navigation
+if (levelUpPending) {
+  const axisX = gp.axes[0];
+  if (axisX > 0.3 && !gp._cardRightHeld) {
+    levelUpSelectedIndex = (levelUpSelectedIndex + 1) % levelUpCards.length;
+    gp._cardRightHeld = true;
+  }
+  if (axisX < -0.3 && !gp._cardLeftHeld) {
+    levelUpSelectedIndex = (levelUpSelectedIndex - 1 + levelUpCards.length) % levelUpCards.length;
+    gp._cardLeftHeld = true;
+  }
+  if (Math.abs(axisX) < 0.3) { gp._cardRightHeld = false; gp._cardLeftHeld = false; }
+
+  if (gp.buttons[0]?.pressed && !gp._menuConfirmHeld) {
+    chooseLevelUpCard(levelUpSelectedIndex);
+    gp._menuConfirmHeld = true;
+  }
+  return; // skip regular button nav while upgrade screen is open
+}
   // get all visible, focusable buttons in current visible menu
-  const buttons = Array.from(document.querySelectorAll(
-    '.menu:not(.hidden) button, #levelSelect:not(.hidden) button, ' +
-    '#waveSelect:not(.hidden) button, #freeSelect:not(.hidden) button, ' +
-    '#settings:not(.hidden) button, #credits:not(.hidden) button, ' +
-    '#controls:not(.hidden) button, #pauseMenu:not(.hidden) button'
-  ));
+const buttons = Array.from(document.querySelectorAll(
+  '#menu:not(.hidden) button, #levelSelect:not(.hidden) button, ' +
+  '#waveSelect:not(.hidden) button, #freeSelect:not(.hidden) button, ' +
+  '#settings:not(.hidden) button, #credits:not(.hidden) button, ' +
+  '#controls:not(.hidden) button, #pauseMenu:not(.hidden) button'
+));
   if (!buttons.length) return;
 
   focusedButtonIndex = Math.max(0, Math.min(focusedButtonIndex, buttons.length - 1));
@@ -9062,8 +9081,6 @@ function gameLoop(currentTime) {
     // Track how much extra time we have
     const excess = deltaTime % FRAME_DURATION;
     lastFrameTime = currentTime - excess;
-
-    updateGamepadMenu();
     
   if (!gamePaused) {
     updateGamepad();
@@ -9115,3 +9132,10 @@ updateDashDamage();
   requestAnimationFrame(gameLoop);
 }
 gameLoop();
+
+
+function menuLoop() {
+  updateGamepadMenu();
+  requestAnimationFrame(menuLoop);
+}
+menuLoop(); // start it immediately at the bottom of your script
