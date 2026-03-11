@@ -1433,7 +1433,7 @@ if (Math.abs(cannonAimAngle) > Math.PI / 2) {
   ctx.scale(1, -1);
 }
 
-ctx.drawImage(cannonImg, 0, -cannonH / 2, cannonW, cannonH);
+ctx.drawImage(cannonImg, -5, -cannonH / 2, cannonW, cannonH);
 
 ctx.restore();
 
