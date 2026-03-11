@@ -614,6 +614,10 @@ keys["s"] = axisY > STICK_DEAD || gp.buttons[13]?.pressed; // down
     tryDash();
   }
 
+  if (gameOver && gp.buttons[1]?.pressed && !gp._menuBackHeld) {
+  keys["r"] = true;
+  gp._menuBackHeld = true;
+}
   // Sword — X button (index 2)
   const swordHeld = gp.buttons[2]?.pressed;
   if (swordHeld && !player.attackCharging && player.attackTimer <= 0 && player.attackCooldown <= 0) {
@@ -695,6 +699,52 @@ if (levelUpPending) {
     gp._menuConfirmHeld = true;
   }
   return; // skip regular button nav while upgrade screen is open
+}
+
+  // Settings navigation
+if (!document.getElementById("settings").classList.contains("hidden")) {
+  const toggles = Array.from(document.querySelectorAll("#settings input[type='checkbox']"));
+  
+  // use focusedButtonIndex to track which toggle is highlighted
+  focusedButtonIndex = Math.max(0, Math.min(focusedButtonIndex, toggles.length - 1));
+  
+  const axisY = gp.axes[1];
+  if (axisY > 0.3 && !gp._settingsDownHeld) {
+    focusedButtonIndex = (focusedButtonIndex + 1) % toggles.length;
+    menuNavCooldown = 18;
+    gp._settingsDownHeld = true;
+  }
+  if (axisY < -0.3 && !gp._settingsUpHeld) {
+    focusedButtonIndex = (focusedButtonIndex - 1 + toggles.length) % toggles.length;
+    menuNavCooldown = 18;
+    gp._settingsUpHeld = true;
+  }
+  if (Math.abs(axisY) < 0.3) { gp._settingsDownHeld = false; gp._settingsUpHeld = false; }
+
+  // highlight focused toggle's label
+  toggles.forEach((t, i) => {
+    const label = t.closest("label") || t.parentElement;
+    label.style.outline   = i === focusedButtonIndex ? '2px solid #ffd54f' : '';
+    label.style.boxShadow = i === focusedButtonIndex ? '0 0 10px #ffd54f' : '';
+  });
+
+  // A to toggle
+  if (gp.buttons[0]?.pressed && !gp._menuConfirmHeld) {
+    const t = toggles[focusedButtonIndex];
+    t.checked = !t.checked;
+    t.dispatchEvent(new Event("change")); // fire the change listener
+    gp._menuConfirmHeld = true;
+  }
+  if (!gp.buttons[0]?.pressed) gp._menuConfirmHeld = false;
+
+  // B to go back
+  if (gp.buttons[1]?.pressed && !gp._menuBackHeld) {
+    document.querySelector("#settings .back-btn")?.click();
+    gp._menuBackHeld = true;
+  }
+  if (!gp.buttons[1]?.pressed) gp._menuBackHeld = false;
+
+  return; // skip regular button nav
 }
   // get all visible, focusable buttons in current visible menu
 const buttons = Array.from(document.querySelectorAll(
