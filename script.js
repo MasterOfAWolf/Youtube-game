@@ -7055,9 +7055,9 @@ if (t.flipping) {
     if (t.dir > 0) {
       ctx.translate(t.x + t.width, t.y);
       ctx.scale(-1, 1);
-      ctx.drawImage(img, -10, 0, t.width + 20, t.height + 20);
+      ctx.drawImage(img, -10, -20, t.width + 20, t.height + 20);
     } else {
-      ctx.drawImage(img, t.x - 10, t.y, t.width + 20, t.height + 20);
+      ctx.drawImage(img, t.x - 10, t.y - 20, t.width + 20, t.height + 20);
     }
   }
 }
