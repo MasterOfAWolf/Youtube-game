@@ -684,23 +684,33 @@ function updateGamepadMenu() {
   // Level up card navigation
 if (levelUpPending) {
   const axisX = gp.axes[0];
-  if (axisX > 0.3 && !gp._cardRightHeld) {
+  
+  const moveRight = axisX > 0.3 || gp.buttons[15]?.pressed;
+  const moveLeft  = axisX < -0.3 || gp.buttons[14]?.pressed;
+
+  if (moveRight && !gp._cardRightHeld) {
     levelUpSelectedIndex = (levelUpSelectedIndex + 1) % levelUpCards.length;
     gp._cardRightHeld = true;
+    menuNavCooldown = 18;
   }
-  if (axisX < -0.3 && !gp._cardLeftHeld) {
+  if (!moveRight) gp._cardRightHeld = false;
+
+  if (moveLeft && !gp._cardLeftHeld) {
     levelUpSelectedIndex = (levelUpSelectedIndex - 1 + levelUpCards.length) % levelUpCards.length;
     gp._cardLeftHeld = true;
+    menuNavCooldown = 18;
   }
-  if (Math.abs(axisX) < 0.3) { gp._cardRightHeld = false; gp._cardLeftHeld = false; }
+  if (!moveLeft) gp._cardLeftHeld = false;
 
   if (gp.buttons[0]?.pressed && !gp._menuConfirmHeld) {
     chooseLevelUpCard(levelUpSelectedIndex);
     gp._menuConfirmHeld = true;
   }
-  return; // skip regular button nav while upgrade screen is open
-}
+  if (!gp.buttons[0]?.pressed) gp._menuConfirmHeld = false;
 
+  return;
+}
+  
   // Settings navigation
 if (!document.getElementById("settings").classList.contains("hidden")) {
   const toggles = Array.from(document.querySelectorAll("#settings input[type='checkbox']"));
