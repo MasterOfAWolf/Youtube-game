@@ -1483,6 +1483,36 @@ ctx.restore();
   }
 }
 
+function drawExplosions() {
+  for (const e of explosions) {
+    const frac = 1 - e.timer / e.maxTimer;
+    const alpha = 1 - frac;
+
+    // outer shockwave ring
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.strokeStyle = '#ff8800';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // inner fireball
+    ctx.globalAlpha = alpha * 0.8;
+    const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.radius * 0.6);
+    grad.addColorStop(0,   '#fff');
+    grad.addColorStop(0.3, '#ffdd00');
+    grad.addColorStop(0.7, '#ff5500');
+    grad.addColorStop(1,   'rgba(255,80,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.radius * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
 // HUD crosshair — draw in screen-space (after ctx.restore for camera)
 function drawCannonCrosshair() {
   if (!hasPotato || gameOver) return;
@@ -8752,6 +8782,7 @@ if (player.attackCharging) {
 }
   drawBats();
   drawSpecialBoxes();
+  drawExplosions();
   drawPlayerSword();
   drawOrbiters();
   // Dash afterimage trail
