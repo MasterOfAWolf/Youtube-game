@@ -205,6 +205,7 @@ const keyMap = {
 };
 
 document.addEventListener("keydown", e => {
+  keys[e.key.toLowerCase()] = true;
   const btnId = keyMap[e.key];
   if (btnId) {
     const btn = document.getElementById(btnId);
@@ -213,6 +214,7 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("keyup", e => {
+  keys[e.key.toLowerCase()] = false;
   const btnId = keyMap[e.key];
   if (btnId) {
     const btn = document.getElementById(btnId);
@@ -6514,7 +6516,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-  if (e.key === "Escape") togglePause();
+  if (e.key === "escape") togglePause();
 });
 document.addEventListener("keyup", (e) => keys[e.key] = false);
 
@@ -6522,7 +6524,7 @@ document.addEventListener("keydown", e => {
     keys[e.key] = true;
 
     // Start charging if not attacking or on cooldown
-    if (e.key === "Shift") { e.preventDefault(); tryDash(); }
+    if (e.key === "shift") { e.preventDefault(); tryDash(); }
   
     if ((keys["f"]) && player.attackTimer <= 0 && player.attackCooldown <= 0 && !player.attackCharging) {
         player.attackCharging = true;
