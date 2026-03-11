@@ -24,6 +24,9 @@ bgTile.src = "Assets/Tiles/Cobblestone BG.png";
 const snailImg = new Image();
 snailImg.src = "Assets/Sprites/snail-pixilart.png";
 
+const cannonImg = new Image();
+cannonImg.src = "Assets/Sprites/potatocannon.png";
+
 const playerImg = new Image();
 playerImg.src = "Assets/Sprites/Player.png";
 
@@ -1411,34 +1414,28 @@ function drawPotatoCannon() {
   const cy     = player.y + player.height / 2;
   const baked  = potatoState === "baked";
 
-  // --- Draw cannon barrel ---
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(cannonAimAngle);
 
-  // Barrel body
-  ctx.fillStyle = baked ? "#6b3a1f" : "#5a3820";
-  ctx.fillRect(2, -5, 28, 10);
+// --- Draw cannon barrel ---
+ctx.save();
+ctx.translate(cx, cy);
+ctx.rotate(cannonAimAngle);
 
-  // Metal bands
-  ctx.fillStyle = baked ? "#9c5522" : "#7a5030";
-  ctx.fillRect(4,  -5, 4, 10);
-  ctx.fillRect(18, -5, 4, 10);
+const cannonW = 48;
+const cannonH = 24;
 
-  // Muzzle
-  ctx.fillStyle = baked ? "#ff7722" : "#4a2e18";
-  ctx.fillRect(27, -6, 5, 12);
+if (baked) {
+  ctx.shadowColor = "#ff6600";
+  ctx.shadowBlur  = 16;
+}
 
-  // Baked: fiery glow around barrel
-  if (baked) {
-    ctx.shadowColor  = "#ff6600";
-    ctx.shadowBlur   = 14;
-    ctx.strokeStyle  = "#ffaa44";
-    ctx.lineWidth    = 1.5;
-    ctx.strokeRect(2, -5, 28, 10);
-  }
+// Flip sprite vertically when aiming left so it doesn't appear upside-down
+if (Math.abs(cannonAimAngle) > Math.PI / 2) {
+  ctx.scale(1, -1);
+}
 
-  ctx.restore();
+ctx.drawImage(cannonImg, 0, -cannonH / 2, cannonW, cannonH);
+
+ctx.restore();
 
   // --- Draw projectiles ---
   for (const p of cannonProjectiles) {
