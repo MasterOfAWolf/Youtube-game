@@ -1193,11 +1193,21 @@ function updateCannonProjectiles() {
       p.alive = false; continue;
     }
 
-    // Wall collision
-    if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
-      if (p.explosive) createExplosion(p.x, p.y);
-      p.alive = false; continue;
-    }
+   // Wall collision
+if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
+  if (playerUpgrades.cannonBounceEnabled && !p.bounced) {
+    // figure out which axis we hit by checking each direction separately
+    const hitH = collidesWithWall(p.x + p.vx - p.size, p.y - p.size, p.size * 2, p.size * 2);
+    const hitV = collidesWithWall(p.x - p.size, p.y + p.vy - p.size, p.size * 2, p.size * 2);
+    if (hitV) p.vy *= -1;
+    if (hitH) p.vx *= -1;
+    p.bounced = true;
+  } else {
+    if (p.explosive) createExplosion(p.x, p.y);
+    p.alive = false;
+  }
+  continue;
+}
 
     // Enemy hit detection
     const hitBox = { x: p.x - p.size, y: p.y - p.size, width: p.size * 2, height: p.size * 2 };
