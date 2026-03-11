@@ -5954,10 +5954,6 @@ function drawYetis() {
     ctx.fillStyle = "#222";
     const eyeX = y.facing === 1 ? y.x + 30 : y.x + 10;
     ctx.fillRect(eyeX, y.y + 16, 6, 6);
-
-    // HP bar
-    ctx.fillStyle = "red";
-    ctx.fillRect(y.x, y.y - 6, (y.hp / 5) * y.width, 4);
   }
 }
 
