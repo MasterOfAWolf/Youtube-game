@@ -1664,7 +1664,7 @@ function openFreeSelect() {
 }
 function openWaveSelect() {
   hideAllMenus();
-  let tutorialActive = false;
+  tutorialActive = false;
   document.getElementById("waveSelect").classList.remove("hidden");
 }
 function openFreeSelect() {
@@ -4980,6 +4980,8 @@ player.attackKnockback = 2;
   gameRunning = false;
   player.attacking = false;
 
+tutorialActive = false;
+  
  xp = 0;
 xpLevel = 1;
 xpToNext = 60;
@@ -7869,6 +7871,7 @@ function resetWorld() {
   lights = [];        // ← ADD THIS LINE
   playerLight = null; // ← ADD THIS LINE
   let potato
+  tutorialActive = false;
   let potatoMessage = "";
   let potatoMessageTimer = 0;
   let potatoHUDLine = "";
