@@ -1664,6 +1664,7 @@ function openFreeSelect() {
 }
 function openWaveSelect() {
   hideAllMenus();
+  let tutorialActive = false;
   document.getElementById("waveSelect").classList.remove("hidden");
 }
 function openFreeSelect() {
