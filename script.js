@@ -4998,7 +4998,7 @@ playerUpgrades.dashDamageEnabled = false;
 playerUpgrades.extraJumpsMax = 0;
 playerUpgrades.extraJumpsLeft = 0;
 ownedUpgradeIds.clear();
-playerUpgrades.dashInvulEnabled = true;
+playerUpgrades.dashInvulEnabled = false;
   
   generatedTiles = [];
   enemies = [];
@@ -7894,7 +7894,7 @@ playerUpgrades.homingEnabled = false;
 playerUpgrades.homingTimer = 0;
 playerUpgrades.dashDamageEnabled = false;
 playerUpgrades.extraJumpsMax = 0;
-playerUpgrades.dashInvulEnabled = true;
+playerUpgrades.dashInvulEnabled = false;
 playerUpgrades.extraJumpsLeft = 0;
 ownedUpgradeIds.clear();
   cannonProjectiles = [];
