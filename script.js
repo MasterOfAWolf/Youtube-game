@@ -7248,7 +7248,7 @@ function updateChairs() {
       player.dy = 0;
       player.onGround = true;
       player.x += c.dx; // carry player along
-    } else if (!s.tutorialDisplay){
+    } else {
       // Leg zone — ouch
       loseLife();
     }
