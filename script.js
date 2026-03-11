@@ -1839,30 +1839,34 @@ function loadMap_Tutorial() {
     { x: 2050, label: '🔴 TURRET',      desc: 'Fires fireballs in range.\nDestroy it with sword!', color: '#ef5350' },
     { x: 2140, label: '⛄ SNOWMAN',     desc: 'Emits a SLOW FIELD.\nStay back or use potato!',  color: '#e0f7fa' },
     { x: 2210, label: '🦣 YETI',        desc: 'Boss-tier. Throws\nsnowballs. Very tanky.',       color: '#e0e0e0' },
+    { x: 2000, label: '🪑 CHAIR',  desc: 'Bouncy furniture enemy.\nKnockback sends it flying.', color: '#ffcc80' },
+    { x: 2300, label: '🪵 TABLE',  desc: 'Heavy patroller. Hit it\nto trigger a dramatic FLIP!', color: '#c8922a' },
   ];
   for (const me of museum) {
     walls.push({ x: me.x, y: FLOOR - 45, width: 50, height: 45 });
     tutorialState.museumLabels.push({ wx: me.x, wy: FLOOR - 45, label: me.label, desc: me.desc, color: me.color, width: 50 });
   }
   // Display enemies — zero speed, very high HP so they can't be killed
+  chairs.push({ ...createChair(2005, FLOOR - 93), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
+tables.push({ ...createTable(2305, FLOOR - 101), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
   snails.push({ x: 1790, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0, dir: 1,
     speed: 0, gravity: 0, chaseRange: 0, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-    hp: 999, maxHp: 999, hitFlash: 0, frame: 0, frameTimer: 0 });
+    hp: 999, maxHp: 999, hitFlash: 0, frame: 0, frameTimer: 0, tutorialDisplay: true});
   SuperSnails.push({ x: 1875, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0,
     speed: 0, gravity: 0, dir: 1, jumpPower: 0, mode: 'ground',
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-    jumpTimer: 99999, lastWallSide: null, prevMode: 'ground', hp: 999, maxHp: 999, hitFlash: 0 });
+    jumpTimer: 99999, lastWallSide: null, prevMode: 'ground', hp: 999, maxHp: 999, hitFlash: 0, tutorialDisplay: true });
   bats.push({ x: 1965, y: FLOOR - 115, width: 28, height: 20, dx: 0, dy: 0,
-    hp: 999, maxHp: 999, hitFlash: 0 });
+    hp: 999, maxHp: 999, hitFlash: 0, tutorialDisplay: true });
   turrets.push({ x: 2058, y: FLOOR - 77, cooldown: 999999, fireRate: 999999,
-    hp: 999, maxHp: 999, armed: false });
+    hp: 999, maxHp: 999, armed: false, tutorialDisplay: true });
   snowmen.push({ x: 2145, y: FLOOR - 83, width: 26, height: 38, speed: 0,
     slowRadius: 140, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [],
-    hp: 999, maxHp: 999, hitFlash: 0 });
+    hp: 999, maxHp: 999, hitFlash: 0, tutorialDisplay: true });
   yetis.push({ x: 2212, y: FLOOR - 114, width: 48, height: 64, dx: 0, dy: 0,
     dead: false, speed: 0, chaseRange: 0, hp: 999, alive: true,
     throwCooldown: 999999, facing: 1, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-    maxHp: 999, hitFlash: 0 });
+    maxHp: 999, hitFlash: 0, tutorialDisplay: true });
   tutorialState.zoneSigns.push({
     wx: 1762, wy: FLOOR - 230, title: '[ ZONE 6 ]  ENEMY MUSEUM',
     lines: ['These are your foes.', 'Read the labels!'],
@@ -1873,6 +1877,7 @@ function loadMap_Tutorial() {
     zoneId: 'museum', message: '✅ Zone 6 — ENEMIES identified!', color: '#ce93d8' });
 
   // ── ZONE 7: HAZARDS ───────────────────────────
+  walls.push({ x: 1760, y: FLOOR, width: 640, height: WT }); // was 490
   walls.push({ x: 2300, y: FLOOR, width: 220, height: WT });
   spikes.push({ x: 2365, y: FLOOR - 26, width: 40, height: 26 });
   spikes.push({ x: 2415, y: FLOOR - 26, width: 40, height: 26 });
@@ -3420,7 +3425,7 @@ function updateBats() {
     if (bat.y > MAP_HEIGHT - 30) bat.y = MAP_HEIGHT - 30;
     
     // Damage player on contact
-    if (isColliding(bat, player)) {
+    if (isColliding(bat, player)  && !bat.tutorialDisplay) {
       loseLife();
     }
   }
@@ -3755,6 +3760,7 @@ function addEnemyHealth() {
 
 // Handle damage to enemies
 function damageEnemy(enemy, damage, knockbackDir) {
+  if (enemy.tutorialDisplay) return false;
   if (!enemy.hp) enemy.hp = 1; // safety
   
   enemy.hp -= damage;
@@ -5511,7 +5517,7 @@ function updateSnails() {
     }
 
     // --- Player collision kills player ---
-    if (
+    if (!s.tutorialDisplay &&
       player.x < s.x + s.width &&
       player.x + player.width > s.x &&
       player.y < s.y + s.height &&
@@ -5867,9 +5873,9 @@ if ((touching.left || touching.right) && s.mode !== "wall") {
   s.dir *= -1;
 }
     // Player collision kills player
-    if (isColliding(player, s)) loseLife();
-    
-        s.prevMode = s.mode;
+    if (isColliding(player, s)  && !s.tutorialDisplay)
+      loseLife();
+    s.prevMode = s.mode;
   }
 }
 
