@@ -113,6 +113,19 @@ let cannonAimAngle = 0;       // radians, updated every frame from mouse or joys
 let cannonCooldown = 0;       // prevents spray-firing
 const CANNON_COOLDOWN_FRAMES = 18;
 
+// === GAMEPAD MODULE ===
+let gamepadIndex = null;
+
+window.addEventListener("gamepadconnected", (e) => {
+  gamepadIndex = e.gamepad.index;
+  console.log("🎮 Controller connected:", e.gamepad.id);
+});
+
+window.addEventListener("gamepaddisconnected", () => {
+  gamepadIndex = null;
+  console.log("🎮 Controller disconnected");
+});
+  
 const attackBtn = document.getElementById("btnAttack");
 // Joystick state (mobile aiming)
 const joystick = {
@@ -570,6 +583,71 @@ function syncJoystickVisibility() {
   const zone = document.getElementById("potatoJoystickArea");
   if (!zone) return;
   zone.style.display = hasPotato ? "flex" : "none";
+}
+
+function updateGamepad() {
+  if (gamepadIndex === null) return;
+  const gp = navigator.getGamepads()[gamepadIndex];
+  if (!gp) return;
+
+  const STICK_DEAD = 0.2; // deadzone
+
+  // Left stick / D-pad — movement
+  const axisX = gp.axes[0];
+  keys["a"] = axisX < -STICK_DEAD || gp.buttons[14]?.pressed; // left
+  keys["d"] = axisX >  STICK_DEAD || gp.buttons[15]?.pressed; // right
+
+  const axisY = gp.axes[1];
+keys["s"] = axisY > STICK_DEAD || gp.buttons[13]?.pressed; // down
+  
+  // Jump — A button (index 0)
+  keys["w"] = gp.buttons[0]?.pressed;
+  
+  // Dash — Right bumper (index 5) or Left bumper (index 4)
+  if (gp.buttons[5]?.pressed || gp.buttons[4]?.pressed) {
+    tryDash();
+  }
+
+  // Sword — X button (index 2)
+  const swordHeld = gp.buttons[2]?.pressed;
+  if (swordHeld && !player.attackCharging && player.attackTimer <= 0 && player.attackCooldown <= 0) {
+    player.attackCharging = true;
+    player.attackChargeTime = 0;
+    keys["f"] = true;
+  }
+  if (!swordHeld && player.attackCharging) {
+    player.attackCharging = false;
+    player.attackTimer = player.attackDuration;
+    player.attackCooldown = 20;
+    player.attackKnockback = 5 + 5 * Math.min(player.attackChargeTime / player.maxChargeTime, 1);
+    player.attackHitObjects.clear();
+    keys["f"] = false;
+  }
+
+  // Potato cannon — right stick aim + right trigger (index 7) to fire
+  if (hasPotato) {
+    const rx = gp.axes[2];
+    const ry = gp.axes[3];
+    if (Math.hypot(rx, ry) > STICK_DEAD) {
+      cannonAimAngle = Math.atan2(ry, rx);
+      player.facing = rx > 0 ? 1 : -1;
+    }
+    if (gp.buttons[7]?.pressed && cannonCooldown <= 0) {
+      firePotatoCannon();
+    }
+  }
+
+  // Pause — Start button (index 9)
+  if (gp.buttons[9]?.pressed && !gp._pauseHeld) {
+    togglePause();
+    gp._pauseHeld = true;
+  }
+  if (!gp.buttons[9]?.pressed) gp._pauseHeld = false;
+
+  // Restart on game over — Select (index 8)
+  if (gameOver && gp.buttons[8]?.pressed) {
+    keys["r"] = true;
+  }
 }
 
 const crtToggle = document.getElementById("crtToggle");
@@ -8908,6 +8986,7 @@ function gameLoop(currentTime) {
     lastFrameTime = currentTime - excess;
 
   if (!gamePaused) {
+    updateGamepad();
     updateWaveSystem();
     updateEnemyHitFlashes();
     applySnowmanSlow();
