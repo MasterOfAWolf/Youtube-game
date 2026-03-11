@@ -1420,8 +1420,8 @@ ctx.save();
 ctx.translate(cx, cy);
 ctx.rotate(cannonAimAngle);
 
-const cannonW = 48;
-const cannonH = 24;
+const cannonW = 59;
+const cannonH = 12
 
 if (baked) {
   ctx.shadowColor = "#ff6600";
