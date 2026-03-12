@@ -8691,7 +8691,7 @@ function updateWallSliding() {
 function drawMouseCoords() {
   ctx.save();
   ctx.fillStyle = "#0ff";
-  ctx.font = "hudFontSize";
+  ctx.font = `${hudFontSize}px monospace`;
 
   ctx.fillText(
     `Mouse: ${Math.round(mouse.worldX * 3.5)}, ${Math.round(mouse.worldY * 3.5)}`,
@@ -8734,7 +8734,7 @@ function drawDevRulers(scale) {
   const STEP = 100;
 
   ctx.save();
-  ctx.font = "hudFontSize - 6";
+  ctx.font = `${hudFontSize - 6}px monospace`;
   ctx.fillStyle = "#0ff";
   ctx.strokeStyle = "#0ff";
   ctx.lineWidth = 1;
@@ -8902,6 +8902,7 @@ ctx.fillRect(cx - 7, hatY - 6, 3, 14);
 
 //Draw Everything
 function draw() {
+  const hudFontSize = settings.largeHUD ? 22 : 16;
  ctx.clearRect(0, 0, canvas.width, canvas.height);
 ctx.save();
 
@@ -9059,7 +9060,7 @@ ctx.restore();
   // --- POTATO FLOATING MESSAGE ---
 if (potatoMessageTimer > 0) {
   ctx.fillStyle = "#ffd966";
-  ctx.font = "hudFontSize";
+  ctx.font = `${hudFontSize}px monospace`;
   ctx.textAlign = "center";
   
   ctx.fillText(
@@ -9252,27 +9253,27 @@ if (devMapView) {
 }
   // HUD — fixed to screen
   ctx.fillStyle = "#fff";
-  ctx.font = "hudFontSize + 2";
+  ctx.font = `${hudFontSize - 2}px monospace`;
   ctx.fillText("Lives: " + playerLives, 10, 40);
 
   // Dash cooldown indicator
 if (player.dashCooldown > 0) {
   ctx.fillStyle = "#aaa";
-  ctx.font = "hudFontSize - 3";
+  ctx.font = `${hudFontSize - 3}px monospace`;
   ctx.fillText("DASH cooling...", 10, 60);
 } else if (player.onGround || !player.dashUsedInAir) {
   ctx.fillStyle = "#00eeff";
-  ctx.font = "hudFontSize - 3";
+  ctx.font = `${hudFontSize - 3}px monospace`;
   ctx.fillText("DASH ready [Shift]", 10, 60);
 } else {
   ctx.fillStyle = "#555";
-  ctx.font = "hudFontSize - 3";
+  ctx.font = `${hudFontSize - 3}px monospace`;
   ctx.fillText("DASH used", 10, 60);
 }
 
   // --- POTATO HUD WHISPER ---
   ctx.fillStyle = "#ffcc66";
-  ctx.font = "hudFontSize - 2";
+  ctx.font = `${hudFontSize - 2}px monospace`;
   ctx.fillText(potatoHUDLine, 10, 80);
 
   // Version label
@@ -9310,7 +9311,7 @@ if (player.dashCooldown > 0) {
     ctx.fillStyle = "rgba(0,0,0,0.7)";
     ctx.fillRect(10, 10, 220, 30);
     ctx.fillStyle = "#0f0";
-    ctx.font = "hudFontSize";
+    ctx.font = `${hudFontSize}px monospace`;
     ctx.fillText("DEV MAP VIEW (M)", 20, 30);
   }
 
@@ -9328,17 +9329,13 @@ if (settings.showFPS) {
 // Coords
 if (settings.showCoords) {
   ctx.fillStyle = "#0ff";
-  ctx.font = "hudFontSize - 4";
+  ctx.font = `${hudFontSize - 4}px monospace`;
   ctx.fillText(`x:${Math.round(player.x)} y:${Math.round(player.y)}`, canvas.width - 160, 36);
 }
 // Minimap
 if (settings.showMinimap) {
   drawMinimap();
 }
-
-// Large HUD — scale up base font if enabled
-// (apply this wherever you draw HUD text e.g. lives, dash)
-const hudFontSize = settings.largeHUD ? "22px monospace" : "16px monospace";
 }
 
 saveInitialState();
