@@ -9338,7 +9338,7 @@ if (settings.showMinimap) {
 
 // Large HUD — scale up base font if enabled
 // (apply this wherever you draw HUD text e.g. lives, dash)
-const hudFontSize = settings.largeHUD ? "22px" : "16px";
+const hudFontSize = settings.largeHUD ? "22px monospace" : "16px monospace";
 }
 
 saveInitialState();
