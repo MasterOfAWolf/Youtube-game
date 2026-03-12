@@ -71,55 +71,78 @@
 </div>
 
 <div id="settings" class="hidden">
-  <h2>Settings</h2>
+  <div class="settings-container">
+    <h2 class="settings-title">⚙️ SETTINGS</h2>
 
-  <h3>Graphics</h3>
-  <label><input type="checkbox" id="settingLighting" checked> Lighting & Shadows</label>
-  <label><input type="checkbox" id="crtToggle"> CRT Effect</label>
-  <label><input type="checkbox" id="pixelToggle"> Pixel Mode</label>
-  <label><input type="checkbox" id="settingParticles" checked> Particle Effects</label>
-  <label><input type="checkbox" id="settingHealthBars" checked> Enemy Health Bars</label>
-  <label><input type="checkbox" id="settingScreenShake" checked> Screen Shake</label>
-  <label><input type="checkbox" id="settingIndicators" checked> Off-Screen Indicators</label>
+    <div class="settings-columns">
 
-  <h3>Audio</h3>
-  <label><input type="checkbox" id="musicToggle" checked> Music</label>
-  <label><input type="checkbox" id="settingSFX" checked> SFX</label>
-  <label>Music Volume
-    <input type="range" id="settingMusicVolume" min="0" max="1" step="0.05" value="0.5">
-  </label>
+      <div class="settings-column">
+        <div class="settings-section">
+          <h3 class="settings-section-title">🎨 Graphics</h3>
+          <label class="setting-row"><span>Lighting & Shadows</span><input type="checkbox" id="settingLighting" checked></label>
+          <label class="setting-row"><span>CRT Effect</span><input type="checkbox" id="crtToggle"></label>
+          <label class="setting-row"><span>Pixel Mode</span><input type="checkbox" id="pixelToggle"></label>
+          <label class="setting-row"><span>Particle Effects</span><input type="checkbox" id="settingParticles" checked></label>
+          <label class="setting-row"><span>Enemy Health Bars</span><input type="checkbox" id="settingHealthBars" checked></label>
+          <label class="setting-row"><span>Screen Shake</span><input type="checkbox" id="settingScreenShake" checked></label>
+          <label class="setting-row"><span>Off-Screen Indicators</span><input type="checkbox" id="settingIndicators" checked></label>
+        </div>
 
-  <h3>Gameplay</h3>
-  <label><input type="checkbox" id="settingInvincible"> Invincibility</label>
-  <label><input type="checkbox" id="settingInfiniteLives"> Infinite Lives</label>
-  <label><input type="checkbox" id="settingInfiniteDash"> Infinite Dash</label>
-  <label><input type="checkbox" id="settingHitboxes"> Show Hitboxes</label>
-  <label>Player Speed
-    <input type="range" id="settingSpeed" min="0.5" max="3" step="0.1" value="1">
-  </label>
+        <div class="settings-section">
+          <h3 class="settings-section-title">🔊 Audio</h3>
+          <label class="setting-row"><span>Music</span><input type="checkbox" id="musicToggle" checked></label>
+          <label class="setting-row"><span>SFX</span><input type="checkbox" id="settingSFX" checked></label>
+          <label class="setting-row slider-row">
+            <span>Music Volume</span>
+            <div class="slider-wrap">
+              <input type="range" id="settingMusicVolume" min="0" max="1" step="0.05" value="0.5">
+              <span class="slider-value" id="musicVolumeLabel">50%</span>
+            </div>
+          </label>
+        </div>
 
-  <h3>Controls</h3>
-  <label><input type="checkbox" id="hideButtonsToggle"> Hide Touch Buttons</label>
-  <label><input type="checkbox" id="settingSwapJumpDash"> Swap Jump / Dash (Controller)</label>
-  <label><input type="checkbox" id="settingVibration" checked> Controller Vibration</label>
-  <label>Joystick Deadzone
-    <input type="range" id="settingDeadzone" min="0.05" max="0.5" step="0.05" value="0.2">
-  </label>
+        <div class="settings-section">
+          <h3 class="settings-section-title">🐛 Debug</h3>
+          <label class="setting-row"><span>Show Hitboxes</span><input type="checkbox" id="settingHitboxes"></label>
+          <label class="setting-row"><span>Show FPS</span><input type="checkbox" id="settingFPS"></label>
+          <label class="setting-row"><span>Show Coordinates</span><input type="checkbox" id="settingCoords"></label>
+        </div>
+      </div>
 
-  <h3>UI</h3>
-  <label><input type="checkbox" id="settingFPS"> Show FPS</label>
-  <label><input type="checkbox" id="settingCoords"> Show Coordinates</label>
-  <label><input type="checkbox" id="settingMinimap"> Minimap</label>
-  <label><input type="checkbox" id="settingTooltips" checked> Tutorial Tooltips</label>
+      <div class="settings-column">
+        <div class="settings-section">
+          <h3 class="settings-section-title">🎮 Controls</h3>
+          <label class="setting-row"><span>Hide Touch Buttons</span><input type="checkbox" id="hideButtonsToggle"></label>
+          <label class="setting-row"><span>Swap Jump / Dash</span><input type="checkbox" id="settingSwapJumpDash"></label>
+          <label class="setting-row"><span>Controller Vibration</span><input type="checkbox" id="settingVibration" checked></label>
+          <label class="setting-row slider-row">
+            <span>Joystick Deadzone</span>
+            <div class="slider-wrap">
+              <input type="range" id="settingDeadzone" min="0.05" max="0.5" step="0.05" value="0.2">
+              <span class="slider-value" id="deadzoneLabel">0.20</span>
+            </div>
+          </label>
+        </div>
 
-  <h3>Accessibility</h3>
-  <label><input type="checkbox" id="settingReducedMotion"> Reduced Motion</label>
-  <label><input type="checkbox" id="settingHighContrast"> High Contrast</label>
-  <label><input type="checkbox" id="settingLargeHUD"> Large HUD Text</label>
+        <div class="settings-section">
+          <h3 class="settings-section-title">🖥️ UI</h3>
+          <label class="setting-row"><span>Minimap</span><input type="checkbox" id="settingMinimap"></label>
+          <label class="setting-row"><span>Tutorial Tooltips</span><input type="checkbox" id="settingTooltips" checked></label>
+          <label class="setting-row"><span>Large HUD Text</span><input type="checkbox" id="settingLargeHUD"></label>
+        </div>
 
-  <button class="back-btn" onclick="backToMenu()">Back</button>
+        <div class="settings-section">
+          <h3 class="settings-section-title">♿ Accessibility</h3>
+          <label class="setting-row"><span>Reduced Motion</span><input type="checkbox" id="settingReducedMotion"></label>
+          <label class="setting-row"><span>High Contrast</span><input type="checkbox" id="settingHighContrast"></label>
+        </div>
+      </div>
+
+    </div>
+
+    <button class="back-btn settings-back" onclick="backToMenu()">← Back</button>
+  </div>
 </div>
-
 <!-- Comment -->
 <div id="controls" class="hidden">
   <h2>Controls</h2>
