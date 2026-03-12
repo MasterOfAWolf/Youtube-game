@@ -5238,7 +5238,7 @@ function grantXP(amount) {
   if (xp >= xpToNext) {
     xp -= xpToNext;
     xpLevel++;
-    xpToNext = Math.floor(xpToNext * 1.45); // scale requirement up each level
+    xpToNext = Math.floor(xpToNext * 1.20); // scale requirement up each level
     triggerLevelUp();
   }
 }
