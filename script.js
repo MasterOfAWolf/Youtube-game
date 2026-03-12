@@ -2157,10 +2157,10 @@ function addMapBounds() {
   walls.push({ x: 0, y: MAP_HEIGHT - WALL_THICKNESS, width: MAP_WIDTH, height: 50 });
 
   // Ceiling
-  walls.push({ x: 0, y: -970, width: MAP_WIDTH, height: 50 });
+  walls.push({ x: 0, y: -20, width: MAP_WIDTH, height: 50 });
 
   // Left wall
-  walls.push({ x: -970, y: 0, width: 50, height: MAP_HEIGHT });
+  walls.push({ x: -20, y: 0, width: 50, height: MAP_HEIGHT });
 
   // Right wall
   walls.push({ x: MAP_WIDTH - WALL_THICKNESS, y: 0, width: 50, height: MAP_HEIGHT });
