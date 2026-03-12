@@ -2154,16 +2154,16 @@ function startTutorial() {
 
 function addMapBounds() {
   // Floor
-  walls.push({ x: 0, y: MAP_HEIGHT - WALL_THICKNESS, width: MAP_WIDTH, height: 1000 });
+  walls.push({ x: 0, y: MAP_HEIGHT - WALL_THICKNESS, width: MAP_WIDTH, height: 50 });
 
   // Ceiling
-  walls.push({ x: 0, y: -970, width: MAP_WIDTH, height: 1000 });
+  walls.push({ x: 0, y: -970, width: MAP_WIDTH, height: 50 });
 
   // Left wall
-  walls.push({ x: -970, y: 0, width: 1000, height: MAP_HEIGHT });
+  walls.push({ x: -970, y: 0, width: 50, height: MAP_HEIGHT });
 
   // Right wall
-  walls.push({ x: MAP_WIDTH - WALL_THICKNESS, y: 0, width: 1000, height: MAP_HEIGHT });
+  walls.push({ x: MAP_WIDTH - WALL_THICKNESS, y: 0, width: 50, height: MAP_HEIGHT });
 }
 
 function loadMap_Tutorial() {
@@ -9322,15 +9322,15 @@ if (settings.showFPS) {
   const fps = Math.round(1000 / (deltaTime || 16));
   const hudFont = settings.largeHUD ? "16px monospace" : "12px monospace";
   ctx.fillStyle = "#0f0";
-  ctx.font = hudFont;
-  ctx.fillText("FPS: " + fps, canvas.width - 80, 20);
+  ctx.font = `${hudFontSize - 4}px monospace`;
+  ctx.fillText("FPS: " + fps, canvas.width - 400, 0);
 }
 
 // Coords
 if (settings.showCoords) {
   ctx.fillStyle = "#0ff";
   ctx.font = `${hudFontSize - 4}px monospace`;
-  ctx.fillText(`x:${Math.round(player.x)} y:${Math.round(player.y)}`, canvas.width - 160, 36);
+  ctx.fillText(`x:${Math.round(player.x)} y:${Math.round(player.y)}`, canvas.width - 400, 25);
 }
 // Minimap
 if (settings.showMinimap) {
