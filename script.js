@@ -9322,15 +9322,15 @@ if (settings.showFPS) {
   const fps = Math.round(1000 / (deltaTime || 16));
   const hudFont = settings.largeHUD ? "16px monospace" : "12px monospace";
   ctx.fillStyle = "#0f0";
-  ctx.font = `${hudFontSize - 4}px monospace`;
-  ctx.fillText("FPS: " + fps, canvas.width - 400, 0);
+  ctx.font = hudFont;
+  ctx.fillText("FPS: " + fps, canvas.width - 450, 10);
 }
 
 // Coords
 if (settings.showCoords) {
   ctx.fillStyle = "#0ff";
   ctx.font = `${hudFontSize - 4}px monospace`;
-  ctx.fillText(`x:${Math.round(player.x)} y:${Math.round(player.y)}`, canvas.width - 400, 25);
+  ctx.fillText(`x:${Math.round(player.x)} y:${Math.round(player.y)}`, canvas.width - 450, 25);
 }
 // Minimap
 if (settings.showMinimap) {
