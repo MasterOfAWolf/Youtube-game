@@ -8375,6 +8375,11 @@ function updateOrbiters() {
 
   const cx = player.x + player.width / 2;
   const cy = player.y + player.height / 2;
+  const count = playerUpgrades.orbiters.length;
+
+  // Increment only the first orbiter's angle — others derive from it
+  playerUpgrades.orbiters[0].angle += playerUpgrades.orbiters[0].speed;
+  const baseAngle = playerUpgrades.orbiters[0].angle;
 
   const allEnemies = [
     ...snails.map(e => ({ e, list: snails, key: 'snail' })),
@@ -8387,17 +8392,21 @@ function updateOrbiters() {
     ...bats.map(e => ({ e, list: bats, key: 'bat' })),
   ];
 
-  for (const orb of playerUpgrades.orbiters) {
-    orb.angle += orb.speed;
+  for (let i = 0; i < count; i++) {
+    const orb = playerUpgrades.orbiters[i];
 
-    const ox = cx + Math.cos(orb.angle) * orb.radius;
-    const oy = cy + Math.sin(orb.angle) * orb.radius;
+    // Evenly space: 1 orb = 0°, 2 orbs = 180° apart, 3 = 120° apart, etc.
+    const angleOffset = (Math.PI * 2 / count) * i;
+    const angle = baseAngle + angleOffset;
+
+    const ox = cx + Math.cos(angle) * orb.radius;
+    const oy = cy + Math.sin(angle) * orb.radius;
     orb.screenX = ox;
     orb.screenY = oy;
 
     const hitBox = { x: ox - orb.size, y: oy - orb.size, width: orb.size * 2, height: orb.size * 2 };
 
-    // Tick existing cooldowns
+    // Tick cooldowns
     for (const [enemy, timer] of orb.hitCooldowns) {
       if (timer <= 1) orb.hitCooldowns.delete(enemy);
       else orb.hitCooldowns.set(enemy, timer - 1);
@@ -8408,7 +8417,7 @@ function updateOrbiters() {
       if (!isColliding(hitBox, e)) continue;
 
       damageEnemy(e, orb.damage, { x: (e.x - cx) * 0.1, y: -3 });
-      orb.hitCooldowns.set(e, 40); // 40-frame cooldown before hitting same enemy again
+      orb.hitCooldowns.set(e, 40);
 
       if (e.hp <= 0) {
         if (list) {
