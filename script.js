@@ -1774,8 +1774,10 @@ function createExplosion(x, y) {
     }
   }
   // Screen shake + VHS glitch
+  if (settings.screenShake && !settings.reducedMotion) {
   camera.x += (Math.random() - 0.5) * 22;
   camera.y += (Math.random() - 0.5) * 22;
+}
   triggerVHSGlitch();
 
   if (hasPotato) {
@@ -6492,6 +6494,8 @@ let playerLives = maxLives;
 // Function to handle losing a life
 function loseLife() {
   if (settings.invincible) return;
+  if (settings.infiniteLives) { playerLives = maxLives; return; }
+
  if (playerUpgrades.dashInvulEnabled && player.dashActive) return;
   
   playerLives--;
@@ -7010,8 +7014,10 @@ potatoHUDLine = "🥔 something feels different";
 
 
     // Tiny screen shake
+    if (settings.screenShake && !settings.reducedMotion) {
     camera.x += (Math.random() - 0.5) * 13;
     camera.y += (Math.random() - 0.5) * 15;
+}
   }
 }
 
@@ -7355,8 +7361,10 @@ function updateTables() {
             loseLife();
           }
           // Screen shake
+          if (settings.screenShake && !settings.reducedMotion) {
           camera.x += (Math.random()-0.5)*12;
           camera.y += (Math.random()-0.5)*12;
+           }
           triggerVHSGlitch();
           if (hasPotato) {
             potatoMessage = "🥔 the furniture demands respect";
@@ -8683,7 +8691,7 @@ function updateWallSliding() {
 function drawMouseCoords() {
   ctx.save();
   ctx.fillStyle = "#0ff";
-  ctx.font = "14px monospace";
+  ctx.font = "hudFontSize";
 
   ctx.fillText(
     `Mouse: ${Math.round(mouse.worldX * 3.5)}, ${Math.round(mouse.worldY * 3.5)}`,
@@ -8726,7 +8734,7 @@ function drawDevRulers(scale) {
   const STEP = 100;
 
   ctx.save();
-  ctx.font = "8px monospace";
+  ctx.font = "hudFontSize - 6";
   ctx.fillStyle = "#0ff";
   ctx.strokeStyle = "#0ff";
   ctx.lineWidth = 1;
@@ -9051,7 +9059,7 @@ ctx.restore();
   // --- POTATO FLOATING MESSAGE ---
 if (potatoMessageTimer > 0) {
   ctx.fillStyle = "#ffd966";
-  ctx.font = "16px monospace";
+  ctx.font = "hudFontSize";
   ctx.textAlign = "center";
   
   ctx.fillText(
@@ -9212,7 +9220,20 @@ if (player.dashActive || player.dashDuration > 0) {
   }
   ctx.restore();
 }
-  
+  // Hitboxes
+if (settings.showHitboxes) {
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,0,0,0.7)";
+  ctx.lineWidth = 1;
+  const allObjs = [...snails, ...SuperSnails, ...bats, ...turrets,
+                   ...snowmen, ...yetis, ...chairs, ...tables, ...boxes, ...spikes];
+  for (const o of allObjs) ctx.strokeRect(o.x, o.y, o.width || 32, o.height || 32);
+  // player
+  ctx.strokeStyle = "rgba(0,255,0,0.9)";
+  ctx.strokeRect(player.x, player.y, player.width, player.height);
+  ctx.restore();
+}
+
   drawPotatoCannon();
   drawLighting();
   drawEnemyHealthBars();
@@ -9231,32 +9252,32 @@ if (devMapView) {
 }
   // HUD — fixed to screen
   ctx.fillStyle = "#fff";
-  ctx.font = "18px Arial";
+  ctx.font = "hudFontSize + 2";
   ctx.fillText("Lives: " + playerLives, 10, 40);
 
   // Dash cooldown indicator
 if (player.dashCooldown > 0) {
   ctx.fillStyle = "#aaa";
-  ctx.font = "13px Arial";
+  ctx.font = "hudFontSize - 3";
   ctx.fillText("DASH cooling...", 10, 60);
 } else if (player.onGround || !player.dashUsedInAir) {
   ctx.fillStyle = "#00eeff";
-  ctx.font = "13px Arial";
+  ctx.font = "hudFontSize - 3";
   ctx.fillText("DASH ready [Shift]", 10, 60);
 } else {
   ctx.fillStyle = "#555";
-  ctx.font = "13px Arial";
+  ctx.font = "hudFontSize - 3";
   ctx.fillText("DASH used", 10, 60);
 }
 
   // --- POTATO HUD WHISPER ---
   ctx.fillStyle = "#ffcc66";
-  ctx.font = "14px Arial";
+  ctx.font = "hudFontSize - 2";
   ctx.fillText(potatoHUDLine, 10, 80);
 
   // Version label
   ctx.fillStyle = "#fff";
-  ctx.fillText("Version 12", 10, 20);
+  ctx.fillText("Version 16", 10, 20);
 
   // --- GAME OVER OVERLAY ---
   if (gameOver) {
@@ -9289,7 +9310,7 @@ if (player.dashCooldown > 0) {
     ctx.fillStyle = "rgba(0,0,0,0.7)";
     ctx.fillRect(10, 10, 220, 30);
     ctx.fillStyle = "#0f0";
-    ctx.font = "16px monospace";
+    ctx.font = "hudFontSize";
     ctx.fillText("DEV MAP VIEW (M)", 20, 30);
   }
 
@@ -9307,24 +9328,9 @@ if (settings.showFPS) {
 // Coords
 if (settings.showCoords) {
   ctx.fillStyle = "#0ff";
-  ctx.font = "12px monospace";
+  ctx.font = "hudFontSize - 4";
   ctx.fillText(`x:${Math.round(player.x)} y:${Math.round(player.y)}`, canvas.width - 160, 36);
 }
-
-// Hitboxes
-if (settings.showHitboxes) {
-  ctx.save();
-  ctx.strokeStyle = "rgba(255,0,0,0.7)";
-  ctx.lineWidth = 1;
-  const allObjs = [...snails, ...SuperSnails, ...bats, ...turrets,
-                   ...snowmen, ...yetis, ...chairs, ...tables, ...boxes, ...spikes];
-  for (const o of allObjs) ctx.strokeRect(o.x, o.y, o.width || 32, o.height || 32);
-  // player
-  ctx.strokeStyle = "rgba(0,255,0,0.9)";
-  ctx.strokeRect(player.x, player.y, player.width, player.height);
-  ctx.restore();
-}
-
 // Minimap
 if (settings.showMinimap) {
   drawMinimap();
@@ -9332,7 +9338,7 @@ if (settings.showMinimap) {
 
 // Large HUD — scale up base font if enabled
 // (apply this wherever you draw HUD text e.g. lives, dash)
-const hudFontSize = settings.largeHUD ? "22px" : "18px";
+const hudFontSize = settings.largeHUD ? "22px" : "16px";
 }
 
 saveInitialState();
