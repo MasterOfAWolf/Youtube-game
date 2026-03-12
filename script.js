@@ -271,7 +271,7 @@ document.getElementById("settingMusicVolume").addEventListener("input", function
   settings.musicVolume = parseFloat(this.value);
   bgMusic.volume = settings.musicVolume;
 });
-document.getElementById("settingInvincible").addEventListener("change", function() {
+/*document.getElementById("settingInvincible").addEventListener("change", function() {
   settings.invincible = this.checked;
 });
 document.getElementById("settingInfiniteLives").addEventListener("change", function() {
@@ -279,13 +279,13 @@ document.getElementById("settingInfiniteLives").addEventListener("change", funct
 });
 document.getElementById("settingInfiniteDash").addEventListener("change", function() {
   settings.infiniteDash = this.checked;
-});
+});  */
 document.getElementById("settingHitboxes").addEventListener("change", function() {
   settings.showHitboxes = this.checked;
 });
-document.getElementById("settingSpeed").addEventListener("input", function() {
+/*document.getElementById("settingSpeed").addEventListener("input", function() {
   settings.speedMultiplier = parseFloat(this.value);
-});
+});  */
 document.getElementById("settingSwapJumpDash").addEventListener("change", function() {
   settings.swapJumpDash = this.checked;
 });
