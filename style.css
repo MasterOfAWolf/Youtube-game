@@ -397,3 +397,16 @@ button, canvas {
   -webkit-user-select: none;
   user-select: none;
 }
+
+body.high-contrast canvas {
+  filter: contrast(1.5) saturate(0);
+}
+body.high-contrast {
+  background: #000;
+  color: #fff;
+}
+body.high-contrast button {
+  background: #000;
+  color: #fff;
+  border: 2px solid #fff;
+}
