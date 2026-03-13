@@ -270,7 +270,7 @@ document.getElementById("settingSFX").addEventListener("change", function() {
 document.getElementById("settingMusicVolume").addEventListener("input", function() {
   settings.musicVolume = parseFloat(this.value);
   bgMusic.volume = settings.musicVolume;
-  document.getElementById("labelMusicVolume").textContent = Math.round(this.value * 100) + "%";
+  document.getElementById("musicVolumeLabel").textContent = Math.round(this.value * 100) + "%";
 });
 /*document.getElementById("settingInvincible").addEventListener("change", function() {
   settings.invincible = this.checked;
@@ -295,7 +295,7 @@ document.getElementById("settingVibration").addEventListener("change", function(
 });
 document.getElementById("settingDeadzone").addEventListener("input", function() {
   settings.joystickDeadzone = parseFloat(this.value);
-  document.getElementById("labelDeadzone").textContent = parseFloat(this.value).toFixed(2);
+  document.getElementById("deadzoneLabel").textContent = parseFloat(this.value).toFixed(2);
 });
 document.getElementById("settingFPS").addEventListener("change", function() {
   settings.showFPS = this.checked;
@@ -864,17 +864,34 @@ if (!document.getElementById("settings").classList.contains("hidden")) {
   if (!gp.buttons[0]?.pressed) gp._menuConfirmHeld = false;
 
   // left/right stick = adjust slider
-  if (current?.type === "range") {
-    const axisX = gp.axes[0];
-    if (Math.abs(axisX) > 0.2) {
-      const step = parseFloat(current.step) || 0.1;
-      current.value = Math.max(
-        parseFloat(current.min),
-        Math.min(parseFloat(current.max), parseFloat(current.value) + axisX * step * 0.5)
-      );
-      current.dispatchEvent(new Event("input"));
-    }
+ if (current?.type === "range") {
+  const axisX = gp.axes[0];
+  const DEAD = settings.joystickDeadzone;
+
+  // Right
+  if (axisX > DEAD && !gp._sliderRightHeld) {
+    const step = parseFloat(current.step) || 0.1;
+    current.value = Math.min(
+      parseFloat(current.max),
+      parseFloat(current.value) + step
+    );
+    current.dispatchEvent(new Event("input"));
+    gp._sliderRightHeld = true;
   }
+  if (axisX <= DEAD) gp._sliderRightHeld = false;
+
+  // Left — separate held state so it never gets blocked by nav cooldown
+  if (axisX < -DEAD && !gp._sliderLeftHeld) {
+    const step = parseFloat(current.step) || 0.1;
+    current.value = Math.max(
+      parseFloat(current.min),
+      parseFloat(current.value) - step
+    );
+    current.dispatchEvent(new Event("input"));
+    gp._sliderLeftHeld = true;
+  }
+  if (axisX >= -DEAD) gp._sliderLeftHeld = false;
+}
 
   if (gp.buttons[1]?.pressed && !gp._menuBackHeld) {
     document.querySelector("#settings .back-btn")?.click();
@@ -934,6 +951,13 @@ const buttons = Array.from(document.querySelectorAll(
     gp._menuBackHeld = true;
   }
   if (!gp.buttons[1]?.pressed) gp._menuBackHeld = false;
+
+  const current = inputs[focusedButtonIndex];
+
+// ✅ ADD THIS — scroll the focused element into view
+if (current) {
+  current.closest("label")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
 }
 const crtToggle = document.getElementById("crtToggle");
 
@@ -1632,10 +1656,6 @@ if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
         const e = list[j];
         if (isColliding(hitBox, e)) {
           damageEnemy(e, dmg, kb);
-          if (p.homing && playerUpgrades.homingExplosive && hit) {
-  createExplosion(p.x, p.y);}
-             if (e.hp <= 0) { list.splice(j, 1); onEnemyKilled(key); }
-             hit = true; break;
         }
       }
     }
@@ -1695,12 +1715,14 @@ if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
       }
     }
 
-    if (hit) {
-      if (p.explosive) createExplosion(p.x, p.y);
-      p.alive = false;
+  if (hit) {
+  if (p.explosive || (p.homing && playerUpgrades.homingExplosive)) {
+    createExplosion(p.x, p.y);
+  }
+  p.alive = false;
+      }
     }
   }
-}
 
 // --- Explosion (baked potato only) ---
 function createExplosion(x, y) {
@@ -6118,16 +6140,19 @@ function updateSuperSnails() {
       }
     }
 
-    // ✅ FIXED: ground wins over wall (corner priority)
     if (touching.bottom) {
-      s.mode = "ground";
-    } else if (touching.left || touching.right) {
-      s.mode = "wall";
-    } else if (touching.top && s.dy <= 0) {
-      s.mode = "ceiling";
-    } else if (s.mode !== "wall" && s.mode !== "ceiling") {
-      s.mode = "falling";
-    }
+  s.mode = "ground";
+} else if (touching.left && touching.right) {
+  // Squeezed between two walls — just fall
+  s.mode = "falling";
+  s.dy = 2;
+} else if (touching.left || touching.right) {
+  s.mode = "wall";
+} else if (touching.top && s.dy <= 0) {
+  s.mode = "ceiling";
+} else {
+  s.mode = "falling";
+}
 
     // ✅ FIXED: refresh timer while actively on wall (not just on transition)
     if (s.mode === "wall") {
