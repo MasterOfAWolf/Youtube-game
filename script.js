@@ -1650,16 +1650,18 @@ if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
       { list: snowmen,    key: 'snowman' },
     ];
 
-    for (const { list, key } of enemyChecks) {
-      if (hit) break;
-      for (let j = list.length - 1; j >= 0; j--) {
-        const e = list[j];
-        if (isColliding(hitBox, e)) {
-          damageEnemy(e, dmg, kb);
-        }
-      }
+for (const { list, key } of enemyChecks) {
+  if (hit) break;
+  for (let j = list.length - 1; j >= 0; j--) {
+    const e = list[j];
+    if (isColliding(hitBox, e)) {
+      damageEnemy(e, dmg, kb);
+      if (e.hp <= 0) { list.splice(j, 1); onEnemyKilled(key); }
+      hit = true;
+      break;
     }
-
+  }
+}
     
     // Yetis
     if (!hit) for (const y of yetis) {
