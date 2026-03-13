@@ -6071,7 +6071,7 @@ if (s.mode === "ground" || s.mode === "falling") {
     s.x += s.dx;
     s.y += s.dy;
 
-    if (s.y > 2200) {
+    if (s.y > 2100) {
       s.health = 0;
       s.y = 200;
       s.x = Math.random() * world.width;
