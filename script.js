@@ -835,6 +835,11 @@ if (!document.getElementById("settings").classList.contains("hidden")) {
   focusedButtonIndex = Math.max(0, Math.min(focusedButtonIndex, inputs.length - 1));
   const current = inputs[focusedButtonIndex];
 
+  // ✅ ADD THIS — scroll the focused element into view
+if (current) {
+  current.closest("label")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
   const axisY = gp.axes[1];
   if (axisY > 0.3 && !gp._settingsDownHeld) {
     focusedButtonIndex = (focusedButtonIndex + 1) % inputs.length;
@@ -951,13 +956,6 @@ const buttons = Array.from(document.querySelectorAll(
     gp._menuBackHeld = true;
   }
   if (!gp.buttons[1]?.pressed) gp._menuBackHeld = false;
-
-  const current = inputs[focusedButtonIndex];
-
-// ✅ ADD THIS — scroll the focused element into view
-if (current) {
-  current.closest("label")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-}
 }
 const crtToggle = document.getElementById("crtToggle");
 
