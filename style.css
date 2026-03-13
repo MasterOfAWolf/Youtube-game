@@ -563,3 +563,139 @@ body.high-contrast button {
   background: #3a2f5e;
   border-radius: 3px;
 }
+
+#settings span[id^="label"] {
+  color: #f0d060;
+  font-family: monospace;
+  font-size: 12px;
+  min-width: 38px;
+  text-align: right;
+}
+#credits {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(480px, 90vw);
+  background: #0d0d14;
+  border: 1px solid #3a2f5e;
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+  z-index: 100;
+}
+
+.credits-outer {
+  height: 380px;
+  overflow: hidden;
+  position: relative;
+  padding: 0 28px;
+}
+
+/* Fade top and bottom edges */
+.credits-outer::before,
+.credits-outer::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 60px;
+  z-index: 2;
+  pointer-events: none;
+}
+.credits-outer::before {
+  top: 0;
+  background: linear-gradient(to bottom, #0d0d14, transparent);
+}
+.credits-outer::after {
+  bottom: 0;
+  background: linear-gradient(to top, #0d0d14, transparent);
+}
+
+.credits-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: 380px; /* start off-screen */
+  animation: creditsScroll 22s linear infinite;
+}
+
+.credits-scroll:hover {
+  animation-play-state: paused; /* pause on hover */
+}
+
+@keyframes creditsScroll {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
+}
+
+.credits-logo {
+  font-family: monospace;
+  font-size: 36px;
+  font-weight: bold;
+  color: #f0d060;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.credits-tagline {
+  font-family: monospace;
+  font-size: 12px;
+  color: #7a6a9a;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+
+.credits-role {
+  font-family: monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: #a080d0;
+  margin-bottom: 6px;
+}
+
+.credits-name {
+  font-family: monospace;
+  font-size: 18px;
+  color: #e8e0f8;
+  margin-bottom: 4px;
+}
+
+.credits-spacer {
+  height: 40px;
+}
+
+#credits .back-btn {
+  display: block;
+  width: calc(100% - 56px);
+  margin: 0 28px 20px;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid #5a4878;
+  border-radius: 8px;
+  color: #c8c0e8;
+  font-family: monospace;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+#credits .back-btn:hover {
+  background: #5a4878;
+  color: #fff;
+}
+
+#touchControls button {
+  padding: 0;
+  background: transparent;
+  border: none;
+  line-height: 0; /* removes gap below inline img */
+}
+
+#touchControls button img {
+  display: block;
+  image-rendering: pixelated; /* keeps pixel art crisp */
+}
