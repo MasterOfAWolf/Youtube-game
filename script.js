@@ -6036,282 +6036,176 @@ const SUPER_JUMP_COOLDOWN_MAX = 180; // ~3 sec at 60fps
 function updateSuperSnails() {
   for (let s of SuperSnails) {
 
-    if (s.prevMode === undefined) s.prevMode = s.mode;
-if (s.lastWallSide === undefined) s.lastWallSide = null;
-if (s.jumpTimer === undefined) s.jumpTimer = 0;
-    s.wallJumpBoost = 0;
+    if (s.prevMode    === undefined) s.prevMode    = s.mode;
+    if (s.lastWallSide === undefined) s.lastWallSide = null;
+    if (s.jumpTimer   === undefined) s.jumpTimer   = 0;
+    // ✅ REMOVED: s.wallJumpBoost = 0 (was wiping boost every frame)
 
     if (s.knockbackTimer > 0) {
-  s.x += s.knockbackDx;
-  s.y += s.knockbackDy;
-  s.knockbackTimer--;
-  continue; // skip normal AI/movement for this frame
-}
+      s.x += s.knockbackDx;
+      s.y += s.knockbackDy;
+      s.knockbackTimer--;
+      continue;
+    }
 
-    // Reduce jump timer each frame
     if (s.jumpTimer > 0) s.jumpTimer--;
 
-    // Gravity for ground + falling
-if (s.mode === "ground" || s.mode === "falling") {
-  s.dy += s.gravity;
-} else {
-  s.dy = 0; // wall + ceiling = cling
-}
+    // Gravity
+    if (s.mode === "ground" || s.mode === "falling") {
+      s.dy += s.gravity;
+    } else {
+      s.dy = 0;
+    }
 
+    if (s.dy  >  12) s.dy =  12;
+    if (s.dy  < -15) s.dy = -15;
 
-    if (s.dy > 12) s.dy = 12; 
-    if (s.dy < -15) s.dy = -15; 
-    
-    // Predict direction toward player
     const dx = player.x - s.x;
     const dy = player.y - s.y;
     s.dir = dx > 0 ? 1 : -1;
 
-    // Apply movement
     s.x += s.dx;
     s.y += s.dy;
 
-    if (s.y > 2100) {
-      s.health = 0;
+    // ✅ FIXED: s.hp instead of s.health
+    if (s.y > 2200) {
+      s.hp = 0;
       s.y = 200;
       s.x = Math.random() * world.width;
     }
-    // Collision detection
+
     let touching = { left: false, right: false, top: false, bottom: false };
 
-    // --- BOX COLLISIONS ---
-    // --- BOX COLLISIONS (fixed, minimal changes) ---
-for (let b of boxes) {
-  if (!isColliding(s, b)) continue;
+    // Box collisions
+    for (let b of boxes) {
+      if (!isColliding(s, b)) continue;
+      const ox = Math.min(s.x + s.width - b.x, b.x + b.width - s.x);
+      const oy = Math.min(s.y + s.height - b.y, b.y + b.height - s.y);
 
-  const ox = Math.min(s.x + s.width - b.x, b.x + b.width - s.x);
-  const oy = Math.min(s.y + s.height - b.y, b.y + b.height - s.y);
-
-  // 🟢 VERTICAL collision (landing on top or hitting bottom)
-  if (oy < ox) {
-    if (s.dy > 0) {
-      // LAND ON TOP OF BOX
-      s.y = b.y - s.height;
-      s.dy = 0;
-      touching.bottom = true;
-
-      // prevent climb-reset spam loop
-      s.jumpTimer = Math.max(s.jumpTimer, 10);
-
-      // ONLY allow stepping up if the snail was falling or walking
-      if (s.mode === "falling" || s.mode === "ground") {
-        s.mode = "ground";
-      }
-
-    } else {
-  // hit underside of box → just bounce down
-  s.y = b.y + b.height;
-  s.dy = 0;
-  // NO touching.top for boxes
-    }
-  }
-
-  // 🔵 HORIZONTAL collision (push box, but DON'T climb its side)
-  else {
-    if (s.dx > 0) {
-      // RIGHT SIDE
-      s.x = b.x - s.width;
-      touching.right = true;
-    } else if (s.dx < 0) {
-      // LEFT SIDE
-      s.x = b.x + b.width;
-      touching.left = true;
-    }
-
-    // stop horizontal movement
-    s.dx = 0;
-
-    // 🛑 prevent broken climb loops by forcing the snail out of "wall climb" here
-    if (s.mode === "wall") {
-      s.mode = "falling";
-      s.wallJumpActive = false;
-    }
-  }
-}
-
-
-    // --- WALL COLLISIONS ---
-for (let w of walls) {
-  if (isColliding(s, w)) {
-    const ox = Math.min(s.x + s.width - w.x, w.x + w.width - s.x);
-    const oy = Math.min(s.y + s.height - w.y, w.y + w.height - s.y);
-
-    if (ox < oy) {
-      // Horizontal collision
-      if (s.x < w.x) {
-        s.x -= ox;
-        touching.right = true;
-        s.lastWallSide = "right";
+      if (oy < ox) {
+        if (s.dy > 0) {
+          s.y = b.y - s.height;
+          s.dy = 0;
+          touching.bottom = true;
+          s.jumpTimer = Math.max(s.jumpTimer, 10);
+          if (s.mode === "falling" || s.mode === "ground") s.mode = "ground";
+        } else {
+          s.y = b.y + b.height;
+          s.dy = 0;
+        }
       } else {
-        s.x += ox;
-        touching.left = true;
-        s.lastWallSide = "left";
+        if (s.dx > 0) { s.x = b.x - s.width;  touching.right = true; }
+        else           { s.x = b.x + b.width;  touching.left  = true; }
+        s.dx = 0;
+        if (s.mode === "wall") { s.mode = "falling"; s.wallJumpActive = false; }
       }
-      s.dx = 0;
-    } else {
-  // Vertical collision
-  if (s.y < w.y) {
-    s.y -= oy;
-    touching.bottom = true;
-  } else {
-    s.y += oy;
-    touching.top = true; // ✅ ceiling ONLY from walls
-  }
-  // Only cancel vertical velocity if NOT wall-climbing
-if (s.mode !== "wall") {
-  s.dy = 0;
-}
-
     }
-  }
-}
 
+    // Wall collisions
+    for (let w of walls) {
+      if (!isColliding(s, w)) continue;
+      const ox = Math.min(s.x + s.width - w.x, w.x + w.width - s.x);
+      const oy = Math.min(s.y + s.height - w.y, w.y + w.height - s.y);
 
-// === MODE SELECTOR ===
+      if (ox < oy) {
+        if (s.x < w.x) { s.x -= ox; touching.right = true; s.lastWallSide = "right"; }
+        else            { s.x += ox; touching.left  = true; s.lastWallSide = "left";  }
+        s.dx = 0;
+      } else {
+        if (s.y < w.y) { s.y -= oy; touching.bottom = true; }
+        else            { s.y += oy; touching.top    = true; }
+        if (s.mode !== "wall") s.dy = 0;
+      }
+    }
 
-// Bottom → grounded
-if (touching.bottom) {
-  s.mode = "ground";
-}
-
-// --- WALL MODE (ONLY real walls, never boxes) ---
-if (touching.left || touching.right) {
-  s.mode = "wall";
-}
-
-// Top → ceiling
-else if (touching.top && s.dy <= 0) {
-  s.mode = "ceiling";
-}
-
-
-// Otherwise → falling
-else if (!touching.bottom && s.mode !== "wall" && s.mode !== "ceiling") {
-  s.mode = "falling";
-}
-    // Ground → Wall transition: clear jump cooldown
-if (s.mode === "wall" && s.prevMode === "ground") {
-  s.jumpTimer = 6; // tiny grace window
-}
-
-
-  // === WALL → NOT-WALL TRANSITION (WALL JUMP) ===
-   // --- WALL → NOT-WALL TRANSITION (smooth wall jump) ---
-    if (s.prevMode === "wall" && s.mode !== "wall" && !s.wallJumpActive) {
-      s.wallJumpActive = true;
-
-      if (s.lastWallSide === "left") s.wallJumpTargetDx = 60;
-      else if (s.lastWallSide === "right") s.wallJumpTargetDx = -60;
-      else s.wallJumpTargetDx = s.dir * 55;
-
-      s.dy = s.jumpPower * 0.7; // upward kick
+    // ✅ FIXED: ground wins over wall (corner priority)
+    if (touching.bottom) {
+      s.mode = "ground";
+    } else if (touching.left || touching.right) {
+      s.mode = "wall";
+    } else if (touching.top && s.dy <= 0) {
+      s.mode = "ceiling";
+    } else if (s.mode !== "wall" && s.mode !== "ceiling") {
       s.mode = "falling";
-      s.wallJumpBoost = 10; // frames of smoothing
     }
 
-    // Apply smooth horizontal wall-jump
+    // ✅ FIXED: refresh timer while actively on wall (not just on transition)
+    if (s.mode === "wall") {
+      s.jumpTimer = 45;
+    }
+
+    // Wall → not-wall: trigger wall jump
+    if (s.prevMode === "wall" && s.mode !== "wall" && !s.wallJumpActive) {
+      s.wallJumpActive  = true;
+      // ✅ FIXED: sane velocity values (was 60/-60)
+      if      (s.lastWallSide === "left")  s.wallJumpTargetDx =  7;
+      else if (s.lastWallSide === "right") s.wallJumpTargetDx = -7;
+      else                                  s.wallJumpTargetDx = s.dir * 6;
+      s.dy          = s.jumpPower * 0.7;
+      s.mode        = "falling";
+      s.wallJumpBoost = 10;
+    }
+
     if (s.wallJumpActive) {
-      const smoothing = 0.2; // smaller = slower smoothing
+      const smoothing = 0.2;
       s.dx += (s.wallJumpTargetDx - s.dx) * smoothing;
       s.wallJumpBoost--;
       if (s.wallJumpBoost <= 0) s.wallJumpActive = false;
     }
-    
-    // --- EDGE DETECTION ---
+
+    // Edge detection
     let frontX = s.dir > 0 ? s.x + s.width + 2 : s.x - 2;
     let frontY = s.y + s.height + 1;
     let groundAhead = false;
-
-    for (let w of [...walls, ...boxes]) { // boxes count as ground for edge detection
+    for (let w of [...walls, ...boxes]) {
       if (frontX > w.x && frontX < w.x + w.width &&
           frontY >= w.y && frontY <= w.y + w.height) {
-        groundAhead = true;
-        break;
+        groundAhead = true; break;
       }
     }
 
-    // --- MODE BEHAVIOR ---
+    // Mode behaviors
     if (s.mode === "ground") {
       s.dx = s.speed * s.dir;
-
       const distX = Math.abs(player.x - s.x);
       const distY = Math.abs(player.y - s.y);
-
-      // Jump if near player, edge, or blocked
-      if (((distX < 170 && distY < 750 && s.jumpTimer <= 0) ||
-           !groundAhead ||
-           collidesWithWall(s.x + s.dir * (s.width + 2), s.y, 2, s.height) ||
-           touching.left || touching.right)) {
-
+      if ((distX < 170 && distY < 750 && s.jumpTimer <= 0) ||
+          !groundAhead ||
+          collidesWithWall(s.x + s.dir * (s.width + 2), s.y, 2, s.height) ||
+          touching.left || touching.right) {
         s.dy = s.jumpPower;
-        s.jumpTimer = SUPER_JUMP_COOLDOWN + Math.floor(Math.random() * 60);      
+        s.jumpTimer = SUPER_JUMP_COOLDOWN + Math.floor(Math.random() * 60);
       }
     }
 
-    // --- WALL CLIMB FIX ---
-if (s.mode === "wall") {
-  if (s.mode === "wall") s.dx = 0;
+    if (s.mode === "wall") {
+      s.dx = 0;
+      s.dy = player.y > s.y ? s.speed * 1.4 : -s.speed * 1.4;
+    }
 
-
-  if (player.y > s.y) {
-    // Player is BELOW snail → move DOWN
-    s.dy = s.speed * 1.4;
-  } else {
-    // Player is ABOVE snail → move UP
-    s.dy = -s.speed * 1.4;
-  }
-
-  if (s.jumpTimer <= 0) {
-    s.mode = "falling";
-  }
-}
-    
     if (s.mode === "ceiling") {
       let ceilingAbove = false;
       for (let w of walls) {
         if (s.x + s.width > w.x && s.x < w.x + w.width &&
             s.y >= w.y && s.y <= w.y + w.height) {
-          ceilingAbove = true;
-          break;
+          ceilingAbove = true; break;
         }
       }
-
-      if (ceilingAbove) {
-        s.dy = 0;
-        s.dx = s.speed * s.dir; // crawl along ceiling
-      } else {
-       
-        s.mode = "falling";
-      }
-
-      const playerBelow = player.y > s.y + s.height;
-      const playerNearX = Math.abs(player.x - s.x) < 75;
-      if (playerBelow && playerNearX) s.mode = "falling";
+      if (!ceilingAbove) s.mode = "falling";
+      if (player.y > s.y + s.height && Math.abs(player.x - s.x) < 75) s.mode = "falling";
+      if (s.mode === "ceiling") { s.dy = 0; s.dx = s.speed * s.dir; }
     }
 
-  if (s.mode === "falling") {
-
-    if (s.wallJumpBoost > 0) {
-        // use strong push first
-        s.dx = s.dx; // keep current boosted dx
-        s.wallJumpBoost--;
-    } else {
-        // go back to normal falling movement
-        s.dx = s.speed * s.dir;
+    if (s.mode === "falling") {
+      s.dx = s.wallJumpBoost > 0 ? s.dx : s.speed * s.dir;
     }
-}
 
-if ((touching.left || touching.right) && s.mode !== "wall") {
-  s.dir *= -1;
-}
-    // Player collision kills player
-    if (isColliding(player, s)  && !s.tutorialDisplay)
-      loseLife();
+    if ((touching.left || touching.right) && s.mode !== "wall") {
+      s.dir *= -1;
+    }
+
+    if (isColliding(player, s) && !s.tutorialDisplay) loseLife();
+
     s.prevMode = s.mode;
   }
 }
