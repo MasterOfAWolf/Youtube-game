@@ -5417,7 +5417,7 @@ function resetGameState() {
   player.y = 100;
   player.dx = 0;
   player.dy = 0;
-  
+  player.dashMaxCooldown = 50;
   player.jumpPower = 11;
 player.wallJumpPower = 11;
 player.speed = 3;
@@ -8230,7 +8230,7 @@ function resetWorld() {
   let fireballs = [];
   player.speed *= 1;
   player.jumpPower *= 1;
-
+player.dashMaxCooldown = 50;
   xp = 0;
 xpLevel = 1;
 xpToNext = 60;
