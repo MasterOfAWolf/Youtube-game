@@ -270,6 +270,7 @@ document.getElementById("settingSFX").addEventListener("change", function() {
 document.getElementById("settingMusicVolume").addEventListener("input", function() {
   settings.musicVolume = parseFloat(this.value);
   bgMusic.volume = settings.musicVolume;
+  document.getElementById("labelMusicVolume").textContent = Math.round(this.value * 100) + "%";
 });
 /*document.getElementById("settingInvincible").addEventListener("change", function() {
   settings.invincible = this.checked;
@@ -294,6 +295,7 @@ document.getElementById("settingVibration").addEventListener("change", function(
 });
 document.getElementById("settingDeadzone").addEventListener("input", function() {
   settings.joystickDeadzone = parseFloat(this.value);
+  document.getElementById("labelDeadzone").textContent = parseFloat(this.value).toFixed(2);
 });
 document.getElementById("settingFPS").addEventListener("change", function() {
   settings.showFPS = this.checked;
