@@ -116,6 +116,7 @@ let lastTimestamp = 0;
 let generatedTiles = [];
 let enemies = [];
 let walls = [];
+let cheeses = [];
 let boxes = [];
 let items = [];
 let chairs = [];
@@ -125,6 +126,8 @@ let ladders = [];
 let spikes = [];
 let bullets = [];
 let timeElapsed = 0;
+let cheeseCooldown = 0;
+const CHEESE_COOLDOWN = 3600; // 60 seconds
 let gameLoopId = null;
 let snowmen = [];
 let ovens = [];
@@ -1660,7 +1663,15 @@ for (const { list, key } of enemyChecks) {
     }
   }
 }
-    
+// Cheese — cannon
+if (!hit) {
+  hit = damageCheeseCheck(
+    hitBox,
+    dmg,
+    { x: p.vx * 0.4, y: -3 }
+  );
+}
+
     // Yetis
     if (!hit) for (const y of yetis) {
       if (!y.alive) continue;
@@ -3753,7 +3764,248 @@ function updateTutorial() {
     }
   }
 }
-  
+
+// === CHEESE MODULE ===
+// Rare bouncing enemy. Splits on death. Despawns for a free upgrade.
+
+function createCheese(x, y, generation = 0, despawnTimer = 1800, pristine = true) {
+  const scale = Math.pow(0.75, generation);
+  const w = Math.max(8, Math.floor(36 * scale));
+  const h = Math.max(6, Math.floor(28 * scale));
+  const speed = 4 + generation * 0.8;
+
+  return {
+    x, y,
+    width: w,
+    height: h,
+    dx: (Math.random() - 0.5) * speed * 2,
+    dy: -(2 + Math.random() * 3 + generation * 0.5),
+    hp: 1,
+    maxHp: 1,
+    hitFlash: 0,
+    knockbackTimer: 0,
+    knockbackDx: 0,
+    knockbackDy: 0,
+    generation,
+    despawnTimer,
+    pristine,   // ← now actually defined
+    bobTimer: Math.random() * Math.PI * 2,
+    alive: true
+  };
+}
+
+function updateCheeses() {
+  for (let i = cheeses.length - 1; i >= 0; i--) {
+    const c = cheeses[i];
+    if (!c.alive) { cheeses.splice(i, 1); continue; }
+
+    // Despawn timer
+    c.despawnTimer--;
+    if (c.despawnTimer <= 0) {
+      if (c.pristine) {
+        // Was never hit at all — give the upgrade
+        potatoMessage = "🧀 it got away... but left something behind";
+        potatoMessageTimer = 180;
+        cheeseCooldown = CHEESE_COOLDOWN;
+        cheeses.splice(i, 1);
+        triggerLevelUp(); // ← call directly, no setTimeout needed
+        continue;
+      } else {
+        potatoMessage = "🧀 the fragment escaped";
+        potatoMessageTimer = 80;
+        cheeseCooldown = CHEESE_COOLDOWN;
+        cheeses.splice(i, 1);
+        continue;
+      }
+    }
+
+    // Knockback
+    if (c.knockbackTimer > 0) {
+      c.x += c.knockbackDx;
+      c.y += c.knockbackDy;
+      c.knockbackDx *= 0.85;
+      c.knockbackDy *= 0.85;
+      c.knockbackTimer--;
+    }
+
+    if (c.hitFlash > 0) c.hitFlash--;
+
+    // Random direction nudges — makes it feel erratic
+    c.bobTimer += 0.08;
+    if (Math.random() < 0.03) c.dx += (Math.random() - 0.5) * 3;
+    if (Math.random() < 0.015) c.dy -= 2 + Math.random() * 2; // random hop
+
+    // Gravity
+    c.dy += 0.25;
+    if (c.dy > 14) c.dy = 14;
+
+    // Speed cap (loose — cheese is chaotic)
+    c.dx = Math.max(-5, Math.min(5, c.dx));
+
+    c.x += c.dx;
+    c.y += c.dy;
+
+    // Wall bounce
+    for (const w of walls) {
+      if (!isColliding(c, w)) continue;
+      const ox = Math.min(c.x + c.width - w.x, w.x + w.width - c.x);
+      const oy = Math.min(c.y + c.height - w.y, w.y + w.height - c.y);
+
+      if (ox < oy) {
+        c.x += c.x < w.x ? -ox : ox;
+        c.dx *= -0.85; // bounce off walls
+        c.dx += (Math.random() - 0.5) * 2; // chaotic bounce angle
+      } else {
+        if (c.y < w.y) {
+          c.y -= oy;
+          c.dy *= -0.7; // bounce off floor
+          c.dx += (Math.random() - 0.5) * 3;
+        } else {
+          c.y += oy;
+          c.dy = Math.abs(c.dy) * 0.5;
+        }
+      }
+    }
+
+    // World bounds bounce
+    if (c.x < 0) { c.x = 0; c.dx = Math.abs(c.dx); }
+    if (c.x + c.width > world.width) { c.x = world.width - c.width; c.dx = -Math.abs(c.dx); }
+    if (c.y > world.height + 100) { c.alive = false; continue; }
+
+    // Player contact
+    if (isColliding(c, player)) loseLife();
+  }
+}
+
+function drawCheeses() {
+  for (const c of cheeses) {
+    ctx.save();
+
+    // Warning flash in last 5 seconds
+    const flashing = c.despawnTimer < 300 && Math.floor(c.despawnTimer / 15) % 2 === 0;
+    if (flashing) ctx.globalAlpha = 0.4;
+
+    if (c.hitFlash > 0) ctx.filter = "brightness(8)";
+
+    const cx = c.x + c.width / 2;
+    const cy = c.y + c.height / 2;
+
+    // Body
+    ctx.fillStyle = c.generation > 0 ? "#e8c94a" : "#f5d842";    ctx.beginPath();
+    ctx.ellipse(cx, cy, c.width / 2, c.height / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Holes
+    ctx.fillStyle = "#c9a800";
+    const holeCount = c.generation > 0 ? Math.max(1, 4 - c.generation) : 4;
+    for (let h = 0; h < holeCount; h++) {
+      const hx = c.x + 6 + (h % 2) * (c.width * 0.45);
+      const hy = c.y + 6 + Math.floor(h / 2) * (c.height * 0.45);
+      ctx.beginPath();
+      const holeSize = Math.max(1, 4 - c.generation);
+      ctx.ellipse(hx, hy, holeSize, holeSize - 1, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Outline
+    ctx.strokeStyle = "#a07800";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, c.width / 2, c.height / 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Despawn timer bar (shows only when under 10 seconds)
+    if (c.despawnTimer < 600) {
+      const pct = c.despawnTimer / 600;
+      const barW = c.width;
+      ctx.fillStyle = "#300";
+      ctx.fillRect(c.x, c.y - 7, barW, 4);
+      ctx.fillStyle = pct > 0.5 ? "#ff0" : "#f80";
+      ctx.fillRect(c.x, c.y - 7, barW * pct, 4);
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(c.x, c.y - 7, barW, 4);
+    }
+
+    // Health bar
+    if (settings.enemyHealthBars && c.hp > 0) {
+      const barW = c.width;
+      ctx.fillStyle = "#300";
+      ctx.fillRect(c.x, c.y - 14, barW, 4);
+      const hpPct = c.hp / c.maxHp;
+      ctx.fillStyle = hpPct > 0.5 ? "#0f0" : "#f00";
+      ctx.fillRect(c.x, c.y - 14, barW * hpPct, 4);
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(c.x, c.y - 14, barW, 4);
+    }
+  }
+}
+
+function damageCheeseCheck(hitBox, dmg, kb) {
+  for (let i = cheeses.length - 1; i >= 0; i--) {
+    const c = cheeses[i];
+    if (!isColliding(hitBox, c)) continue;
+
+    c.hp -= dmg;
+    c.hitFlash = 5;
+    c.knockbackTimer = 8;
+    c.knockbackDx = kb.x;
+    c.knockbackDy = kb.y;
+
+    if (c.hp <= 0) {
+      const MIN_GENERATION = 6; // stops splitting at this point — too tiny to see
+    
+      if (c.generation < MIN_GENERATION) {
+        // Always split — infinite splitting
+        cheeses.push(createCheese(c.x - 8, c.y - 4, c.generation + 1, c.despawnTimer, false));
+        cheeses.push(createCheese(c.x + 8, c.y - 4, c.generation + 1, c.despawnTimer, false));
+    
+        if (c.generation === 0) {
+          potatoMessage = "🧀 it split!";
+        } else if (c.generation === 1) {
+          potatoMessage = "🧀 it split again??";
+        } else if (c.generation === 2) {
+          potatoMessage = "🧀 stop splitting";
+        } else {
+          potatoMessage = `🧀 generation ${c.generation + 1}... please`;
+        }
+        potatoMessageTimer = 90;
+      } else {
+        // Finally dead — too small to split further
+        potatoMessage = "🧀 +0 XP   (seriously)";
+        potatoMessageTimer = 90;
+      }
+    
+      cheeses.splice(i, 1);
+      return true;
+    }
+    return false;
+  }
+  return false;
+}
+
+// Try to spawn a cheese this wave tick
+// Call this from updateWaveSystem
+function trySpawnCheese() {
+  if (!waveSystem.enabled || !waveSystem.waveActive) return;
+
+  // Base chance 0.03% per frame, scales with wave number
+  const wave = waveSystem.currentWave;
+  const chance = 0.0003 + wave * 0.00015; // caps around 1.8% at wave 10
+
+  if (Math.random() > chance) return;
+  // Max 1 cheese at a time (including splits)
+  if (cheeses.length > 0) return;
+
+  const pos = getSpawnPosition('snail'); // reuse any spawn zone
+  cheeses.push(createCheese(pos.x, pos.y, false));
+  potatoMessage = "🧀 a cheese has appeared";
+  potatoMessageTimer = 120;
+}
+
 function updateBats() {
   for (let i = bats.length - 1; i >= 0; i--) {
     let bat = bats[i];
@@ -4907,6 +5159,7 @@ function randomBetween(min, max) {
 
 // Initialize wave mode for a level
 function startWaveMode(levelNumber) {
+  cheeses = [];
   waveSystem.enabled = true;
   waveSystem.currentWave = 0;
   waveSystem.enemiesRemaining = 0;
@@ -5183,6 +5436,8 @@ function updateWaveSystem() {
   if (tutorialActive) return;
   if (!waveSystem.enabled) return;
   
+  trySpawnCheese();
+
   // Process spawn queue
   if (waveSystem.spawnQueue.length > 0) {
     waveSystem.spawnTimer++;
@@ -5478,7 +5733,7 @@ playerUpgrades.dashInvulEnabled = false;
   timeElapsed = 0;
  hasPotato = false;
   potato.collected = true;
-
+  cheeses = [];
   cannonProjectiles = [];
   explosions = [];
   cannonCooldown = 0;
@@ -8153,7 +8408,12 @@ function updatePlayerSwordAttack() {
       player.attackHitObjects.add(s);
     }
   }
-  
+  // Hit cheeses — sword
+  damageCheeseCheck(
+    attackBox,
+    1,
+    { x: player.attackKnockback * 2 * player.facing, y: -player.attackKnockback * 1.5 }
+  );
   // Hit turrets
   for (let i = turrets.length - 1; i >= 0; i--) {
     let t = turrets[i];
@@ -8233,6 +8493,7 @@ function resetWorld() {
   seesaws = [];
   boxes = [];
   snails = [];
+  cheeses = [];
   bats = [];
   chairs = [];
   tables = [];
@@ -8336,6 +8597,19 @@ function updateOrbiters() {
     for (const { e, list, key } of allEnemies) {
       if (orb.hitCooldowns.has(e)) continue;
       if (!isColliding(hitBox, e)) continue;
+
+      // Orbiter hits cheese
+for (let i = cheeses.length - 1; i >= 0; i--) {
+  const c = cheeses[i];
+  if (orb.hitCooldowns.has(c)) continue;
+  if (!isColliding(hitBox, c)) continue;
+  damageCheeseCheck(
+    { x: ox - orb.size, y: oy - orb.size, width: orb.size*2, height: orb.size*2 },
+    orb.damage,
+    { x: (c.x - cx) * 0.1, y: -3 }
+  );
+  orb.hitCooldowns.set(c, 40);
+}
 
       damageEnemy(e, orb.damage, { x: (e.x - cx) * 0.1, y: -3 });
       orb.hitCooldowns.set(e, 40);
@@ -8621,7 +8895,7 @@ function updateWallSliding() {
 function drawMouseCoords() {
   ctx.save();
   ctx.fillStyle = "#0ff";
-  ctx.font = `${hudFontSize}px monospace`;
+  ctx.font = "10 px monospace";
 
   ctx.fillText(
     `Mouse: ${Math.round(mouse.worldX * 3.5)}, ${Math.round(mouse.worldY * 3.5)}`,
@@ -8664,7 +8938,7 @@ function drawDevRulers(scale) {
   const STEP = 100;
 
   ctx.save();
-  ctx.font = `${hudFontSize - 6}px monospace`;
+  ctx.font = "6px monospace";
   ctx.fillStyle = "#0ff";
   ctx.strokeStyle = "#0ff";
   ctx.lineWidth = 1;
@@ -9126,6 +9400,7 @@ if (player.attackCharging) {
     ctx.fillRect(player.x, player.y - 10, barWidth, 5);
 }
   drawBats();
+  drawCheeses();
   drawSpecialBoxes();
   drawExplosions();
   drawPlayerSword();
@@ -9315,6 +9590,7 @@ function gameLoop(currentTime) {
     updateOvens(player);
     updateSnails();
     updateChairs();
+    updateCheeses();
     updateTables();
     updateSuperSnails();
     if (tutorialActive) updateTutorial();
