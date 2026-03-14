@@ -3992,9 +3992,9 @@ function damageCheeseCheck(hitBox, dmg, kb) {
 function trySpawnCheese() {
   if (!waveSystem.enabled || !waveSystem.waveActive) return;
 
-  // Base chance 0.03% per frame, scales with wave number
+  // Base chance 0.0001% per frame, scales with wave number
   const wave = waveSystem.currentWave;
-  const chance = 0.0003 + wave * 0.00015; // caps around 1.8% at wave 10
+  const chance = 0.000001 + wave * 0.0000015; // caps around 1.8% at wave 10
 
   if (Math.random() > chance) return;
   // Max 1 cheese at a time (including splits)
