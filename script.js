@@ -4683,6 +4683,7 @@ const playerUpgrades = {
 };
 
 // Level-up UI state
+let levelUpInputDelay = 0; // frames before input is accepted
 let levelUpPending = false;
 let levelUpCards = [];       // 3 cards offered this level-up
 let levelUpSelectedIndex = 0;
@@ -5525,6 +5526,7 @@ function grantXP(amount) {
 function triggerLevelUp() {
   levelUpPending = true;
   gamePaused = true; // freeze game while choosing
+  levelUpInputDelay = 45; // 0.75 seconds before you can pick
 
   // Pick 3 unique upgrades at random
   // Infinitely-stackable ones (orbiters, speed, etc.) are always available;
@@ -5558,6 +5560,7 @@ const available = UPGRADE_POOL.filter(u => {
 }
 
 function chooseLevelUpCard(index) {
+  if (levelUpInputDelay > 0) return;
   const card = levelUpCards[index];
   if (!card) return;
 
@@ -9605,6 +9608,8 @@ updateDashDamage();
     drawOven();
   }
     draw();
+    // In gameLoop, outside the if (!gamePaused) block:
+if (levelUpInputDelay > 0) levelUpInputDelay--;
   }
   requestAnimationFrame(gameLoop);
 }
