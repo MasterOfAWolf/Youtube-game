@@ -3,7 +3,7 @@
 
   <head>
     <meta charset="UTF-8">
-    <title>Youtube Game V12.2</title>
+    <title>Youtube Game V16</title>
     <meta name="viewport"
   content="width=device-width, height=device-height,
   initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -60,6 +60,8 @@
   <h2>Select Level</h2>
   <button onclick="openFreeSelect()">Tutorial 📖 — Training Dojo</button></button>
   <button onclick="openWaveSelect()">🌊 Wave Mode</button>
+  <!--<button onclick="startDebugMode()">🧪 Debug Test Map</button>
+  <button onclick="startBuildTest()">🔧 Build Test</button>-->
   <button class="back-btn" onclick="backToMenu()">Back</button>
 </div>
 
@@ -140,7 +142,7 @@
 
         <div class="settings-section">
           <h3 class="settings-section-title">🖥️ UI</h3>
-          <label class="setting-row"><span>Minimap</span><input type="checkbox" id="settingMinimap"></label>
+          <label class="setting-row"><span>Minimap</span><input type="checkbox" id="settingMinimap" checked></label>
           <label class="setting-row"><span>Tutorial Tooltips</span><input type="checkbox" id="settingTooltips" checked></label>
           <label class="setting-row"><span>Large HUD Text</span><input type="checkbox" id="settingLargeHUD"></label>
         </div>
@@ -159,17 +161,15 @@
 </div>
 <!-- Comment -->
 <div id="controls" class="hidden">
-  <h2>Controls</h2>
-  <p><b>Move Left:</b> A / ←</p>
-  <p><b>Move Right:</b> D / →</p>
-  <p><b>Jump:</b> W / Space</p>
-  <p><b>Attack:</b> F</p>
-  <p><b>Dash:</b> Shift</p>
-  <p><b>Pause:</b> ESC</p>
-  <p><b>Dev View:</b> M</p>
-  <p><b>Dev Grid (In Dev View):</b> G</p>
-  <br>
+  <h2>Controls:</h2>
+  <img src="Assets/UI/keyboardcontrols.png" width="500" height="300">
+  <button onclick="openControllerControls()">Controller Controls</button>
   <button class="back-btn" onclick="backToMenu()">Back</button>
+
+</div>
+<div id="controllerControls" class="hidden">
+<img src="Assets/UI/controllercontrols.png" width="600" height="300">
+<button class="back-btn" onclick="backToControls()">Back</button>
 </div>
 
 <div id="credits" class="hidden">

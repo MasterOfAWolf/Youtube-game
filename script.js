@@ -30,6 +30,9 @@ cannonImg.src = "Assets/Sprites/potatocannon.png";
 const playerImg = new Image();
 playerImg.src = "Assets/Sprites/Player.png";
 
+const controlImg = new Image();
+controlImg.src = "Assets/UI/xboxcontrols.png";
+
 const snailFrames = [];
 
 const snail1 = new Image();
@@ -77,7 +80,7 @@ const settings = {
   // UI
   showFPS: false,
   showCoords: false,
-  showMinimap: false,
+  showMinimap: true,
   tutorialTooltips: true,
 
   // Accessibility
@@ -100,6 +103,17 @@ const tutorialState = {
   museumLabels: [],
   checkpointArrows: [],
   zoneDividers: [],
+};
+
+// === DEBUG TEST SYSTEM ===
+let debugTests = [];
+let debugTestMode = false;
+
+const TEST_STATUS = {
+  PENDING:  "pending",
+  RUNNING:  "running",
+  PASS:     "pass",
+  FAIL:     "fail"
 };
 
 const TUTORIAL_TRIGGERS = [];
@@ -146,11 +160,39 @@ let potatoMessageTimer = 0;
 let potatoHUDLine = "";
 let ambientLight = .67;
 
+let vehicles = [];
+let playerVehicle = null;    // vehicle the player is currently in
+let playerInVehicle = false;
+
 let cannonProjectiles = [];
 let explosions = [];
 let cannonAimAngle = 0;       // radians, updated every frame from mouse or joystick
 let cannonCooldown = 0;       // prevents spray-firing
 const CANNON_COOLDOWN_FRAMES = 18;
+
+let droppedParts = [];    // world pickups
+let placedStructures = []; // built objects in the world
+let partInventory = {
+  bouncy: 0, spike: 0, wall: 0,
+  body: 0, wheel: 0, engine: 0, seat: 0
+};
+
+let buildMode = false;
+let buildSelectedPart = "bouncy";
+let buildCursor = { wx: 0, wy: 0 }; // world-space grid cursor
+let buildDeleteMode = false;
+
+const BUILD_CELL = 40; // grid cell size in world pixels
+
+const PART_TYPES = {
+  bouncy:   { label: "🌀 Bouncy",    color: "#4caf50", key: "2" },
+  spike:    { label: "🩸 Spike Trap",color: "#d33",    key: "3" },
+  wall:     { label: "🧱 Wall",      color: "#888",    key: "4" },
+  body:     { label: "🟫 Body",      color: "#7a5c3a", key: "5" },
+  wheel:    { label: "⚙️ Wheel",     color: "#333",    key: "6" },
+  engine:   { label: "🔧 Engine",    color: "#c07020", key: "7" },
+  seat:     { label: "💺 Seat",      color: "#4466aa", key: "8" },
+};
 
 // === GAMEPAD MODULE ===
 const virtualCursor = {
@@ -231,6 +273,601 @@ const MAP_WIDTH = 2800;
 const MAP_HEIGHT = 2100;
 const WALL_THICKNESS = 30;
 
+//Debugging amd testing Module
+
+function initDebugTests() {
+  debugTests = [
+    // --- PLAYER ---
+    {
+      id: "player_spawn",
+      name: "Player spawns at start position",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      check() {
+        return player.x > 0 && player.y > 0 && playerLives === maxLives;
+      }
+    },
+    {
+      id: "player_gravity",
+      name: "Gravity pulls player down",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _startY: null,
+      setup() { this._startY = player.y; player.dy = 0; player.onGround = false; },
+      check() { return player.y > this._startY + 10; }
+    },
+    {
+      id: "player_wall_collision",
+      name: "Player collides with walls",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      check() { return player.onGround === true; }
+    },
+    {
+      id: "player_jump",
+      name: "Player can jump",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _startY: null,
+      setup() {
+        this._startY = player.y;
+        player.onGround = true;
+        player.dy = -player.jumpPower;
+      },
+      check() { return player.y < this._startY - 20; }
+    },
+    {
+      id: "player_dash",
+      name: "Dash moves player horizontally",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _startX: null,
+      setup() { this._startX = player.x; tryDash(); },
+      check() { return Math.abs(player.x - this._startX) > 20; }
+    },
+
+    // --- PHYSICS ---
+    {
+      id: "box_gravity",
+      name: "Boxes fall with gravity",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _box: null,
+      setup() {
+        this._box = createBox(500, 200, BOX_TYPE.NORMAL);
+        this._box._testStartY = this._box.y;
+        boxes.push(this._box);
+      },
+      check() { return this._box && this._box.y > this._box._testStartY + 10; },
+      cleanup() {
+        const i = boxes.indexOf(this._box);
+        if (i > -1) boxes.splice(i, 1);
+      }
+    },
+    {
+      id: "bouncy_box",
+      name: "Bouncy boxes rebound",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _box: null,
+      setup() {
+        this._box = createBox(600, 400, BOX_TYPE.BOUNCY);
+        this._box.dy = 8;
+        boxes.push(this._box);
+      },
+      check() {
+        return this._box && this._box.dy < 0 && this._box.y < 420;
+      },
+      cleanup() {
+        const i = boxes.indexOf(this._box);
+        if (i > -1) boxes.splice(i, 1);
+      }
+    },
+    {
+      id: "seesaw_responds",
+      name: "Seesaw tilts under weight",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _seesaw: null,
+      setup() {
+        this._seesaw = { x: 700, y: 400, width: 160, height: 12, angle: 0, angularVelocity: 0 };
+        seesaws.push(this._seesaw);
+      },
+      check() { return this._seesaw && Math.abs(this._seesaw.angle) > 0.01; },
+      cleanup() {
+        const i = seesaws.indexOf(this._seesaw);
+        if (i > -1) seesaws.splice(i, 1);
+      }
+    },
+
+    // --- ENEMIES ---
+    {
+      id: "snail_spawns",
+      name: "Snail spawns and has HP",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _snail: null,
+      setup() {
+        this._snail = {
+          x: 900, y: 300, width: 28, height: 20,
+          dx: 0, dy: 0, dir: 1, speed: 0.5, gravity: 0.6,
+          chaseRange: 400, hp: 2, maxHp: 2, hitFlash: 0,
+          frame: 0, frameTimer: 0,
+          knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0
+        };
+        snails.push(this._snail);
+      },
+      check() { return this._snail && this._snail.hp === 2; },
+      cleanup() {
+        const i = snails.indexOf(this._snail);
+        if (i > -1) snails.splice(i, 1);
+      }
+    },
+    {
+      id: "enemy_takes_damage",
+      name: "damageEnemy reduces HP",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _snail: null,
+      setup() {
+        this._snail = {
+          x: 1000, y: 300, width: 28, height: 20,
+          dx: 0, dy: 0, dir: 1, speed: 0, gravity: 0.6,
+          chaseRange: 0, hp: 3, maxHp: 3, hitFlash: 0,
+          frame: 0, frameTimer: 0,
+          knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0
+        };
+        snails.push(this._snail);
+        damageEnemy(this._snail, 1, { x: 0, y: 0 });
+      },
+      check() { return this._snail && this._snail.hp === 2; },
+      cleanup() {
+        const i = snails.indexOf(this._snail);
+        if (i > -1) snails.splice(i, 1);
+      }
+    },
+    {
+      id: "bat_patrols",
+      name: "Bat moves from spawn point",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _bat: null,
+      setup() {
+        this._bat = createBat(1100, 300, 2);
+        this._bat._startX = this._bat.x;
+        bats.push(this._bat);
+      },
+      check() { return this._bat && Math.abs(this._bat.x - this._bat._startX) > 2; },
+      cleanup() {
+        const i = bats.indexOf(this._bat);
+        if (i > -1) bats.splice(i, 1);
+      }
+    },
+    {
+      id: "turret_fires",
+      name: "Turret fires fireball at player",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _turret: null,
+      _prevFireballs: 0,
+      setup() {
+        this._prevFireballs = fireballs.length;
+        this._turret = {
+          x: player.x + 100, y: player.y,
+          width: 40, height: 40,
+          cooldown: 0, fireRate: 1,
+          hp: 5, maxHp: 5, hitFlash: 0, armed: true
+        };
+        turrets.push(this._turret);
+      },
+      check() { return fireballs.length > this._prevFireballs; },
+      cleanup() {
+        const i = turrets.indexOf(this._turret);
+        if (i > -1) turrets.splice(i, 1);
+      }
+    },
+
+    // --- WEAPONS ---
+    {
+      id: "sword_swing",
+      name: "Sword attack timer runs",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      setup() {
+        player.attackCharging = false;
+        player.attackTimer = player.attackDuration;
+        player.attackHitObjects.clear();
+      },
+      check() { return player.attackTimer > 0 && player.attackTimer < player.attackDuration; }
+    },
+    {
+      id: "cannon_fires",
+      name: "Potato cannon creates projectile",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _prevCount: 0,
+      setup() {
+        hasPotato = true;
+        potatoState = "raw";
+        this._prevCount = cannonProjectiles.length;
+        cannonAimAngle = 0;
+        cannonCooldown = 0;
+        firePotatoCannon();
+      },
+      check() { return cannonProjectiles.length > this._prevCount; },
+      cleanup() { hasPotato = false; potatoState = "none"; }
+    },
+    {
+      id: "explosion_creates",
+      name: "createExplosion adds to array",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _prevCount: 0,
+      setup() {
+        this._prevCount = explosions.length;
+        createExplosion(500, 500);
+      },
+      check() { return explosions.length > this._prevCount; }
+    },
+
+    // --- WAVE SYSTEM ---
+    {
+      id: "wave_xp",
+      name: "grantXP increases xp",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _prevXP: 0,
+      setup() { this._prevXP = xp; waveSystem.enabled = true; grantXP(10); },
+      check() { return xp > this._prevXP; },
+      cleanup() { waveSystem.enabled = false; }
+    },
+    {
+      id: "enemy_killed_counts",
+      name: "onEnemyKilled increments kills",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _prevKills: 0,
+      setup() {
+        waveSystem.enabled = true;
+        waveSystem.totalEnemiesKilled = 0;
+        this._prevKills = waveSystem.totalEnemiesKilled;
+        onEnemyKilled('snail');
+      },
+      check() { return waveSystem.totalEnemiesKilled > this._prevKills; },
+      cleanup() { waveSystem.enabled = false; }
+    },
+    {
+      id: "level_up_triggers",
+      name: "triggerLevelUp sets levelUpPending",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      setup() { triggerLevelUp(); },
+      check() { return levelUpPending === true; },
+      cleanup() {
+        levelUpPending = false;
+        levelUpCards = [];
+        gamePaused = false;
+      }
+    },
+
+    // --- BUILD SYSTEM ---
+    {
+      id: "part_drops",
+      name: "tryDropPart adds to droppedParts",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _prevCount: 0,
+      setup() {
+        this._prevCount = droppedParts.length;
+        // Force a drop by calling multiple times
+        for (let i = 0; i < 20; i++) tryDropPart(400, 300);
+      },
+      check() { return droppedParts.length > this._prevCount; },
+      cleanup() { droppedParts = []; }
+    },
+    {
+      id: "place_wall",
+      name: "placeBuildPart adds wall to world",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _prevWalls: 0,
+      setup() {
+        partInventory.wall = 5;
+        buildSelectedPart = "wall";
+        this._prevWalls = walls.length;
+        placeBuildPart(800, 400);
+      },
+      check() { return walls.length > this._prevWalls; },
+      cleanup() {
+        deleteBuildPart(800, 400);
+      }
+    },
+    {
+      id: "delete_restores_inventory",
+      name: "deleteBuildPart refunds inventory",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      setup() {
+        partInventory.wall = 1;
+        buildSelectedPart = "wall";
+        placeBuildPart(840, 400);
+        this._countAfterPlace = partInventory.wall;
+        deleteBuildPart(840, 400);
+      },
+      check() { return partInventory.wall > this._countAfterPlace; }
+    },
+
+    // --- CHEESE ---
+    {
+      id: "cheese_creates",
+      name: "createCheese returns valid object",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _cheese: null,
+      setup() { this._cheese = createCheese(500, 300, 0); },
+      check() {
+        return this._cheese &&
+               this._cheese.width > 0 &&
+               this._cheese.despawnTimer === 1800 &&
+               this._cheese.pristine === true;
+      }
+    },
+    {
+      id: "cheese_despawns",
+      name: "Cheese despawn timer counts down",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _cheese: null,
+      setup() {
+        this._cheese = createCheese(550, 300, 0);
+        this._cheese._startTimer = this._cheese.despawnTimer;
+        cheeses.push(this._cheese);
+      },
+      check() {
+        return this._cheese &&
+               this._cheese.despawnTimer < this._cheese._startTimer;
+      },
+      cleanup() {
+        const i = cheeses.indexOf(this._cheese);
+        if (i > -1) cheeses.splice(i, 1);
+      }
+    },
+
+    // --- CAMERA ---
+    {
+      id: "camera_follows_player",
+      name: "Camera follows player position",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      _startCamX: 0,
+      setup() {
+        this._startCamX = camera.x;
+        player.x += 200;
+        updateCamera();
+      },
+      check() { return camera.x !== this._startCamX; },
+      cleanup() { player.x -= 200; }
+    },
+
+    // --- COLLISION ---
+    {
+      id: "isColliding_works",
+      name: "isColliding detects overlap",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      check() {
+        const a = { x: 0, y: 0, width: 10, height: 10 };
+        const b = { x: 5, y: 5, width: 10, height: 10 };
+        const c = { x: 20, y: 20, width: 10, height: 10 };
+        return isColliding(a, b) === true && isColliding(a, c) === false;
+      }
+    },
+    {
+      id: "rectsOverlap_works",
+      name: "rectsOverlap detects overlap",
+      status: TEST_STATUS.PENDING,
+      timer: 0,
+      check() {
+        const a = { x: 0,  y: 0,  width: 10, height: 10 };
+        const b = { x: 5,  y: 5,  width: 10, height: 10 };
+        const c = { x: 50, y: 50, width: 10, height: 10 };
+        return rectsOverlap(a, b) === true && rectsOverlap(a, c) === false;
+      }
+    },
+  ];
+}
+
+// How long each test has to pass before it fails (frames)
+const TEST_TIMEOUT = 120;
+
+function runDebugTests() {
+  if (!debugTestMode) return;
+
+  for (const test of debugTests) {
+    if (test.status === TEST_STATUS.PASS || test.status === TEST_STATUS.FAIL) continue;
+
+    if (test.status === TEST_STATUS.PENDING) {
+      // Run setup if defined
+      if (test.setup) {
+        try { test.setup(); }
+        catch (e) { test.status = TEST_STATUS.FAIL; test.error = e.message; continue; }
+      }
+      test.status = TEST_STATUS.RUNNING;
+      test.timer = 0;
+    }
+
+    if (test.status === TEST_STATUS.RUNNING) {
+      test.timer++;
+      let passed = false;
+      try { passed = test.check(); }
+      catch (e) { test.status = TEST_STATUS.FAIL; test.error = e.message; continue; }
+
+      if (passed) {
+        test.status = TEST_STATUS.PASS;
+        if (test.cleanup) {
+          try { test.cleanup(); } catch (e) {}
+        }
+      } else if (test.timer >= TEST_TIMEOUT) {
+        test.status = TEST_STATUS.FAIL;
+        test.error = "Timed out";
+        if (test.cleanup) {
+          try { test.cleanup(); } catch (e) {}
+        }
+      }
+    }
+  }
+}
+
+function startDebugMode() {
+  hideAllMenus();
+  document.getElementById("game").style.display = "block";
+  stopGameLoop();
+  resetGameState();
+  debugTestMode = true;
+  currentLevel = 99; // won't match any real level
+  loadMap_Debug();
+  saveInitialState();
+  startMusic();
+  gameRunning = true;
+  gamePaused = false;
+  lastFrameTime = performance.now();
+  lastTimestamp  = performance.now();
+  initDebugTests();
+  gameLoopId = requestAnimationFrame(gameLoop);
+}
+
+function startBuildTest() {
+  hideAllMenus();
+  document.getElementById("game").style.display = "block";
+  stopGameLoop();
+  resetGameState();
+  currentLevel = 99;
+  loadMap_Debug();
+  saveInitialState();
+  startMusic();
+  gameRunning = true;
+  gamePaused = false;
+  lastFrameTime = performance.now();
+  lastTimestamp = performance.now();
+
+  // Max out vehicle inventory
+  partInventory.body   = 20;
+  partInventory.wheel  = 20;
+  partInventory.engine = 10;
+  partInventory.seat   = 10;
+  partInventory.wall   = 10;
+  partInventory.bouncy = 10;
+  partInventory.spike  = 10;
+
+  // Drop straight into build mode
+  openBuildMode();
+
+  gameLoopId = requestAnimationFrame(gameLoop);
+}
+
+function drawDebugTests() {
+  if (!debugTestMode) return;
+
+  const panelW = 340;
+  const panelX = canvas.width - panelW - 8;
+  const lineH  = 18;
+  const panelH = debugTests.length * lineH + 50;
+  const panelY = 8;
+
+  // Panel background
+  ctx.fillStyle = "rgba(0,0,0,0.85)";
+  ctx.strokeStyle = "#555";
+  ctx.lineWidth = 1;
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+  // Title
+  ctx.fillStyle = "#ffd54f";
+  ctx.font = "bold 12px monospace";
+  ctx.textAlign = "left";
+  ctx.fillText("🧪 GAME TEST", panelX + 10, panelY + 16);
+
+  // Pass/fail summary
+  const passed = debugTests.filter(t => t.status === TEST_STATUS.PASS).length;
+  const failed = debugTests.filter(t => t.status === TEST_STATUS.FAIL).length;
+  const total  = debugTests.length;
+  ctx.fillStyle = failed > 0 ? "#f44" : passed === total ? "#0f0" : "#aaa";
+  ctx.font = "10px monospace";
+  ctx.textAlign = "right";
+  ctx.fillText(`${passed}/${total} passed`, panelX + panelW - 8, panelY + 16);
+  ctx.textAlign = "left";
+
+  // Individual test rows
+  for (let i = 0; i < debugTests.length; i++) {
+    const test = debugTests[i];
+    const ty   = panelY + 28 + i * lineH;
+
+    // Status light
+    let lightColor;
+    switch (test.status) {
+      case TEST_STATUS.PASS:    lightColor = "#00ff44"; break;
+      case TEST_STATUS.FAIL:    lightColor = "#ff3333"; break;
+      case TEST_STATUS.RUNNING: lightColor = "#ffaa00"; break;
+      default:                  lightColor = "#555555";
+    }
+
+    // Pulsing effect for running tests
+    if (test.status === TEST_STATUS.RUNNING) {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.01);
+      ctx.globalAlpha = 0.4 + pulse * 0.6;
+    }
+
+    ctx.fillStyle = lightColor;
+    ctx.beginPath();
+    ctx.arc(panelX + 14, ty + 6, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Glow for pass/fail
+    if (test.status === TEST_STATUS.PASS || test.status === TEST_STATUS.FAIL) {
+      ctx.shadowColor = lightColor;
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(panelX + 14, ty + 6, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.globalAlpha = 1;
+
+    // Test name
+    ctx.fillStyle = test.status === TEST_STATUS.FAIL ? "#ff8888" :
+                    test.status === TEST_STATUS.PASS ? "#aaffaa" : "#ccc";
+    ctx.font = "9px monospace";
+    ctx.fillText(test.name, panelX + 24, ty + 9);
+
+    // Error message for failures
+    if (test.status === TEST_STATUS.FAIL && test.error) {
+      ctx.fillStyle = "#ff4444";
+      ctx.font = "8px monospace";
+      ctx.fillText(`  ↳ ${test.error}`, panelX + 24, ty + 17);
+    }
+
+    // Timer bar for running tests
+    if (test.status === TEST_STATUS.RUNNING) {
+      const pct = test.timer / TEST_TIMEOUT;
+      ctx.fillStyle = "#333";
+      ctx.fillRect(panelX + 24, ty + 11, panelW - 32, 3);
+      ctx.fillStyle = "#ffaa00";
+      ctx.fillRect(panelX + 24, ty + 11, (panelW - 32) * (1 - pct), 3);
+    }
+  }
+
+  // Reset button
+  const resetBtnY = panelY + panelH - 22;
+  ctx.fillStyle = "#333";
+  ctx.strokeStyle = "#777";
+  ctx.lineWidth = 1;
+  ctx.fillRect(panelX + 8, resetBtnY, 80, 16);
+  ctx.strokeRect(panelX + 8, resetBtnY, 80, 16);
+  ctx.fillStyle = "#fff";
+  ctx.font = "9px monospace";
+  ctx.fillText("↺ Re-run", panelX + 14, resetBtnY + 11);
+}
 // === MUSIC MODULE ===
 const bgMusic = new Audio("Assets/Music/Dungeon%20Synth.mp3");
 bgMusic.loop = true;
@@ -560,9 +1197,48 @@ canvas.addEventListener("mousemove", (e) => {
   }
 });
 
-// --- Mouse click to fire ---
 canvas.addEventListener("mousedown", (e) => {
-  if (levelUpPending) {
+  if (buildMode) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    // ✅ Skip button — check FIRST since it overlaps the HUD y-range
+    const skipBtnW = 140;
+    const skipBtnX = canvas.width - skipBtnW - 12;
+    const skipBtnY = canvas.height - 116;
+    if (mx >= skipBtnX && mx <= skipBtnX + skipBtnW &&
+      my >= skipBtnY && my <= skipBtnY + 50) {
+      closeBuildMode();
+      waveSystem.waveTimer = 180 // Give 3 seconds after closing build mode to breath
+      return;
+    }
+
+    // HUD part buttons
+    const partKeys = Object.keys(PART_TYPES);
+    const btnW = 90;
+    const totalW = btnW * partKeys.length + 8 * (partKeys.length - 1);
+    const startBtnX = (canvas.width - totalW) / 2;
+    const by = canvas.height - 58;
+
+    if (my >= by && my <= canvas.height) {
+      for (let i = 0; i < partKeys.length; i++) {
+        const bx = startBtnX + i * (btnW + 8);
+        if (mx >= bx && mx <= bx + btnW) {
+          buildSelectedPart = partKeys[i];
+          return;
+        }
+      }
+    }
+
+    // World placement
+    const wx = Math.floor((mx + camera.x) / BUILD_CELL) * BUILD_CELL;
+    const wy = Math.floor((my + camera.y) / BUILD_CELL) * BUILD_CELL;
+    if (e.button === 0) placeBuildPart(wx, wy);
+    if (e.button === 2) deleteBuildPart(wx, wy);
+    return;
+  }
+    if (levelUpPending) {
   const cardW = 170;
   const cardH = 200;
   const gap = 24;
@@ -581,6 +1257,21 @@ canvas.addEventListener("mousedown", (e) => {
     }
   }
   return; // don't fire cannon while card is up
+}
+// Inside mousedown, before cannon fire:
+if (debugTestMode) {
+  const panelW  = 340;
+  const panelX  = canvas.width - panelW - 8;
+  const panelH  = debugTests.length * 18 + 50;
+  const resetBtnY = 8 + panelH - 22;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  if (mx >= panelX + 8 && mx <= panelX + 88 &&
+      my >= resetBtnY  && my <= resetBtnY + 16) {
+    initDebugTests();
+    return;
+  }
 }
   if (!hasPotato || !gameRunning || gamePaused || gameOver) return;
   if (e.button === 0) firePotatoCannon();
@@ -1156,7 +1847,7 @@ function lineSegmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
 
 function drawMinimap() {
   const MW = 160, MH = 90;
-  const MX = canvas.width - MW - 10, MY = 10;
+  const MX = canvas.width - MW - 10, MY = 95;
   const scaleX = MW / world.width, scaleY = MH / world.height;
 
   ctx.save();
@@ -2154,6 +2845,11 @@ function openCredits() {
   
 }
 
+function openControllerControls() {
+  hideAllMenus();
+  document.getElementById("controllerControls").classList.remove("hidden");
+}
+
 function openControls() {
     document.getElementById("menu").classList.add("hidden");
     document.getElementById("controls").classList.remove("hidden");
@@ -2397,6 +3093,69 @@ tables.push({ ...createTable(2305, FLOOR - 101), hp: 999, maxHp: 999, dx: 0, dy:
   player.y = FLOOR - 50;
 }
     
+//Debugging Map
+
+function loadMap_Debug() {
+  resetWorld();
+  addMapBounds();
+
+  const FLOOR = 500;
+
+  // Main floor
+  walls.push({ x: 0, y: FLOOR, width: 2800, height: 20 });
+
+  // Platforms for testing specific mechanics
+  walls.push({ x: 200, y: FLOOR - 120, width: 160, height: 20 }); // jump test
+  walls.push({ x: 500, y: FLOOR - 300,  width: 200, height: 20 }); // seesaw platform
+  walls.push({ x: 800, y: FLOOR,       width: 200, height: 20 }); // enemy test area
+  walls.push(
+    { x: 1100, y: FLOOR - 200, width: 120, height: 20, moving: true, dir: 1, speed: 2, startX: 1100, range: 150 }
+  ); // moving platform test
+
+  // Boxes for box physics tests
+  boxes.push(createBox(400, FLOOR - 100, BOX_TYPE.BOUNCY));
+  boxes.push(createBox(560, FLOOR - 100, BOX_TYPE.BREAKABLE));
+  boxes.push(createBox(620, FLOOR - 100, BOX_TYPE.HEAVY));
+
+  // Seesaw
+  seesaws.push({ x: 500, y: FLOOR - 40, width: 200, height: 12, angle: 0, angularVelocity: 0 });
+
+  // Spikes
+  spikes.push({ x: 1400, y: FLOOR - 26, width: 40, height: 26 });
+  spikes.push({ x: 1460, y: FLOOR - 26, width: 40, height: 26 });
+
+  // Ladder
+  ladders.push({ x: 1600, y: FLOOR - 200, width: 30, height: 200 });
+
+  // Oven for potato test
+  ovens.push({ x: 1800, y: FLOOR - 60, width: 40, height: 50, active: true, baked: false, glow: 0 });
+
+  // Potato pickup
+  potato.x = 1700;
+  potato.y = FLOOR - 30;
+  potato.collected = false;
+
+  // Part inventory for build test
+  partInventory.wall = 10;
+  partInventory.bouncy = 5;
+  partInventory.spike = 5;
+  partInventory.body = 5;
+  partInventory.wheel = 5;
+  partInventory.engine = 3;
+  partInventory.seat = 2;
+
+  // Lights for the test area
+  lights.push(
+    { x: 400,  y: FLOOR - 100, radius: 300, color: "#aaddff", intensity: 0.6, baseRadius: 300, baseIntensity: 0.6, flickerSpeed: 0, flickerAmount: 0 },
+    { x: 900,  y: FLOOR - 100, radius: 300, color: "#aaddff", intensity: 0.6, baseRadius: 300, baseIntensity: 0.6, flickerSpeed: 0, flickerAmount: 0 },
+    { x: 1400, y: FLOOR - 100, radius: 300, color: "#aaddff", intensity: 0.6, baseRadius: 300, baseIntensity: 0.6, flickerSpeed: 0, flickerAmount: 0 },
+    { x: 1900, y: FLOOR - 100, radius: 300, color: "#aaddff", intensity: 0.6, baseRadius: 300, baseIntensity: 0.6, flickerSpeed: 0, flickerAmount: 0 }
+  );
+
+  player.x = 100;
+  player.y = FLOOR - 50;
+}
+
 function loadMap_Level1() {
 
   /* ------------------ WORLD BOUNDS ------------------ */
@@ -3276,6 +4035,860 @@ function createBox(x, y, type = BOX_TYPE.NORMAL, width = 32, height = 32) {
   return box;
 }
 
+function tryDropPart(x, y) {
+  // Building parts from boxes
+  const buildTypes = ["bouncy", "spike", "wall"];
+  // Vehicle parts from enemies and boxes
+  const vehicleTypes = ["body", "wheel", "engine", "seat"];
+
+  const allTypes = [...buildTypes, ...buildTypes, ...buildTypes, ...vehicleTypes];
+  // Build parts are 3x more common than vehicle parts
+
+  const dropCount = Math.random() < 0.3 ? 2 : Math.random() < 0.6 ? 1 : 0;
+  for (let i = 0; i < dropCount; i++) {
+    const type = allTypes[Math.floor(Math.random() * allTypes.length)];
+    droppedParts.push({
+      x: x + (Math.random() - 0.5) * 30,
+      y: y - 10,
+      dy: -3 - Math.random() * 2,
+      width: 20,
+      height: 20,
+      type,
+      landed: false
+    });
+  }
+}
+
+function updateDroppedParts() {
+  for (let i = droppedParts.length - 1; i >= 0; i--) {
+    const p = droppedParts[i];
+
+    if (!p.landed) {
+      p.dy += 0.4;
+      p.y += p.dy;
+      if (collidesWithWall(p.x, p.y, p.width, p.height)) {
+        p.dy = 0;
+        p.landed = true;
+      }
+    }
+
+    // Player picks it up
+    if (isColliding(p, player)) {
+      partInventory[p.type]++;
+      potatoMessage = `+1 ${PART_TYPES[p.type].label}`;
+      potatoMessageTimer = 60;
+      droppedParts.splice(i, 1);
+    }
+  }
+}
+
+function drawDroppedParts() {
+  for (const p of droppedParts) {
+    const pt = PART_TYPES[p.type];
+    ctx.save();
+    ctx.fillStyle = pt.color;
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(p.x, p.y, p.width, p.height);
+    ctx.strokeRect(p.x, p.y, p.width, p.height);
+    // icon
+    ctx.font = "12px Arial";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(pt.label.split(" ")[0], p.x + p.width / 2, p.y + p.height / 2 + 4);
+    ctx.textAlign = "left";
+    ctx.restore();
+
+    // Bobbing label
+    const bob = Math.sin(performance.now() * 0.004 + p.x) * 4;
+    ctx.fillStyle = "#fff";
+    ctx.font = "10px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(pt.label, p.x + p.width / 2, p.y - 6 + bob);
+    ctx.textAlign = "left";
+  }
+}
+
+
+function updateBuildMode() {
+  if (!buildMode) return;
+
+  // Keyboard part selection
+  for (const [type, data] of Object.entries(PART_TYPES)) {
+    if (keys[data.key]) buildSelectedPart = type;
+  }
+  if (keys["x"] || keys["X"]) buildDeleteMode = !keys["x"]; // hold X to delete
+
+  // Mouse cursor → snap to grid in world space
+  const wx = Math.floor((mouse.x + camera.x) / BUILD_CELL) * BUILD_CELL;
+  const wy = Math.floor((mouse.y + camera.y) / BUILD_CELL) * BUILD_CELL;
+  buildCursor.wx = wx;
+  buildCursor.wy = wy;
+
+  // Controller cursor movement
+  if (gamepadIndex !== null) {
+    const gp = navigator.getGamepads()[gamepadIndex];
+    if (gp) {
+      const DEAD = settings.joystickDeadzone;
+      const spd = 6;
+      if (Math.abs(gp.axes[0]) > DEAD) buildCursor.wx += gp.axes[0] * spd;
+      if (Math.abs(gp.axes[1]) > DEAD) buildCursor.wy += gp.axes[1] * spd;
+
+      // Snap controller cursor to grid
+      buildCursor.wx = Math.floor(buildCursor.wx / BUILD_CELL) * BUILD_CELL;
+      buildCursor.wy = Math.floor(buildCursor.wy / BUILD_CELL) * BUILD_CELL;
+
+      // A = place, B = delete, bumpers = cycle parts
+      const partKeys = Object.keys(PART_TYPES);
+      if (gp.buttons[4]?.pressed && !gp._buildLBHeld) {
+        const idx = partKeys.indexOf(buildSelectedPart);
+        buildSelectedPart = partKeys[(idx - 1 + partKeys.length) % partKeys.length];
+        gp._buildLBHeld = true;
+      }
+      if (!gp.buttons[4]?.pressed) gp._buildLBHeld = false;
+
+      if (gp.buttons[5]?.pressed && !gp._buildRBHeld) {
+        const idx = partKeys.indexOf(buildSelectedPart);
+        buildSelectedPart = partKeys[(idx + 1) % partKeys.length];
+        gp._buildRBHeld = true;
+      }
+      if (!gp.buttons[5]?.pressed) gp._buildRBHeld = false;
+
+      if (gp.buttons[0]?.pressed && !gp._buildPlaceHeld) {
+        placeBuildPart(buildCursor.wx, buildCursor.wy);
+        gp._buildPlaceHeld = true;
+      }
+      if (!gp.buttons[0]?.pressed) gp._buildPlaceHeld = false;
+
+      if (gp.buttons[1]?.pressed && !gp._buildDeleteHeld) {
+        deleteBuildPart(buildCursor.wx, buildCursor.wy);
+        gp._buildDeleteHeld = true;
+      }
+      if (!gp.buttons[1]?.pressed) gp._buildDeleteHeld = false;
+
+      // Y = close build mode early
+      if (gp.buttons[3]?.pressed && !gp._buildCloseHeld) {
+        closeBuildMode();
+        startNextWave(); // ← ADD THIS
+        gp._buildCloseHeld = true;
+      }
+      if (!gp.buttons[3]?.pressed) gp._buildCloseHeld = false;
+    }
+  }
+}
+
+function drawBuildMode() {
+  if (!buildMode) return;
+
+  // Dim overlay
+  ctx.fillStyle = "rgba(0,0,20,0.55)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid lines (visible portion only)
+  ctx.strokeStyle = "rgba(255,255,255,0.07)";
+  ctx.lineWidth = 1;
+  const startX = Math.floor(camera.x / BUILD_CELL) * BUILD_CELL;
+  const startY = Math.floor(camera.y / BUILD_CELL) * BUILD_CELL;
+  for (let x = startX; x < camera.x + canvas.width; x += BUILD_CELL) {
+    ctx.beginPath();
+    ctx.moveTo(x - camera.x, 0);
+    ctx.lineTo(x - camera.x, canvas.height);
+    ctx.stroke();
+  }
+  for (let y = startY; y < camera.y + canvas.height; y += BUILD_CELL) {
+    ctx.beginPath();
+    ctx.moveTo(0, y - camera.y);
+    ctx.lineTo(canvas.width, y - camera.y);
+    ctx.stroke();
+  }
+
+  // Draw placed structures
+  for (const s of placedStructures) {
+    const pt = PART_TYPES[s.type];
+    const sx = s.wx - camera.x;
+    const sy = s.wy - camera.y;
+    ctx.fillStyle = pt.color + "cc";
+    ctx.strokeStyle = pt.color;
+    ctx.lineWidth = 2;
+    ctx.fillRect(sx, sy, BUILD_CELL, BUILD_CELL);
+    ctx.strokeRect(sx, sy, BUILD_CELL, BUILD_CELL);
+    ctx.font = "18px Arial";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(pt.label.split(" ")[0], sx + BUILD_CELL / 2, sy + BUILD_CELL / 2 + 6);
+    ctx.textAlign = "left";
+  }
+
+  // Ghost cursor
+  const pt = PART_TYPES[buildSelectedPart];
+  const gx = buildCursor.wx - camera.x;
+  const gy = buildCursor.wy - camera.y;
+  const hasStock = partInventory[buildSelectedPart] > 0;
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = hasStock ? pt.color : "#f00";
+  ctx.fillRect(gx, gy, BUILD_CELL, BUILD_CELL);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = hasStock ? "#fff" : "#f00";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(gx, gy, BUILD_CELL, BUILD_CELL);
+
+  // HUD panel — bottom of screen
+  ctx.fillStyle = "rgba(0,0,0,0.85)";
+  ctx.fillRect(0, canvas.height - 64, canvas.width, 64);
+
+  // Part buttons
+  const partKeys = Object.keys(PART_TYPES);
+  const btnW = 90;
+  const totalW = btnW * partKeys.length + 8 * (partKeys.length - 1);
+  const startBtnX = (canvas.width - totalW) / 2;
+
+  for (let i = 0; i < partKeys.length; i++) {
+    const key = partKeys[i];
+    const pdata = PART_TYPES[key];
+    const bx = startBtnX + i * (btnW + 8);
+    const by = canvas.height - 58;
+    const selected = key === buildSelectedPart;
+
+    ctx.fillStyle = selected ? pdata.color : "#222";
+    ctx.strokeStyle = selected ? "#fff" : "#555";
+    ctx.lineWidth = selected ? 2 : 1;
+    ctx.fillRect(bx, by, btnW, 50);
+    ctx.strokeRect(bx, by, btnW, 50);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 11px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(pdata.label, bx + btnW / 2, by + 18);
+    ctx.fillStyle = partInventory[key] > 0 ? "#0f0" : "#f44";
+    ctx.fillText(`x${partInventory[key]}`, bx + btnW / 2, by + 36);
+    ctx.fillStyle = "#888";
+    ctx.font = "10px monospace";
+    ctx.fillText(`[${pdata.key}]`, bx + btnW / 2, by + 48);
+    ctx.textAlign = "left";
+  }
+
+// Timer and instructions
+const secondsLeft = Math.ceil(waveSystem.waveTimer / 60);
+ctx.fillStyle = secondsLeft < 5 ? "#f44" : "#ffd54f";
+ctx.font = "bold 13px monospace";
+ctx.textAlign = "center";
+ctx.fillText(`⚠️ WAVE STARTS IN ${secondsLeft}s`, canvas.width / 2, canvas.height - 122);
+
+// ✅ SKIP BUTTON
+const skipBtnW = 140;
+const skipBtnX = canvas.width - skipBtnW - 12;
+const skipBtnY = canvas.height - 116;
+ctx.fillStyle = "#c03030";
+ctx.strokeStyle = "#ff4444";
+ctx.lineWidth = 2;
+ctx.fillRect(skipBtnX, skipBtnY, skipBtnW, 50);
+ctx.strokeRect(skipBtnX, skipBtnY, skipBtnW, 50);
+ctx.fillStyle = "#fff";
+ctx.font = "bold 12px monospace";
+ctx.fillText("▶ START WAVE", skipBtnX + skipBtnW / 2, skipBtnY + 30);
+ctx.textAlign = "left";
+}
+
+// Mobile part selector buttons — drawn in screen space outside camera transform
+function drawBuildMobileButtons() {
+  if (!buildMode) return;
+  // These are handled in the HUD panel drawn in drawBuildMode above
+  // Mobile users tap the bottom panel to select, then tap canvas to place
+  const partKeys = Object.keys(PART_TYPES);
+  const btnW = 90;
+  const startBtnX = (canvas.width - (btnW * partKeys.length + 8 * (partKeys.length - 1))) / 2;
+
+  for (let i = 0; i < partKeys.length; i++) {
+    const bx = startBtnX + i * (btnW + 8);
+    const by = canvas.height - 116;
+    // Touch detection for part selection buttons
+    // (handled via touchstart listener below)
+  }
+}
+
+function placeBuildPart(wx, wy) {
+  if (partInventory[buildSelectedPart] <= 0) {
+    potatoMessage = `🧱 no ${PART_TYPES[buildSelectedPart].label} left`;
+    potatoMessageTimer = 60;
+    return;
+  }
+
+  // Don't stack on existing structure
+  const existing = placedStructures.find(s => s.wx === wx && s.wy === wy);
+  if (existing) return;
+
+  partInventory[buildSelectedPart]--;
+  placedStructures.push({
+    wx, wy,
+    type: buildSelectedPart,
+    x: wx, y: wy,
+    width: BUILD_CELL, height: BUILD_CELL
+  });
+
+  // Register as a wall or spike immediately
+  applyStructureToWorld(placedStructures[placedStructures.length - 1]);
+}
+
+function deleteBuildPart(wx, wy) {
+  const idx = placedStructures.findIndex(s => s.wx === wx && s.wy === wy);
+  if (idx === -1) return;
+
+  const s = placedStructures[idx];
+  partInventory[s.type]++;            // refund the part
+  removeStructureFromWorld(s);
+  placedStructures.splice(idx, 1);
+}
+
+function applyStructureToWorld(s) {
+  if (s.type === "wall") {
+    // Tag it so we can find and remove it later
+    const wall = { x: s.wx, y: s.wy, width: BUILD_CELL, height: BUILD_CELL, isBuilt: true, structureRef: s };
+    walls.push(wall);
+    s._wallRef = wall;
+  }
+  if (s.type === "spike") {
+    const spike = { x: s.wx, y: s.wy + BUILD_CELL - 26, width: BUILD_CELL, height: 26, isBuilt: true, structureRef: s };
+    spikes.push(spike);
+    s._spikeRef = spike;
+  }
+  if (s.type === "bouncy") {
+    // Handled in updatePlacedStructures
+  }
+}
+
+function drawPlacedStructures() {
+  for (const s of placedStructures) {
+    if (s.type === "wall" || s.type === "spike") continue;
+    // walls/spikes/platforms already draw via the walls/spikes arrays
+    // only bouncy needs a manual draw here
+    const pt = PART_TYPES[s.type];
+    ctx.fillStyle = pt.color + "cc";
+    ctx.strokeStyle = pt.color;
+    ctx.lineWidth = 2;
+    ctx.fillRect(s.wx, s.wy, BUILD_CELL, BUILD_CELL);
+    ctx.strokeRect(s.wx, s.wy, BUILD_CELL, BUILD_CELL);
+    ctx.font = "18px Arial";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(pt.label.split(" ")[0], s.wx + BUILD_CELL / 2, s.wy + BUILD_CELL / 2 + 6);
+    ctx.textAlign = "left";
+  }
+}
+
+function removeStructureFromWorld(s) {
+  if (s._wallRef) {
+    const idx = walls.indexOf(s._wallRef);
+    if (idx > -1) walls.splice(idx, 1);
+  }
+  if (s._spikeRef) {
+    const idx = spikes.indexOf(s._spikeRef);
+    if (idx > -1) spikes.splice(idx, 1);
+  }
+}
+
+function updatePlacedStructures() {
+  for (const s of placedStructures) {
+    if (s.type !== "bouncy") continue;
+
+    // Launch anything that lands on it
+    const rect = { x: s.wx, y: s.wy, width: BUILD_CELL, height: BUILD_CELL };
+
+    const targets = [player, ...snails, ...SuperSnails, ...chairs, ...tables];
+    for (const t of targets) {
+      if (!isColliding(rect, t)) continue;
+      const feet = t.y + (t.height || 32);
+      const top = s.wy + 4;
+      if (feet >= top && feet <= top + 12 && t.dy >= 0) {
+        t.dy = -18;
+        t.y = s.wy - (t.height || 32);
+      }
+    }
+  }
+}
+
+// === VEHICLE MODULE ===
+
+const VEHICLE_TILE = BUILD_CELL; // same grid size as build tiles
+
+// After build mode closes, scan all placed structures for connected
+// groups that contain a seat — turn them into vehicle objects
+function buildVehiclesFromStructures() {
+  // Remove old vehicles first, return their tiles to placedStructures
+  // (vehicles persist so we skip this — only build on first assembly)
+
+  const vehicleTileTypes = new Set(["body", "wheel", "engine", "seat"]);
+  const candidates = placedStructures.filter(s => vehicleTileTypes.has(s.type));
+
+  // Find connected groups via flood fill
+  const visited = new Set();
+  const groups = [];
+
+  for (const start of candidates) {
+    const key = `${start.wx},${start.wy}`;
+    if (visited.has(key)) continue;
+
+    // BFS
+    const group = [];
+    const queue = [start];
+    visited.add(key);
+
+    while (queue.length > 0) {
+      const tile = queue.shift();
+      group.push(tile);
+
+      // Check 4 neighbours
+      const neighbours = [
+        { wx: tile.wx + VEHICLE_TILE, wy: tile.wy },
+        { wx: tile.wx - VEHICLE_TILE, wy: tile.wy },
+        { wx: tile.wx, wy: tile.wy + VEHICLE_TILE },
+        { wx: tile.wx, wy: tile.wy - VEHICLE_TILE },
+      ];
+
+      for (const n of neighbours) {
+        const nKey = `${n.wx},${n.wy}`;
+        if (visited.has(nKey)) continue;
+        const found = candidates.find(s => s.wx === n.wx && s.wy === n.wy);
+        if (found) {
+          visited.add(nKey);
+          queue.push(found);
+        }
+      }
+    }
+
+    // Only a vehicle if it has a seat
+    if (group.some(t => t.type === "seat")) {
+      groups.push(group);
+    }
+  }
+
+  // Turn each group into a vehicle — only create if not already one
+  for (const group of groups) {
+    const alreadyVehicle = vehicles.some(v =>
+      v.tiles.some(t => group.includes(t))
+    );
+    if (alreadyVehicle) continue;
+
+    // Origin = top-left tile of the group
+    const minX = Math.min(...group.map(t => t.wx));
+    const minY = Math.min(...group.map(t => t.wy));
+
+    const vehicle = {
+      x: minX,      // world position of origin
+      y: minY,
+      cx: minX,   // ← ADD
+      cy: minY,   // ← ADD
+      angle: 0,           // ← ADD
+  angularVelocity: 0, // ← ADD
+
+      dx: 0,
+      dy: 0,
+      onGround: false,
+
+      tiles: group.map(t => ({
+        relX: t.wx - minX,   // relative to vehicle origin
+        relY: t.wy - minY,
+        type: t.type,
+        hp: t.type === "wheel" ? 2 : t.type === "engine" ? 3 : 1,
+        maxHp: t.type === "wheel" ? 2 : t.type === "engine" ? 3 : 1,
+        hitFlash: 0,
+        structureRef: t     // link back so we can remove from placedStructures
+      })),
+
+      // Capability flags — derived from tiles
+      hasEngine: group.some(t => t.type === "engine"),
+      hasWheels: group.some(t => t.type === "wheel"),
+      hasSeat:   group.some(t => t.type === "seat"),
+    };
+
+    vehicles.push(vehicle);
+
+    // Remove these tiles from placedStructures and world walls
+    // so they don't double-collide
+    for (const t of group) {
+      removeStructureFromWorld(t);
+      const idx = placedStructures.indexOf(t);
+      if (idx > -1) placedStructures.splice(idx, 1);
+    }
+  }
+}
+
+function updateVehicles() {
+  for (let vi = vehicles.length - 1; vi >= 0; vi--) {
+    const v = vehicles[vi];
+
+    // --- Remove dead tiles ---
+    for (let ti = v.tiles.length - 1; ti >= 0; ti--) {
+      const t = v.tiles[ti];
+      if (t.hitFlash > 0) t.hitFlash--;
+      if (t.hp <= 0) {
+        if (t.type === "seat" && playerInVehicle && playerVehicle === v) exitVehicle();
+        v.tiles.splice(ti, 1);
+      }
+    }
+
+    v.hasEngine = v.tiles.some(t => t.type === "engine");
+    v.hasWheels = v.tiles.some(t => t.type === "wheel");
+    v.hasSeat   = v.tiles.some(t => t.type === "seat");
+
+    if (v.tiles.length === 0 || !v.hasSeat) {
+      if (playerInVehicle && playerVehicle === v) exitVehicle();
+      vehicles.splice(vi, 1);
+      continue;
+    }
+
+    if (v.angle           === undefined) v.angle           = 0;
+    if (v.angularVelocity === undefined) v.angularVelocity = 0;
+
+    const isOccupied = playerInVehicle && playerVehicle === v;
+
+    // --- Gravity ---
+    v.dy += 0.55;
+    if (v.dy > 16) v.dy = 16;
+
+    // --- Driving ---
+    let throttle = 0;
+    if (isOccupied && v.hasEngine && v.hasWheels && v.onGround) {
+      throttle =
+        (keys["d"] || keys["ArrowRight"]) ?  1 :
+        (keys["a"] || keys["ArrowLeft"])  ? -1 : 0;
+      v.dx += throttle * 0.5;
+      const MAX_SPEED = 8;
+      if (v.dx >  MAX_SPEED) v.dx =  MAX_SPEED;
+      if (v.dx < -MAX_SPEED) v.dx = -MAX_SPEED;
+    }
+
+    // --- Jump ---
+    if (isOccupied && v.onGround && (keys["w"] || keys["ArrowUp"])) {
+      v.dy = -13;
+      // Small angular kick on jump
+      v.angularVelocity += (Math.random() - 0.5) * 0.04;
+    }
+
+    // --- Friction ---
+    if (v.onGround) {
+      v.dx *= 0.82;
+    } else {
+      v.dx *= 0.98;
+    }
+    if (Math.abs(v.dx) < 0.05) v.dx = 0;
+
+    // --- Rotation physics ---
+    if (v.onGround) {
+      // Tilt forward when accelerating, backward when braking
+      v.angularVelocity += throttle * 0.003;
+      // Tilt from current horizontal speed (inertia leans the body)
+      v.angularVelocity += v.dx * 0.0003;
+      // Spring back to upright
+      v.angularVelocity -= v.angle * 0.08;
+      // Strong damping on ground
+      v.angularVelocity *= 0.75;
+    } else {
+      // In air — looser, more natural tumble
+      v.angularVelocity -= v.angle * 0.02;
+      v.angularVelocity *= 0.92;
+    }
+
+    // Clamp angle — can lean but not fully flip
+    const MAX_TILT = Math.PI * 0.28; // ~50 degrees
+    if (Math.abs(v.angle) > MAX_TILT) {
+      v.angle = Math.sign(v.angle) * MAX_TILT;
+      v.angularVelocity *= -0.3;
+    }
+
+    v.angle += v.angularVelocity;
+
+    // --- Move ---
+    v.x += v.dx;
+    v.y += v.dy;
+    v.onGround = false;
+
+    // --- Wall collisions ---
+    const bounds = getVehicleBounds(v);
+    for (const w of walls) {
+      if (!rectsOverlap(bounds, w)) continue;
+      const ox = Math.min(bounds.x + bounds.width  - w.x, w.x + w.width  - bounds.x);
+      const oy = Math.min(bounds.y + bounds.height - w.y, w.y + w.height - bounds.y);
+      if (ox < oy) {
+        if (bounds.x < w.x) v.x -= ox; else v.x += ox;
+        v.dx *= -0.2;
+        // Tap of angular velocity on wall hit
+        v.angularVelocity += v.dx * 0.01;
+      } else {
+        if (bounds.y < w.y) {
+          v.y -= oy;
+          v.dy = 0;
+          v.onGround = true;
+        } else {
+          v.y += oy;
+          v.dy = 0;
+        }
+      }
+    }
+
+    // --- World bounds ---
+    if (v.x < 0) { v.x = 0; v.dx = Math.abs(v.dx) * 0.3; }
+    if (v.y > world.height + 200) {
+      if (playerInVehicle && playerVehicle === v) exitVehicle();
+      vehicles.splice(vi, 1);
+      continue;
+    }
+
+    // --- Sync player to seat ---
+    if (isOccupied) {
+      const seat = v.tiles.find(t => t.type === "seat");
+      if (seat) {
+        // Rotate the seat position around the vehicle center
+        let sumX = 0, sumY = 0;
+        for (const t of v.tiles) { sumX += t.relX + VEHICLE_TILE/2; sumY += t.relY + VEHICLE_TILE/2; }
+        const lcx = sumX / v.tiles.length;
+        const lcy = sumY / v.tiles.length;
+        const lx  = seat.relX + VEHICLE_TILE/2 - lcx;
+        const ly  = seat.relY + VEHICLE_TILE/2 - lcy;
+        const cosA = Math.cos(v.angle);
+        const sinA = Math.sin(v.angle);
+        const seatWX = v.x + lcx + cosA * lx - sinA * ly;
+        const seatWY = v.y + lcy + sinA * lx + cosA * ly;
+        player.x = seatWX - player.width  / 2;
+        player.y = seatWY - player.height / 2;
+        player.dx = v.dx;
+        player.dy = v.dy;
+      }
+    }
+
+    // --- Ram enemies ---
+    if (Math.abs(v.dx) > 2) {
+      const ramBounds = getVehicleBounds(v);
+      const lists = [
+        { list: snails,      key: 'snail'      },
+        { list: SuperSnails, key: 'superSnail' },
+        { list: chairs,      key: 'chair'      },
+        { list: tables,      key: 'table'      },
+      ];
+      for (const { list, key } of lists) {
+        for (let i = list.length - 1; i >= 0; i--) {
+          if (!rectsOverlap(ramBounds, list[i])) continue;
+          damageEnemy(list[i], 1, { x: v.dx * 0.6, y: -4 });
+          if (list[i].hp <= 0) { list.splice(i, 1); onEnemyKilled(key); }
+        }
+      }
+    }
+  }
+}
+
+// Get the bounding box of the entire vehicle in world space
+function getVehicleBounds(v) {
+  let minRX = Infinity, minRY = Infinity, maxRX = -Infinity, maxRY = -Infinity;
+  for (const t of v.tiles) {
+    minRX = Math.min(minRX, t.relX);
+    minRY = Math.min(minRY, t.relY);
+    maxRX = Math.max(maxRX, t.relX + VEHICLE_TILE);
+    maxRY = Math.max(maxRY, t.relY + VEHICLE_TILE);
+  }
+  return { x: v.x + minRX, y: v.y + minRY, width: maxRX - minRX, height: maxRY - minRY };
+}
+
+function enterVehicle(v) {
+  playerInVehicle = true;
+  playerVehicle = v;
+  player.dx = 0;
+  player.dy = 0;
+  potatoMessage = "💺 entered vehicle — W=jump  A/D=drive  S=exit";
+  potatoMessageTimer = 180;
+}
+
+function exitVehicle() {
+  if (!playerInVehicle) return;
+  playerInVehicle = false;
+  player.dy = playerVehicle?.dy ?? 0;
+  player.dx = playerVehicle?.dx ?? 0;
+  playerVehicle = null;
+  potatoMessage = "💺 exited vehicle";
+  potatoMessageTimer = 90;
+}
+
+function checkVehicleEntry() {
+  if (playerInVehicle) {
+    // Exit with S or down
+    if (keys["s"] || keys["ArrowDown"]) {
+      exitVehicle();
+    }
+    return;
+  }
+
+  for (const v of vehicles) {
+    if (!v.hasSeat) continue;
+    const seat = v.tiles.find(t => t.type === "seat");
+    if (!seat) continue;
+
+    const seatWorldX = v.x + seat.relX;
+    const seatWorldY = v.y + seat.relY;
+    const seatRect = { x: seatWorldX, y: seatWorldY, width: VEHICLE_TILE, height: VEHICLE_TILE };
+
+    // Player overlaps the seat tile and presses up
+    if (isColliding(player, seatRect) && (keys["w"] || keys["ArrowUp"])) {
+      enterVehicle(v);
+      return;
+    }
+  }
+}
+
+function drawVehicles() {
+  for (const v of vehicles) {
+    const angle = v.angle ?? 0;
+    const cosA  = Math.cos(angle);
+    const sinA  = Math.sin(angle);
+
+    // Center of the tile group in local space
+    let sumX = 0, sumY = 0;
+    for (const t of v.tiles) { sumX += t.relX + VEHICLE_TILE/2; sumY += t.relY + VEHICLE_TILE/2; }
+    const lcx = sumX / v.tiles.length;
+    const lcy = sumY / v.tiles.length;
+
+    for (const t of v.tiles) {
+      // Local offset from center
+      const lx = t.relX + VEHICLE_TILE/2 - lcx;
+      const ly = t.relY + VEHICLE_TILE/2 - lcy;
+
+      // World position after rotation — ctx already has -camera offset
+      const wx = v.x + lcx + cosA * lx - sinA * ly;
+      const wy = v.y + lcy + sinA * lx + cosA * ly;
+
+      ctx.save();
+      ctx.translate(wx, wy);
+      ctx.rotate(angle);
+      if (t.hitFlash > 0) ctx.filter = "brightness(5)";
+
+      const hw = VEHICLE_TILE / 2;
+
+      switch (t.type) {
+        case "body":
+          ctx.fillStyle = "#7a5c3a";
+          ctx.fillRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
+          ctx.strokeStyle = "#5a3c1a";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
+          ctx.strokeStyle = "rgba(0,0,0,0.2)";
+          ctx.lineWidth = 1;
+          for (let i = -hw + 8; i < hw; i += 8) {
+            ctx.beginPath();
+            ctx.moveTo(-hw, i);
+            ctx.lineTo( hw, i);
+            ctx.stroke();
+          }
+          break;
+
+        case "wheel": {
+          const r    = hw - 3;
+          const spin = (v.x / 8) % (Math.PI * 2);
+          ctx.fillStyle = "#1a1a1a";
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#888";
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#aaa";
+          ctx.lineWidth = 2;
+          for (let a = 0; a < Math.PI * 2; a += Math.PI / 3) {
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(a + spin) * r * 0.55, Math.sin(a + spin) * r * 0.55);
+            ctx.lineTo(Math.cos(a + spin) * r,        Math.sin(a + spin) * r);
+            ctx.stroke();
+          }
+          ctx.fillStyle = "#ccc";
+          ctx.beginPath();
+          ctx.arc(0, 0, 4, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+
+        case "engine":
+          ctx.fillStyle = "#c07020";
+          ctx.fillRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
+          ctx.strokeStyle = "#804000";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
+          ctx.fillStyle = "#888";
+          ctx.fillRect(-hw + 6,  -hw + 6,  10, 6);
+          ctx.fillRect(-hw + 6,  -hw + 28, 10, 6);
+          ctx.fillRect( hw - 16, -hw + 6,  10, 6);
+          ctx.fillRect( hw - 16, -hw + 28, 10, 6);
+          ctx.fillStyle = "#ff8800";
+          ctx.beginPath();
+          ctx.arc(0, 0, 8, 0, Math.PI * 2);
+          ctx.fill();
+          if (playerInVehicle && playerVehicle === v &&
+              (keys["d"] || keys["ArrowRight"] || keys["a"] || keys["ArrowLeft"])) {
+            ctx.fillStyle = `rgba(120,120,120,${Math.random() * 0.5})`;
+            ctx.beginPath();
+            ctx.arc(-hw - 5, 0, 4 + Math.random() * 4, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          break;
+
+        case "seat":
+          ctx.fillStyle = "#4466aa";
+          ctx.fillRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
+          ctx.strokeStyle = "#224488";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
+          ctx.fillStyle = "#2244aa";
+          ctx.fillRect(-hw + 6, -hw + 4, VEHICLE_TILE - 12, VEHICLE_TILE * 0.4);
+          ctx.fillStyle = "#3355bb";
+          ctx.fillRect(-hw + 4, 0, VEHICLE_TILE - 8, VEHICLE_TILE * 0.35);
+          if (!playerInVehicle) {
+            const dist = Math.hypot(player.x - wx, player.y - wy);
+            if (dist < 80) {
+              ctx.rotate(-angle); // unrotate text so it's always readable
+              ctx.fillStyle = "#fff";
+              ctx.font = "bold 11px monospace";
+              ctx.textAlign = "center";
+              ctx.fillText("W to enter", 0, -hw - 6);
+              ctx.textAlign = "left";
+            }
+          }
+          break;
+      }
+
+      // HP bar — unrotated so it's always horizontal
+      if (t.hp < t.maxHp && settings.enemyHealthBars) {
+        ctx.rotate(-angle);
+        const pct = t.hp / t.maxHp;
+        ctx.fillStyle = "#300";
+        ctx.fillRect(-hw, -hw - 7, VEHICLE_TILE, 3);
+        ctx.fillStyle = pct > 0.5 ? "#0f0" : "#f00";
+        ctx.fillRect(-hw, -hw - 7, VEHICLE_TILE * pct, 3);
+      }
+
+      ctx.restore();
+    }
+  }
+}
+
+function checkEnemyVehicleDamage() {
+  for (const v of vehicles) {
+    const bounds = getVehicleBounds(v);
+    const allEnemies = [...snails, ...SuperSnails, ...bats];
+
+    for (const e of allEnemies) {
+      if (!rectsOverlap(bounds, e)) continue;
+      // Find which tile was hit
+      for (const t of v.tiles) {
+        const tRect = {
+          x: v.x + t.relX, y: v.y + t.relY,
+          width: VEHICLE_TILE, height: VEHICLE_TILE
+        };
+        if (!rectsOverlap(tRect, e)) continue;
+        if (Math.random() < 0.02) { // low chance per frame so it doesn't melt instantly
+          t.hp--;
+          t.hitFlash = 4;
+        }
+      }
+    }
+  }
+}
+
 function updateSpecialBoxes() {
   for (let i = boxes.length - 1; i >= 0; i--) {
     let box = boxes[i];
@@ -3286,10 +4899,14 @@ function updateSpecialBoxes() {
     // Remove broken boxes
     if (box.type === BOX_TYPE.BREAKABLE && box.hp <= 0) {
       createBreakEffect(box.x + box.width / 2, box.y + box.height / 2);
+    
+      // ← ADD THIS: chance to drop parts
+      tryDropPart(box.x + box.width / 2, box.y);
+    
       boxes.splice(i, 1);
       continue;
     }
-    
+
     // Hit flash
     if (box.hitFlash > 0) box.hitFlash--;
     
@@ -4912,7 +6529,7 @@ let waveSystem = {
   currentWave: 0,
   enemiesRemaining: 0,
   waveActive: false,
-  timeBetweenWaves: 180,
+  timeBetweenWaves: 180 * 5,
   waveTimer: 0,
   totalEnemiesKilled: 0,
   
@@ -5240,6 +6857,15 @@ function startNextWave() {
   
   waveSystem.enemiesRemaining = waveSystem.spawnQueue.length;
   waveSystem.spawnTimer = 0;
+  const boxCount = 2 + Math.floor(waveSystem.currentWave * 0.5);
+  for (let i = 0; i < boxCount; i++) {
+    const pos = getSpawnPosition('snail'); // reuse spawn zones
+    boxes.push(createBox(
+      pos.x + (Math.random() - 0.5) * 200,
+      pos.y - 40,
+      BOX_TYPE.BREAKABLE
+    ));
+  }
 }
 
 // Spawn positions for different enemy types
@@ -5469,7 +7095,7 @@ function updateWaveSystem() {
       waveSystem.waveTimer = waveSystem.timeBetweenWaves;
       
       giveWaveReward();
-      
+      openBuildMode();
       potatoMessage = `✅ Wave ${waveSystem.currentWave} Complete!`;
       potatoMessageTimer = 180;
     }
@@ -5480,6 +7106,7 @@ function updateWaveSystem() {
     waveSystem.waveTimer--;
     
     if (waveSystem.waveTimer === 0) {
+      closeBuildMode();
       startNextWave();
     }
   }
@@ -5506,6 +7133,12 @@ function onEnemyKilled(enemyType) {
   waveSystem.totalEnemiesKilled++;
   const gained = XP_TABLE[enemyType] ?? 10;
   grantXP(gained);
+  // Small chance to drop a part
+  if (Math.random() < 0.12) {
+    const pos = getSpawnPosition('snail');
+    // Use the last killed enemy position if we can find it
+    tryDropPart(pos.x, pos.y);
+  }
 }
 
 function grantXP(amount) {
@@ -5521,6 +7154,17 @@ function grantXP(amount) {
     xpToNext = Math.floor(xpToNext * 1.20); // scale requirement up each level
     triggerLevelUp();
   }
+}
+
+function openBuildMode() {
+  buildMode = true;
+  //gamePaused = true; // freeze enemies
+}
+
+function closeBuildMode() {
+  buildMode = false;
+  gamePaused = false;
+  buildVehiclesFromStructures();
 }
 
 function triggerLevelUp() {
@@ -5655,6 +7299,8 @@ function hideAllMenus() {
   document.getElementById("freeSelect").classList.add("hidden");
   document.getElementById("settings").classList.add("hidden");
   document.getElementById("pauseMenu").classList.add("hidden");
+  document.getElementById("controls").classList.add("hidden");
+  document.getElementById("controllerControls").classList.add("hidden");
 }
 
 // AABB collision
@@ -5729,7 +7375,19 @@ playerUpgrades.extraJumpsMax = 0;
 playerUpgrades.extraJumpsLeft = 0;
 ownedUpgradeIds.clear();
 playerUpgrades.dashInvulEnabled = false;
+
+droppedParts = [];
+placedStructures = [];
+partInventory = {bouncy: 0, spike: 0, wall: 0, body: 0, wheel: 0, engine: 0, seat: 0 };
+buildMode = false;
+vehicles = [];
+playerVehicle = null;
+playerInVehicle = false;
+cheeseCooldown = 0;
   
+debugTestMode = false;
+debugTests = [];
+
   generatedTiles = [];
   enemies = [];
   fireballs = [];
@@ -6674,9 +8332,9 @@ let playerLives = maxLives;
 function loseLife() {
   if (settings.invincible) return;
   if (settings.infiniteLives) { playerLives = maxLives; return; }
-
  if (playerUpgrades.dashInvulEnabled && player.dashActive) return;
   
+ if (playerInVehicle) exitVehicle();
   playerLives--;
 
   if (hasPotato) {
@@ -7158,6 +8816,22 @@ function togglePause() {
   }
 }
 
+function backToControls() {
+
+  stopGameLoop();  
+  document.getElementById("pauseMenu").classList.add("hidden");
+  document.getElementById("levelSelect").classList.add("hidden");
+  document.getElementById("waveSelect").classList.add("hidden");
+  document.getElementById("credits").classList.add("hidden");
+  document.getElementById("freeSelect").classList.add("hidden");
+  document.getElementById("settings").classList.add("hidden");
+  document.getElementById("menu").classList.add("hidden");
+  document.getElementById("controls").classList.remove("hidden");
+  document.getElementById("controllerControls").classList.add("hidden");
+  // Hide canvas to be safe
+  document.getElementById("game").style.display = "none";
+}
+
 function backToMenu() {
 
   stopGameLoop();  
@@ -7169,6 +8843,7 @@ function backToMenu() {
   document.getElementById("settings").classList.add("hidden");
   document.getElementById("menu").classList.remove("hidden");
   document.getElementById("controls").classList.add("hidden");
+  document.getElementById("controllerControls").classList.add("hidden");
   // Hide canvas to be safe
   document.getElementById("game").style.display = "none";
 }
@@ -7896,7 +9571,8 @@ function drawChairs() {
 // --- UPDATE PLAYER ---
 function updatePlayer() {
   if (gameOver || levelUpPending) return;
-  
+  if (playerInVehicle) return;
+
   if (player.attackTimer > 0) {
     player.attackTimer--;
   }
@@ -8507,7 +10183,15 @@ function resetWorld() {
   hasPotato = false;
   yetis =[];
   snowmen =[];
+
+  vehicles = [];
+  playerVehicle = null;
+  playerInVehicle = false;
+
   ovens = [];
+  droppedParts = [];
+  placedStructures = [];
+  partInventory = {bouncy: 0, spike: 0, wall: 0, body: 0, wheel: 0, engine: 0, seat: 0 };  buildMode = false;
   lights = [];        // ← ADD THIS LINE
   playerLight = null; // ← ADD THIS LINE
   let potato
@@ -8517,6 +10201,7 @@ function resetWorld() {
   let potatoHUDLine = "";
   let potatoState = "none";
   let fireballs = [];
+
   player.speed *= 1;
   player.jumpPower *= 1;
 player.dashMaxCooldown = 50;
@@ -8543,10 +10228,9 @@ ownedUpgradeIds.clear();
   currentWave: 0,
   enemiesRemaining: 0,
   waveActive: false,
-  timeBetweenWaves: 180,
+  timeBetweenWaves: 180 * 5,
   waveTimer: 0,
   totalEnemiesKilled: 0,
-  
   spawnQueue: [],
   spawnTimer: 0,
   
@@ -9165,6 +10849,7 @@ ctx.fill();
   drawSnowmen();
    drawPotato();
   drawOven();
+  drawDroppedParts();
   // Draw walls
   for (let wall of walls) {
 
@@ -9248,6 +10933,7 @@ function drawSnails() {
 }
   drawChairs();
   drawTables();
+  drawVehicles();
   drawSnails();
   drawSuperSnails();
   drawYetis();
@@ -9405,6 +11091,7 @@ if (player.attackCharging) {
   drawBats();
   drawCheeses();
   drawSpecialBoxes();
+  drawPlacedStructures()
   drawExplosions();
   drawPlayerSword();
   drawOrbiters();
@@ -9449,7 +11136,7 @@ if (settings.showHitboxes) {
   ctx.restore(); // Restore camera transform for HUD
 
   drawOffScreenIndicators();
-
+  drawBuildMode();
   if (tutorialActive) drawTutorialWorld();
   // HUD / DEV OVERLAYS
 if (devMapView) {
@@ -9504,6 +11191,8 @@ if (player.dashCooldown > 0) {
   }
 
   drawWaveUI();  
+  if (debugTestMode) drawDebugTests();
+
       ctx.restore();
 
   drawCannonCrosshair();
@@ -9566,12 +11255,14 @@ function gameLoop(currentTime) {
     updateWaveSystem();
     updateEnemyHitFlashes();
     applySnowmanSlow();
+    if (!buildMode) {
     updatePlayer();
     updatePlayerSwordAttack();
     updateBats();
     updateCannonAim();
     updateCannonProjectiles();
     updateExplosions();
+    updatePlacedStructures();
     syncJoystickVisibility();
     //updateBoxes();
     updateSpecialBoxes();
@@ -9593,24 +11284,31 @@ function gameLoop(currentTime) {
     updateOvens(player);
     updateSnails();
     updateChairs();
+    if (debugTestMode) runDebugTests();
     updateCheeses();
     updateTables();
+    updateVehicles();
+   checkEnemyVehicleDamage();
+    checkVehicleEntry();
     updateSuperSnails();
     if (tutorialActive) updateTutorial();
     updateOrbiters();
-updateHomingShot();
-updateDashDamage();
-    updateCamera();
-    updateSnow();
+    updateHomingShot();
+    updateDashDamage();
+    }
     updateLights();
     spawnSnow();
-    drawIcicles();
-    drawOven();
+    updateCamera();
+    updateSnow();
+    updateDroppedParts();
   }
+  drawIcicles();
+  drawOven();
     draw();
     // In gameLoop, outside the if (!gamePaused) block:
 if (levelUpInputDelay > 0) levelUpInputDelay--;
   }
+  if (buildMode) updateBuildMode();
   requestAnimationFrame(gameLoop);
 }
 gameLoop();
