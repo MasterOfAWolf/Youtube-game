@@ -4468,37 +4468,39 @@ function buildVehiclesFromStructures() {
     );
     if (alreadyVehicle) continue;
 
-    // Origin = top-left tile of the group
-    const minX = Math.min(...group.map(t => t.wx));
-    const minY = Math.min(...group.map(t => t.wy));
+    // Replace the vehicle = { ... } block:
+const minX = Math.min(...group.map(t => t.wx));
+const minY = Math.min(...group.map(t => t.wy));
 
-    const vehicle = {
-      x: minX,      // world position of origin
-      y: minY,
-      cx: minX,   // ← ADD
-      cy: minY,   // ← ADD
-      angle: 0,           // ← ADD
-  angularVelocity: 0, // ← ADD
+// Compute center of mass in local space BEFORE creating vehicle
+let initSX = 0, initSY = 0;
+for (const t of group) {
+  initSX += (t.wx - minX) + VEHICLE_TILE / 2;
+  initSY += (t.wy - minY) + VEHICLE_TILE / 2;
+}
+const initLcx = initSX / group.length;
+const initLcy = initSY / group.length;
 
-      dx: 0,
-      dy: 0,
-      onGround: false,
-
-      tiles: group.map(t => ({
-        relX: t.wx - minX,   // relative to vehicle origin
-        relY: t.wy - minY,
-        type: t.type,
-        hp: t.type === "wheel" ? 2 : t.type === "engine" ? 3 : 1,
-        maxHp: t.type === "wheel" ? 2 : t.type === "engine" ? 3 : 1,
-        hitFlash: 0,
-        structureRef: t     // link back so we can remove from placedStructures
-      })),
-
-      // Capability flags — derived from tiles
-      hasEngine: group.some(t => t.type === "engine"),
-      hasWheels: group.some(t => t.type === "wheel"),
-      hasSeat:   group.some(t => t.type === "seat"),
-    };
+const vehicle = {
+  x: minX, y: minY,
+  cx: minX + initLcx,   // ← world position of center of mass
+  cy: minY + initLcy,
+  vx: 0, vy: 0,
+  angle: 0,
+  angularVel: 0,
+  tiles: group.map(t => ({
+    relX: t.wx - minX,
+    relY: t.wy - minY,
+    type: t.type,
+    hp:    t.type === "wheel" ? 2 : t.type === "engine" ? 3 : 1,
+    maxHp: t.type === "wheel" ? 2 : t.type === "engine" ? 3 : 1,
+    hitFlash: 0,
+    structureRef: t
+  })),
+  hasEngine: group.some(t => t.type === "engine"),
+  hasWheels: group.some(t => t.type === "wheel"),
+  hasSeat:   group.some(t => t.type === "seat"),
+};
 
     vehicles.push(vehicle);
 
@@ -4516,7 +4518,7 @@ function updateVehicles() {
   for (let vi = vehicles.length - 1; vi >= 0; vi--) {
     const v = vehicles[vi];
 
-    // --- Remove dead tiles ---
+    // --- Tile management ---
     for (let ti = v.tiles.length - 1; ti >= 0; ti--) {
       const t = v.tiles[ti];
       if (t.hitFlash > 0) t.hitFlash--;
@@ -4525,139 +4527,212 @@ function updateVehicles() {
         v.tiles.splice(ti, 1);
       }
     }
-
     v.hasEngine = v.tiles.some(t => t.type === "engine");
     v.hasWheels = v.tiles.some(t => t.type === "wheel");
     v.hasSeat   = v.tiles.some(t => t.type === "seat");
-
     if (v.tiles.length === 0 || !v.hasSeat) {
       if (playerInVehicle && playerVehicle === v) exitVehicle();
       vehicles.splice(vi, 1);
       continue;
     }
 
-    if (v.angle           === undefined) v.angle           = 0;
-    if (v.angularVelocity === undefined) v.angularVelocity = 0;
+    // --- Local center of mass ---
+    let sx = 0, sy = 0;
+    for (const t of v.tiles) { sx += t.relX + VEHICLE_TILE/2; sy += t.relY + VEHICLE_TILE/2; }
+    const lcx = sx / v.tiles.length;
+    const lcy = sy / v.tiles.length;
+
+    // --- Init physics if missing ---
+    if (v.cx === undefined) {
+      v.cx = v.x + lcx; v.cy = v.y + lcy;
+      v.vx = 0; v.vy = 0;
+      v.angle = 0; v.angularVel = 0;
+    }
 
     const isOccupied = playerInVehicle && playerVehicle === v;
 
-    // --- Gravity ---
-    v.dy += 0.55;
-    if (v.dy > 16) v.dy = 16;
-
-    // --- Driving ---
-    let throttle = 0;
-    if (isOccupied && v.hasEngine && v.hasWheels && v.onGround) {
-      throttle =
-        (keys["d"] || keys["ArrowRight"]) ?  1 :
-        (keys["a"] || keys["ArrowLeft"])  ? -1 : 0;
-      v.dx += throttle * 0.5;
-      const MAX_SPEED = 8;
-      if (v.dx >  MAX_SPEED) v.dx =  MAX_SPEED;
-      if (v.dx < -MAX_SPEED) v.dx = -MAX_SPEED;
+    // --- Mass and moment of inertia ---
+    const MASS = Math.max(v.tiles.length * 4, 8);
+    let inertia = 0;
+    for (const t of v.tiles) {
+      const dx = t.relX + VEHICLE_TILE/2 - lcx;
+      const dy = t.relY + VEHICLE_TILE/2 - lcy;
+      inertia += (dx*dx + dy*dy + VEHICLE_TILE*VEHICLE_TILE/6) * MASS / v.tiles.length;
     }
+    inertia = Math.max(inertia, 4000);
 
-    // --- Jump ---
-    if (isOccupied && v.onGround && (keys["w"] || keys["ArrowUp"])) {
-      v.dy = -13;
-      // Small angular kick on jump
-      v.angularVelocity += (Math.random() - 0.5) * 0.04;
+    const cosA = Math.cos(v.angle);
+    const sinA = Math.sin(v.angle);
+
+    // --- Force / torque accumulators ---
+    let Fx = 0;
+    let Fy = MASS * 0.45;  // gravity
+    let torque = 0;
+
+    // ── WHEEL / DRIVE / COLLISION ──────────────────────────────
+    const WHEEL_R = VEHICLE_TILE * 0.45;
+    const DRIVE_ACCEL = 0.55;  // velocity added per frame when throttle held
+    const MAX_SPEED   = 9;
+    const GROUND_SNAP = WHEEL_R + 8; // distance within which wheel counts as grounded
+    
+    const wheelTiles = v.tiles.filter(t => t.type === "wheel");
+    let groundedWheels = 0;
+    
+    const throttle = (isOccupied && v.hasEngine) ?
+      ((keys["d"] || keys["ArrowRight"]) ?  1 :
+       (keys["a"] || keys["ArrowLeft"])  ? -1 : 0) : 0;
+    
+    // ── 1. GRAVITY ─────────────────────────────────────────────
+    v.vy += 0.55;
+    if (v.vy >  20) v.vy = 20;
+    if (v.vy < -20) v.vy = -20;
+    
+    // ── 2. MOVE ────────────────────────────────────────────────
+    v.cx += v.vx;
+    v.cy += v.vy;
+    v.angle += v.angularVel;
+    
+    // ── 3. CORNER COLLISION (position only, clamped velocity) ──
+    // Recompute corners after move
+    const corners = [];
+    for (const t of v.tiles) {
+      for (const [clx, cly] of [
+        [t.relX,               t.relY              ],
+        [t.relX + VEHICLE_TILE, t.relY              ],
+        [t.relX,               t.relY + VEHICLE_TILE],
+        [t.relX + VEHICLE_TILE, t.relY + VEHICLE_TILE],
+      ]) {
+        const dlx = clx - lcx, dly = cly - lcy;
+        corners.push({
+          wx: v.cx + cosA*dlx - sinA*dly,
+          wy: v.cy + sinA*dlx + cosA*dly,
+          rx: cosA*dlx - sinA*dly,
+          ry: sinA*dlx + cosA*dly
+        });
+      }
     }
-
-    // --- Friction ---
-    if (v.onGround) {
-      v.dx *= 0.82;
-    } else {
-      v.dx *= 0.98;
-    }
-    if (Math.abs(v.dx) < 0.05) v.dx = 0;
-
-    // --- Rotation physics ---
-    if (v.onGround) {
-      // Tilt forward when accelerating, backward when braking
-      v.angularVelocity += throttle * 0.003;
-      // Tilt from current horizontal speed (inertia leans the body)
-      v.angularVelocity += v.dx * 0.0003;
-      // Spring back to upright
-      v.angularVelocity -= v.angle * 0.08;
-      // Strong damping on ground
-      v.angularVelocity *= 0.75;
-    } else {
-      // In air — looser, more natural tumble
-      v.angularVelocity -= v.angle * 0.02;
-      v.angularVelocity *= 0.92;
-    }
-
-    // Clamp angle — can lean but not fully flip
-    const MAX_TILT = Math.PI * 0.28; // ~50 degrees
-    if (Math.abs(v.angle) > MAX_TILT) {
-      v.angle = Math.sign(v.angle) * MAX_TILT;
-      v.angularVelocity *= -0.3;
-    }
-
-    v.angle += v.angularVelocity;
-
-    // --- Move ---
-    v.x += v.dx;
-    v.y += v.dy;
-    v.onGround = false;
-
-    // --- Wall collisions ---
-    const bounds = getVehicleBounds(v);
-    for (const w of walls) {
-      if (!rectsOverlap(bounds, w)) continue;
-      const ox = Math.min(bounds.x + bounds.width  - w.x, w.x + w.width  - bounds.x);
-      const oy = Math.min(bounds.y + bounds.height - w.y, w.y + w.height - bounds.y);
-      if (ox < oy) {
-        if (bounds.x < w.x) v.x -= ox; else v.x += ox;
-        v.dx *= -0.2;
-        // Tap of angular velocity on wall hit
-        v.angularVelocity += v.dx * 0.01;
-      } else {
-        if (bounds.y < w.y) {
-          v.y -= oy;
-          v.dy = 0;
-          v.onGround = true;
+    
+    for (const c of corners) {
+      for (const wall of walls) {
+        if (c.wx < wall.x || c.wx > wall.x + wall.width)   continue;
+        if (c.wy < wall.y || c.wy > wall.y + wall.height)  continue;
+    
+        const dTop    = c.wy - wall.y;
+        const dBottom = wall.y + wall.height - c.wy;
+        const dLeft   = c.wx - wall.x;
+        const dRight  = wall.x + wall.width - c.wx;
+        const minD    = Math.min(dTop, dBottom, dLeft, dRight);
+    
+        if (dTop === minD) {
+          v.cy -= dTop;
+          if (v.vy > 0) v.vy = 0; // absorb landing, no bounce explosion
+          v.angularVel -= c.rx * 0.0003 * dTop;
+        } else if (dBottom === minD) {
+          v.cy += dBottom;
+          if (v.vy < 0) v.vy *= -0.1;
+        } else if (dLeft === minD) {
+          v.cx -= dLeft;
+          if (v.vx > 0) v.vx *= -0.2;
+          v.angularVel += c.ry * 0.0003 * dLeft;
         } else {
-          v.y += oy;
-          v.dy = 0;
+          v.cx += dRight;
+          if (v.vx < 0) v.vx *= -0.2;
+          v.angularVel -= c.ry * 0.0003 * dRight;
         }
       }
     }
+    
+    // ── 4. WHEEL GROUND DETECTION ──────────────────────────────
+    for (const wt of wheelTiles) {
+      const wlx = wt.relX + VEHICLE_TILE/2 - lcx;
+      const wly = wt.relY + VEHICLE_TILE/2 - lcy;
+      const wwx = v.cx + cosA*wlx - sinA*wly;
+      const wwy = v.cy + sinA*wlx + cosA*wly;
+    
+      // Check all 4 sides of each wheel for contact
+      const probes = [
+        { px: wwx,          py: wwy + WHEEL_R, side: "bottom" },
+        { px: wwx - WHEEL_R, py: wwy,          side: "left"   },
+        { px: wwx + WHEEL_R, py: wwy,          side: "right"  },
+        { px: wwx,          py: wwy - WHEEL_R, side: "top"    },
+      ];
+    
+      for (const probe of probes) {
+        for (const wall of walls) {
+          const inside =
+            probe.px >= wall.x - GROUND_SNAP &&
+            probe.px <= wall.x + wall.width  + GROUND_SNAP &&
+            probe.py >= wall.y - GROUND_SNAP &&
+            probe.py <= wall.y + wall.height + GROUND_SNAP;
+    
+          if (!inside) continue;
+    
+          groundedWheels++;
+    
+          // Lever arm from CoM to wheel center
+          const rx = wwx - v.cx;
+          const ry = wwy - v.cy;
+    
+          // ── Drive: flat accel, capped, in correct direction ──
+          if (throttle !== 0) {
+            // Apply as velocity delta, capped so landing can't amplify it
+            const currentSpeed = v.vx;
+            const newSpeed = currentSpeed + throttle * DRIVE_ACCEL;
+            v.vx = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, newSpeed));
+    
+            // Torque from drive — creates tilt effect
+          }
+          v.angularVel -= throttle * 0.0085; // direct, no inertia division
+          // ── Ground friction ──
+          v.vx *= 0.86;
+    
+          break; // one contact per wheel
+        }
+        if (groundedWheels > 0) break; // one side per wheel
+      }
+    }
+    
+    // ── 5. JUMP ────────────────────────────────────────────────
+    if (isOccupied && groundedWheels > 0 && (keys["w"] || keys["ArrowUp"])) {
+      v.vy = -15;
+    }
+    
+    // ── 6. ANGULAR VELOCITY ────────────────────────────────────
+    v.angularVel += torque / inertia;
+    v.angularVel *= groundedWheels > 0 ? 0.92 : 0.985;
+    
+    // Air resistance
+    if (groundedWheels === 0) v.vx *= 0.995;
 
-    // --- World bounds ---
-    if (v.x < 0) { v.x = 0; v.dx = Math.abs(v.dx) * 0.3; }
-    if (v.y > world.height + 200) {
+    // World bounds
+    if (v.cx < 100) { v.cx = 100; if (v.vx < 0) v.vx *= -0.3; }
+    if (v.cx > world.width - 100) { v.cx = world.width - 100; if (v.vx > 0) v.vx *= -0.3; }
+    if (v.cy > world.height + 200) {
       if (playerInVehicle && playerVehicle === v) exitVehicle();
       vehicles.splice(vi, 1);
       continue;
     }
 
+    // Re-derive v.x/y from cx/cy (for bounds and legacy draw code)
+    v.x = v.cx - (cosA*lcx - sinA*lcy);
+    v.y = v.cy - (sinA*lcx + cosA*lcy);
+
     // --- Sync player to seat ---
     if (isOccupied) {
       const seat = v.tiles.find(t => t.type === "seat");
       if (seat) {
-        // Rotate the seat position around the vehicle center
-        let sumX = 0, sumY = 0;
-        for (const t of v.tiles) { sumX += t.relX + VEHICLE_TILE/2; sumY += t.relY + VEHICLE_TILE/2; }
-        const lcx = sumX / v.tiles.length;
-        const lcy = sumY / v.tiles.length;
-        const lx  = seat.relX + VEHICLE_TILE/2 - lcx;
-        const ly  = seat.relY + VEHICLE_TILE/2 - lcy;
-        const cosA = Math.cos(v.angle);
-        const sinA = Math.sin(v.angle);
-        const seatWX = v.x + lcx + cosA * lx - sinA * ly;
-        const seatWY = v.y + lcy + sinA * lx + cosA * ly;
-        player.x = seatWX - player.width  / 2;
-        player.y = seatWY - player.height / 2;
-        player.dx = v.dx;
-        player.dy = v.dy;
+        const slx = seat.relX + VEHICLE_TILE/2 - lcx;
+        const sly = seat.relY + VEHICLE_TILE/2 - lcy;
+        player.x = v.cx + cosA*slx - sinA*sly - player.width  / 2;
+        player.y = v.cy + sinA*slx + cosA*sly - player.height / 2;
+        player.dx = v.vx;
+        player.dy = v.vy;
       }
     }
 
     // --- Ram enemies ---
-    if (Math.abs(v.dx) > 2) {
-      const ramBounds = getVehicleBounds(v);
+    if (Math.abs(v.vx) > 2) {
+      const bounds = getVehicleBounds(v);
       const lists = [
         { list: snails,      key: 'snail'      },
         { list: SuperSnails, key: 'superSnail' },
@@ -4666,8 +4741,8 @@ function updateVehicles() {
       ];
       for (const { list, key } of lists) {
         for (let i = list.length - 1; i >= 0; i--) {
-          if (!rectsOverlap(ramBounds, list[i])) continue;
-          damageEnemy(list[i], 1, { x: v.dx * 0.6, y: -4 });
+          if (!rectsOverlap(bounds, list[i])) continue;
+          damageEnemy(list[i], 1, { x: v.vx * 0.6, y: -4 });
           if (list[i].hp <= 0) { list.splice(i, 1); onEnemyKilled(key); }
         }
       }
@@ -4677,14 +4752,33 @@ function updateVehicles() {
 
 // Get the bounding box of the entire vehicle in world space
 function getVehicleBounds(v) {
-  let minRX = Infinity, minRY = Infinity, maxRX = -Infinity, maxRY = -Infinity;
+  const cosA = Math.cos(v.angle ?? 0);
+  const sinA = Math.sin(v.angle ?? 0);
+  let sx = 0, sy = 0;
+  for (const t of v.tiles) { sx += t.relX + VEHICLE_TILE/2; sy += t.relY + VEHICLE_TILE/2; }
+  const lcx = sx / v.tiles.length;
+  const lcy = sy / v.tiles.length;
+  const cx = v.cx ?? (v.x + lcx);
+  const cy = v.cy ?? (v.y + lcy);
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const t of v.tiles) {
-    minRX = Math.min(minRX, t.relX);
-    minRY = Math.min(minRY, t.relY);
-    maxRX = Math.max(maxRX, t.relX + VEHICLE_TILE);
-    maxRY = Math.max(maxRY, t.relY + VEHICLE_TILE);
+    for (const [clx, cly] of [
+      [t.relX, t.relY],
+      [t.relX + VEHICLE_TILE, t.relY],
+      [t.relX, t.relY + VEHICLE_TILE],
+      [t.relX + VEHICLE_TILE, t.relY + VEHICLE_TILE],
+    ]) {
+      const dlx = clx - lcx, dly = cly - lcy;
+      const wx = cx + cosA*dlx - sinA*dly;
+      const wy = cy + sinA*dlx + cosA*dly;
+      if (wx < minX) minX = wx;
+      if (wx > maxX) maxX = wx;
+      if (wy < minY) minY = wy;
+      if (wy > maxY) maxY = wy;
+    }
   }
-  return { x: v.x + minRX, y: v.y + minRY, width: maxRX - minRX, height: maxRY - minRY };
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 function enterVehicle(v) {
@@ -4708,10 +4802,7 @@ function exitVehicle() {
 
 function checkVehicleEntry() {
   if (playerInVehicle) {
-    // Exit with S or down
-    if (keys["s"] || keys["ArrowDown"]) {
-      exitVehicle();
-    }
+    if (keys["s"] || keys["ArrowDown"]) exitVehicle();
     return;
   }
 
@@ -4720,12 +4811,22 @@ function checkVehicleEntry() {
     const seat = v.tiles.find(t => t.type === "seat");
     if (!seat) continue;
 
-    const seatWorldX = v.x + seat.relX;
-    const seatWorldY = v.y + seat.relY;
-    const seatRect = { x: seatWorldX, y: seatWorldY, width: VEHICLE_TILE, height: VEHICLE_TILE };
+    const cosA = Math.cos(v.angle ?? 0);
+    const sinA = Math.sin(v.angle ?? 0);
+    let sx = 0, sy = 0;
+    for (const t of v.tiles) { sx += t.relX + VEHICLE_TILE/2; sy += t.relY + VEHICLE_TILE/2; }
+    const lcx = sx / v.tiles.length;
+    const lcy = sy / v.tiles.length;
+    const cx = v.cx ?? (v.x + lcx);
+    const cy = v.cy ?? (v.y + lcy);
 
-    // Player overlaps the seat tile and presses up
-    if (isColliding(player, seatRect) && (keys["w"] || keys["ArrowUp"])) {
+    const slx = seat.relX + VEHICLE_TILE/2 - lcx;
+    const sly = seat.relY + VEHICLE_TILE/2 - lcy;
+    const seatWX = cx + cosA*slx - sinA*sly;
+    const seatWY = cy + sinA*slx + cosA*sly;
+
+    const dist = Math.hypot(player.x + player.width/2 - seatWX, player.y + player.height/2 - seatWY);
+    if (dist < VEHICLE_TILE && (keys["w"] || keys["ArrowUp"])) {
       enterVehicle(v);
       return;
     }
@@ -4738,20 +4839,20 @@ function drawVehicles() {
     const cosA  = Math.cos(angle);
     const sinA  = Math.sin(angle);
 
-    // Center of the tile group in local space
-    let sumX = 0, sumY = 0;
-    for (const t of v.tiles) { sumX += t.relX + VEHICLE_TILE/2; sumY += t.relY + VEHICLE_TILE/2; }
-    const lcx = sumX / v.tiles.length;
-    const lcy = sumY / v.tiles.length;
+    let sx = 0, sy = 0;
+    for (const t of v.tiles) { sx += t.relX + VEHICLE_TILE/2; sy += t.relY + VEHICLE_TILE/2; }
+    const lcx = sx / v.tiles.length;
+    const lcy = sy / v.tiles.length;
+    const cx = v.cx ?? (v.x + lcx);
+    const cy = v.cy ?? (v.y + lcy);
 
     for (const t of v.tiles) {
-      // Local offset from center
       const lx = t.relX + VEHICLE_TILE/2 - lcx;
       const ly = t.relY + VEHICLE_TILE/2 - lcy;
 
-      // World position after rotation — ctx already has -camera offset
-      const wx = v.x + lcx + cosA * lx - sinA * ly;
-      const wy = v.y + lcy + sinA * lx + cosA * ly;
+      // World position — ctx.translate already handles camera offset
+      const wx = cx + cosA*lx - sinA*ly;
+      const wy = cy + sinA*lx + cosA*ly;
 
       ctx.save();
       ctx.translate(wx, wy);
@@ -4764,65 +4865,50 @@ function drawVehicles() {
         case "body":
           ctx.fillStyle = "#7a5c3a";
           ctx.fillRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
-          ctx.strokeStyle = "#5a3c1a";
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#5a3c1a"; ctx.lineWidth = 2;
           ctx.strokeRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
-          ctx.strokeStyle = "rgba(0,0,0,0.2)";
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.lineWidth = 1;
           for (let i = -hw + 8; i < hw; i += 8) {
-            ctx.beginPath();
-            ctx.moveTo(-hw, i);
-            ctx.lineTo( hw, i);
-            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-hw, i); ctx.lineTo(hw, i); ctx.stroke();
           }
           break;
 
         case "wheel": {
           const r    = hw - 3;
-          const spin = (v.x / 8) % (Math.PI * 2);
+          const spin = (v.cx ?? 0) / 8 % (Math.PI * 2);
           ctx.fillStyle = "#1a1a1a";
-          ctx.beginPath();
-          ctx.arc(0, 0, r, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
           ctx.fillStyle = "#888";
-          ctx.beginPath();
-          ctx.arc(0, 0, r * 0.55, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = "#aaa";
-          ctx.lineWidth = 2;
-          for (let a = 0; a < Math.PI * 2; a += Math.PI / 3) {
+          ctx.beginPath(); ctx.arc(0, 0, r*0.55, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = "#aaa"; ctx.lineWidth = 2;
+          for (let a = 0; a < Math.PI*2; a += Math.PI/3) {
             ctx.beginPath();
-            ctx.moveTo(Math.cos(a + spin) * r * 0.55, Math.sin(a + spin) * r * 0.55);
-            ctx.lineTo(Math.cos(a + spin) * r,        Math.sin(a + spin) * r);
+            ctx.moveTo(Math.cos(a+spin)*r*0.55, Math.sin(a+spin)*r*0.55);
+            ctx.lineTo(Math.cos(a+spin)*r,      Math.sin(a+spin)*r);
             ctx.stroke();
           }
           ctx.fillStyle = "#ccc";
-          ctx.beginPath();
-          ctx.arc(0, 0, 4, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
           break;
         }
 
         case "engine":
           ctx.fillStyle = "#c07020";
           ctx.fillRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
-          ctx.strokeStyle = "#804000";
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#804000"; ctx.lineWidth = 2;
           ctx.strokeRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
           ctx.fillStyle = "#888";
-          ctx.fillRect(-hw + 6,  -hw + 6,  10, 6);
-          ctx.fillRect(-hw + 6,  -hw + 28, 10, 6);
-          ctx.fillRect( hw - 16, -hw + 6,  10, 6);
-          ctx.fillRect( hw - 16, -hw + 28, 10, 6);
+          ctx.fillRect(-hw+6, -hw+6,  10, 6);
+          ctx.fillRect(-hw+6, -hw+28, 10, 6);
+          ctx.fillRect(hw-16, -hw+6,  10, 6);
+          ctx.fillRect(hw-16, -hw+28, 10, 6);
           ctx.fillStyle = "#ff8800";
-          ctx.beginPath();
-          ctx.arc(0, 0, 8, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
           if (playerInVehicle && playerVehicle === v &&
               (keys["d"] || keys["ArrowRight"] || keys["a"] || keys["ArrowLeft"])) {
-            ctx.fillStyle = `rgba(120,120,120,${Math.random() * 0.5})`;
+            ctx.fillStyle = `rgba(140,100,40,${0.3 + Math.random()*0.4})`;
             ctx.beginPath();
-            ctx.arc(-hw - 5, 0, 4 + Math.random() * 4, 0, Math.PI * 2);
+            ctx.arc(-hw - 6, 0, 4 + Math.random()*5, 0, Math.PI*2);
             ctx.fill();
           }
           break;
@@ -4830,17 +4916,17 @@ function drawVehicles() {
         case "seat":
           ctx.fillStyle = "#4466aa";
           ctx.fillRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
-          ctx.strokeStyle = "#224488";
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#224488"; ctx.lineWidth = 2;
           ctx.strokeRect(-hw, -hw, VEHICLE_TILE, VEHICLE_TILE);
           ctx.fillStyle = "#2244aa";
-          ctx.fillRect(-hw + 6, -hw + 4, VEHICLE_TILE - 12, VEHICLE_TILE * 0.4);
+          ctx.fillRect(-hw+6, -hw+4, VEHICLE_TILE-12, VEHICLE_TILE*0.4);
           ctx.fillStyle = "#3355bb";
-          ctx.fillRect(-hw + 4, 0, VEHICLE_TILE - 8, VEHICLE_TILE * 0.35);
+          ctx.fillRect(-hw+4, 0, VEHICLE_TILE-8, VEHICLE_TILE*0.35);
           if (!playerInVehicle) {
-            const dist = Math.hypot(player.x - wx, player.y - wy);
+            const dist = Math.hypot(player.x + player.width/2 - wx,
+                                    player.y + player.height/2 - wy);
             if (dist < 80) {
-              ctx.rotate(-angle); // unrotate text so it's always readable
+              ctx.rotate(-angle);
               ctx.fillStyle = "#fff";
               ctx.font = "bold 11px monospace";
               ctx.textAlign = "center";
@@ -4851,14 +4937,13 @@ function drawVehicles() {
           break;
       }
 
-      // HP bar — unrotated so it's always horizontal
       if (t.hp < t.maxHp && settings.enemyHealthBars) {
         ctx.rotate(-angle);
         const pct = t.hp / t.maxHp;
         ctx.fillStyle = "#300";
-        ctx.fillRect(-hw, -hw - 7, VEHICLE_TILE, 3);
+        ctx.fillRect(-hw, -hw-7, VEHICLE_TILE, 3);
         ctx.fillStyle = pct > 0.5 ? "#0f0" : "#f00";
-        ctx.fillRect(-hw, -hw - 7, VEHICLE_TILE * pct, 3);
+        ctx.fillRect(-hw, -hw-7, VEHICLE_TILE*pct, 3);
       }
 
       ctx.restore();
