@@ -759,6 +759,13 @@ function startBuildTest() {
   partInventory.bouncy = 10;
   partInventory.spike  = 10;
 
+
+  waveSystem.enabled = true;
+  waveSystem.currentMapWaves = waveConfigurations.level1;
+  waveSystem.currentWave = 0;
+  waveSystem.waveActive = false;
+  waveSystem.waveTimer = 900; // 15 second build window
+
   // Drop straight into build mode
   openBuildMode();
 
@@ -1120,30 +1127,76 @@ attackBtn.addEventListener("touchend", e => {
 });
 
 canvas.addEventListener("touchstart", (e) => {
-  if (!levelUpPending) return;
-  e.preventDefault();
-
-  const cardW = 170;
-  const cardH = 200;
-  const gap = 24;
-  const totalW = levelUpCards.length * cardW + (levelUpCards.length - 1) * gap;
-  const startX = (canvas.width - totalW) / 2;
-  const cardY = (canvas.height - cardH) / 2 - 10;
-  const rect = canvas.getBoundingClientRect();
-
-  // Scale touch coords to canvas coords (handles CSS scaling)
+  const rect   = canvas.getBoundingClientRect();
   const scaleX = canvas.width  / rect.width;
   const scaleY = canvas.height / rect.height;
-  const touch = e.changedTouches[0];
+  const touch  = e.changedTouches[0];
   const mx = (touch.clientX - rect.left) * scaleX;
   const my = (touch.clientY - rect.top)  * scaleY;
 
-  for (let i = 0; i < levelUpCards.length; i++) {
-    const cx = startX + i * (cardW + gap);
-    if (mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
-      levelUpSelectedIndex = i;
-      chooseLevelUpCard(i);
+  // ── BUILD MODE ─────────────────────────────────────────
+  if (buildMode) {
+    e.preventDefault();
+
+    // Skip / start wave button
+    const skipBtnW = 140;
+    const skipBtnX = canvas.width - skipBtnW - 12;
+    const skipBtnY = canvas.height - 116;
+    if (mx >= skipBtnX && mx <= skipBtnX + skipBtnW &&
+        my >= skipBtnY && my <= skipBtnY + 50) {
+      closeBuildMode();
+      waveSystem.waveTimer = 180;
       return;
+    }
+
+    // HUD part buttons
+    const partKeys  = Object.keys(PART_TYPES);
+    const btnW      = 90;
+    const totalW    = btnW * partKeys.length + 8 * (partKeys.length - 1);
+    const startBtnX = (canvas.width - totalW) / 2;
+    const by        = canvas.height - 58;
+
+    if (my >= by && my <= canvas.height) {
+      for (let i = 0; i < partKeys.length; i++) {
+        const bx = startBtnX + i * (btnW + 8);
+        if (mx >= bx && mx <= bx + btnW) {
+          buildSelectedPart = partKeys[i];
+          return;
+        }
+      }
+    }
+
+    // World placement — mx/my are already in canvas space, add camera for world space
+    if (gamepadIndex === null) {
+  buildCursor.wx = Math.floor((mouse.x + camera.x) / BUILD_CELL) * BUILD_CELL;
+  buildCursor.wy = Math.floor((mouse.y + camera.y) / BUILD_CELL) * BUILD_CELL;
+}
+    const existing = placedStructures.find(s => s.wx === wx && s.wy === wy);
+    if (existing) {
+      deleteBuildPart(wx, wy);
+    } else {
+      placeBuildPart(wx, wy);
+    }
+    return;
+  }
+
+  // ── LEVEL UP CARDS ─────────────────────────────────────
+  if (levelUpPending) {
+    e.preventDefault();
+    const cardW  = 170;
+    const cardH  = 200;
+    const gap    = 24;
+    const totalW = levelUpCards.length * cardW + (levelUpCards.length - 1) * gap;
+    const startX = (canvas.width - totalW) / 2;
+    const cardY  = (canvas.height - cardH) / 2 - 10;
+
+    for (let i = 0; i < levelUpCards.length; i++) {
+      const cx = startX + i * (cardW + gap);
+      if (mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
+        levelUpSelectedIndex = i;
+        chooseLevelUpCard(i);
+        return;
+      }
     }
   }
 }, { passive: false });
@@ -1398,7 +1451,7 @@ function updateGamepad() {
   if (gamepadIndex === null) return;
   const gp = navigator.getGamepads()[gamepadIndex];
   if (!gp) return;
-
+  if (buildMode) return;
   const STICK_DEAD = settings.joystickDeadzone; // deadzone
 
   // Left stick / D-pad — movement
@@ -4119,24 +4172,44 @@ function updateBuildMode() {
   }
   if (keys["x"] || keys["X"]) buildDeleteMode = !keys["x"]; // hold X to delete
 
-  // Mouse cursor → snap to grid in world space
-  const wx = Math.floor((mouse.x + camera.x) / BUILD_CELL) * BUILD_CELL;
-  const wy = Math.floor((mouse.y + camera.y) / BUILD_CELL) * BUILD_CELL;
-  buildCursor.wx = wx;
-  buildCursor.wy = wy;
-
+ // Mouse cursor — only when no controller is connected
+  if (gamepadIndex === null) {
+    buildCursor.wx = Math.floor((mouse.x + camera.x) / BUILD_CELL) * BUILD_CELL;
+    buildCursor.wy = Math.floor((mouse.y + camera.y) / BUILD_CELL) * BUILD_CELL;
+  }
+  
+  // Controller cursor movement
   // Controller cursor movement
   if (gamepadIndex !== null) {
     const gp = navigator.getGamepads()[gamepadIndex];
     if (gp) {
       const DEAD = settings.joystickDeadzone;
-      const spd = 6;
-      if (Math.abs(gp.axes[0]) > DEAD) buildCursor.wx += gp.axes[0] * spd;
-      if (Math.abs(gp.axes[1]) > DEAD) buildCursor.wy += gp.axes[1] * spd;
 
-      // Snap controller cursor to grid
-      buildCursor.wx = Math.floor(buildCursor.wx / BUILD_CELL) * BUILD_CELL;
-      buildCursor.wy = Math.floor(buildCursor.wy / BUILD_CELL) * BUILD_CELL;
+      if (!gp._buildCursorCooldown) gp._buildCursorCooldown = 0;
+      if (gp._buildCursorCooldown > 0) {
+        gp._buildCursorCooldown--;
+      } else {
+        const axisX = gp.axes[0];
+        const axisY = gp.axes[1];
+        if (axisX > DEAD || gp.buttons[15]?.pressed) {
+          buildCursor.wx += BUILD_CELL;
+          gp._buildCursorCooldown = 8;
+        } else if (axisX < -DEAD || gp.buttons[14]?.pressed) {
+          buildCursor.wx -= BUILD_CELL;
+          gp._buildCursorCooldown = 8;
+        }
+        if (axisY > DEAD || gp.buttons[13]?.pressed) {
+          buildCursor.wy += BUILD_CELL;
+          gp._buildCursorCooldown = 8;
+        } else if (axisY < -DEAD || gp.buttons[12]?.pressed) {
+          buildCursor.wy -= BUILD_CELL;
+          gp._buildCursorCooldown = 8;
+        }
+      }
+
+      // Clamp to world
+      buildCursor.wx = Math.max(0, Math.min(world.width  - BUILD_CELL, buildCursor.wx));
+      buildCursor.wy = Math.max(0, Math.min(world.height - BUILD_CELL, buildCursor.wy));
 
       // A = place, B = delete, bumpers = cycle parts
       const partKeys = Object.keys(PART_TYPES);
@@ -4166,10 +4239,10 @@ function updateBuildMode() {
       }
       if (!gp.buttons[1]?.pressed) gp._buildDeleteHeld = false;
 
-      // Y = close build mode early
+      // Y = skip wave
       if (gp.buttons[3]?.pressed && !gp._buildCloseHeld) {
         closeBuildMode();
-        startNextWave(); // ← ADD THIS
+        startNextWave();
         gp._buildCloseHeld = true;
       }
       if (!gp.buttons[3]?.pressed) gp._buildCloseHeld = false;
@@ -6890,6 +6963,12 @@ function startWaveMode(levelNumber) {
 
 // Start the next wave
 function startNextWave() {
+  if (!waveSystem.currentMapWaves) {
+    potatoMessage = "🌊 no wave config for this map";
+    potatoMessageTimer = 120;
+    buildMode = false;
+    return;
+  }
   waveSystem.currentWave++;
   waveSystem.waveActive = true;
   waveSystem.waveTimer = 0;
