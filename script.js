@@ -1166,11 +1166,9 @@ canvas.addEventListener("touchstart", (e) => {
       }
     }
 
-    // World placement — mx/my are already in canvas space, add camera for world space
-    if (gamepadIndex === null) {
-  buildCursor.wx = Math.floor((mouse.x + camera.x) / BUILD_CELL) * BUILD_CELL;
-  buildCursor.wy = Math.floor((mouse.y + camera.y) / BUILD_CELL) * BUILD_CELL;
-}
+    // World placement — convert touch canvas coords to world space
+    const wx = Math.floor((mx + camera.x) / BUILD_CELL) * BUILD_CELL;
+    const wy = Math.floor((my + camera.y) / BUILD_CELL) * BUILD_CELL;
     const existing = placedStructures.find(s => s.wx === wx && s.wy === wy);
     if (existing) {
       deleteBuildPart(wx, wy);
