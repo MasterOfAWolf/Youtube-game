@@ -1225,6 +1225,7 @@ bindTouch("btnLeft", "a");
 bindTouch("btnRight", "d");
 bindTouch("btnJump", "w");
 bindTouch("btnAttack", "f");
+bindTouch("btnDown", "s");
 
 document.getElementById("btnPause").addEventListener("click", () => {
   togglePause();
