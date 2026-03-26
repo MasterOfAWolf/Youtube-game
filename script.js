@@ -974,6 +974,8 @@ const keyMap = {
   "d": "btnRight",
   "ArrowUp": "btnJump",
   "w": "btnJump",
+  "s": "btnDown",
+  "ArrowDown": "btnDown",
   "r": "btnRestart",
   "Escape": "btnPause",
   "f": "btnAttack"
