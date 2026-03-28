@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>🥔 Level Editor — Youtube Game</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg:       #090910;
+  --panel:    #101018;
+  --panel2:   #14141e;
+  --border:   #232333;
+  --accent:   #5b8cff;
+  --text:     #c8c8e0;
+  --dim:      #44445a;
+
+  --c-wall:    #4a7abf;
+  --c-mwall:   #9b59b6;
+  --c-spike:   #e74c3c;
+  --c-ladder:  #e8a020;
+  --c-snail:   #2ecc71;
+  --c-bat:     #bb8fce;
+  --c-snowman: #85c1e9;
+  --c-turret:  #e67e22;
+  --c-spawn:   #f1c40f;
+}
+
+html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'Courier New',monospace; }
+
+/* ── HEADER ── */
+#hdr {
+  height:44px; background:var(--panel); border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:12px; padding:0 14px; flex-shrink:0;
+}
+#hdr h1 { font-size:13px; color:#f0d060; letter-spacing:2px; text-transform:uppercase; white-space:nowrap; }
+.hsep { width:1px; height:22px; background:var(--border); }
+.hinfo { font-size:11px; color:var(--dim); display:flex; align-items:center; gap:6px; }
+.hinfo b { color:var(--text); }
+#snap-px { width:42px; background:#0c0c16; border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:11px; padding:2px 5px; border-radius:3px; text-align:center; }
+#snap-px:focus { outline:none; border-color:var(--accent); }
+#level-name { width:130px; background:#0c0c16; border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:12px; padding:3px 8px; border-radius:3px; }
+#level-name:focus { outline:none; border-color:var(--accent); }
+#zoom-lbl { min-width:38px; }
+
+/* ── LAYOUT ── */
+#wrap { display:flex; height:calc(100vh - 44px - 22px); }
+
+/* ── LEFT TOOLBAR ── */
+#toolbar {
+  width:62px; background:var(--panel); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; align-items:center; padding:8px 0; gap:2px; flex-shrink:0; overflow-y:auto;
+}
+.tbtn {
+  width:50px; height:50px; border:1px solid transparent; border-radius:6px;
+  background:transparent; color:var(--text); cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-size:18px; gap:1px; transition:background .1s, border-color .1s; position:relative;
+}
+.tbtn .tl { font-size:8px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
+.tbtn:hover  { background:rgba(91,140,255,.08); border-color:var(--border); }
+.tbtn.active { background:rgba(91,140,255,.18); border-color:var(--accent); }
+.tbtn[title]:hover::after {
+  content:attr(title); position:absolute; left:58px; top:50%; transform:translateY(-50%);
+  background:#1a1a2a; border:1px solid var(--border); padding:3px 9px; border-radius:4px;
+  font-size:11px; white-space:nowrap; pointer-events:none; z-index:200; color:var(--text);
+}
+.tsep { width:38px; height:1px; background:var(--border); margin:4px 0; flex-shrink:0; }
+
+/* ── CANVAS ── */
+#cw { flex:1; position:relative; overflow:hidden; background:#07070f; }
+#cv { display:block; }
+
+/* ── RIGHT PANEL ── */
+#rpanel {
+  width:236px; background:var(--panel); border-left:1px solid var(--border);
+  display:flex; flex-direction:column; flex-shrink:0; overflow:hidden;
+}
+.rhead {
+  padding:6px 12px; font-size:10px; letter-spacing:2px; text-transform:uppercase;
+  color:#f0d060; background:rgba(240,208,96,.04); border-bottom:1px solid var(--border); flex-shrink:0;
+}
+#props-body { padding:10px 12px; display:flex; flex-direction:column; gap:5px; }
+.prow { display:flex; align-items:center; gap:6px; }
+.prow label { font-size:11px; color:var(--dim); width:54px; flex-shrink:0; }
+.prow input, .prow select {
+  flex:1; background:#0a0a14; border:1px solid var(--border); color:var(--text);
+  font-family:inherit; font-size:11px; padding:3px 6px; border-radius:3px; min-width:0;
+}
+.prow input:focus, .prow select:focus { outline:none; border-color:var(--accent); }
+.prow input[type=checkbox] { width:14px; height:14px; flex:none; cursor:pointer; }
+.no-sel { padding:14px 12px; font-size:11px; color:var(--dim); }
+
+/* obj list */
+#obj-list { flex:1; overflow-y:auto; max-height:200px; padding:3px 0; }
+.oitem {
+  padding:4px 12px; font-size:11px; cursor:pointer; display:flex; align-items:center;
+  gap:7px; border-left:2px solid transparent;
+}
+.oitem:hover { background:rgba(255,255,255,.03); }
+.oitem.sel { background:rgba(91,140,255,.1); border-left-color:var(--accent); }
+.odot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+
+/* export */
+#export-wrap { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+#export-inner { flex:1; display:flex; flex-direction:column; padding:8px; gap:6px; min-height:0; }
+#export-code {
+  flex:1; background:#07070f; border:1px solid var(--border); color:#5cff88;
+  font-family:'Courier New',monospace; font-size:10px; padding:8px;
+  resize:none; border-radius:4px; min-height:60px;
+}
+.btn {
+  padding:6px 10px; border:1px solid var(--border); border-radius:4px;
+  background:transparent; color:var(--text); font-family:inherit; font-size:11px;
+  cursor:pointer; transition:background .12s; white-space:nowrap;
+}
+.btn:hover { background:rgba(255,255,255,.06); }
+.brow { display:flex; gap:5px; }
+.ba { border-color:var(--accent); color:var(--accent); }
+.ba:hover { background:rgba(91,140,255,.12); }
+.bd { border-color:#e74c3c; color:#e74c3c; }
+.bd:hover { background:rgba(231,76,60,.1); }
+
+/* ── STATUS BAR ── */
+#sbar {
+  height:22px; background:var(--panel); border-top:1px solid var(--border);
+  display:flex; align-items:center; gap:20px; padding:0 14px;
+  font-size:10px; color:var(--dim); flex-shrink:0;
+}
+#sbar b { color:var(--text); }
+
+/* cursor modes */
+body.cur-crosshair #cv { cursor:crosshair; }
+body.cur-default   #cv { cursor:default; }
+body.cur-grab      #cv { cursor:grab; }
+body.cur-grabbing  #cv { cursor:grabbing; }
+
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:#2a2a40; border-radius:2px; }
+</style>
+</head>
+<body class="cur-crosshair">
+
+<!-- HEADER -->
+<div id="hdr">
+  <h1>🥔 Level Editor</h1>
+  <div class="hsep"></div>
+  <div class="hinfo">
+    Snap: <input type="number" id="snap-px" value="20" min="1" max="200">
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text)">
+      <input type="checkbox" id="snap-on" checked> grid
+    </label>
+  </div>
+  <div class="hsep"></div>
+  <div class="hinfo">Zoom: <b id="zoom-lbl">28%</b></div>
+  <div class="hsep"></div>
+  <div class="hinfo" style="margin-left:auto;gap:8px">
+    Level: <input type="text" id="level-name" value="my_level">
+    <button class="btn ba" onclick="saveLevel()">💾 Save</button>
+    <button class="btn"    onclick="loadPrompt()">📂 Load</button>
+    <button class="btn bd" onclick="clearAll()">🗑 Clear</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="wrap">
+
+  <!-- TOOLBAR -->
+  <div id="toolbar">
+    <button class="tbtn" id="t-select" onclick="setTool('select')" title="Select / Move  [V]">↖<span class="tl">select</span></button>
+    <div class="tsep"></div>
+    <button class="tbtn active" id="t-wall"  onclick="setTool('wall')"  title="Wall  [W]">🟦<span class="tl">wall</span></button>
+    <button class="tbtn" id="t-wall-moving"  onclick="setTool('wall-moving')" title="Moving Wall  [M]">🟪<span class="tl">moving</span></button>
+    <div class="tsep"></div>
+    <button class="tbtn" id="t-spike"  onclick="setTool('spike')"  title="Spike  [S]">🔺<span class="tl">spike</span></button>
+    <button class="tbtn" id="t-ladder" onclick="setTool('ladder')" title="Ladder  [L]">🪜<span class="tl">ladder</span></button>
+    <div class="tsep"></div>
+    <button class="tbtn" id="t-snail"   onclick="setTool('snail')"   title="Snail  [1]">🐌<span class="tl">snail</span></button>
+    <button class="tbtn" id="t-bat"     onclick="setTool('bat')"     title="Bat  [2]">🦇<span class="tl">bat</span></button>
+    <button class="tbtn" id="t-snowman" onclick="setTool('snowman')" title="Snowman  [3]">⛄<span class="tl">snowman</span></button>
+    <button class="tbtn" id="t-turret"  onclick="setTool('turret')"  title="Turret  [4]">🔴<span class="tl">turret</span></button>
+    <div class="tsep"></div>
+    <button class="tbtn" id="t-spawn" onclick="setTool('spawn')" title="Player Spawn  [P]">🟡<span class="tl">spawn</span></button>
+  </div>
+
+  <!-- CANVAS -->
+  <div id="cw"><canvas id="cv"></canvas></div>
+
+  <!-- RIGHT PANEL -->
+  <div id="rpanel">
+
+    <div style="border-bottom:1px solid var(--border)">
+      <div class="rhead">Properties</div>
+      <div id="props-area"><div class="no-sel">Nothing selected.<br>Click an object to edit.</div></div>
+      <div id="del-row" style="display:none;padding:6px 12px">
+        <button class="btn bd" style="width:100%" onclick="deleteSelected()">🗑 Delete Object</button>
+      </div>
+    </div>
+
+    <div style="border-bottom:1px solid var(--border);display:flex;flex-direction:column;max-height:220px">
+      <div class="rhead">Objects &nbsp;<span id="obj-cnt" style="color:var(--text)">0</span></div>
+      <div id="obj-list"></div>
+    </div>
+
+    <div id="export-wrap">
+      <div class="rhead">Export JS</div>
+      <div id="export-inner">
+        <div class="brow">
+          <button class="btn ba" style="flex:1" onclick="genExport()">⚙ Generate</button>
+          <button class="btn"    onclick="copyExport()">📋 Copy</button>
+        </div>
+        <textarea id="export-code" readonly placeholder="Click Generate..."></textarea>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="sbar">
+  <span>World: <b id="st-xy">0, 0</b></span>
+  <span>Objects: <b id="st-n">0</b></span>
+  <span>Selected: <b id="st-sel">none</b></span>
+  <span style="margin-left:auto;color:var(--dim)">Del=delete · Ctrl+Z/Y=undo/redo · Scroll=zoom · Space+drag=pan · RClick=delete</span>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  YOUTUBE GAME — LEVEL EDITOR
+// ═══════════════════════════════════════════════════════════
+
+const cv   = document.getElementById('cv');
+const ctx  = cv.getContext('2d');
+const cw   = document.getElementById('cw');
+
+const WORLD_W = 2800, WORLD_H = 2100;
+
+// View
+let vx = 0, vy = 0, zoom = 0.28;
+
+// State
+let tool     = 'wall';
+let objects  = [];
+let spawn    = { x: 100, y: 2000 };
+let selId    = null;
+let nextId   = 1;
+
+// Draw drag
+let drawing = false, dsx = 0, dsy = 0, dcx = 0, dcy = 0;
+
+// Move drag
+let moving = false, mOffX = 0, mOffY = 0;
+
+// Pan
+let panning = false, psx = 0, psy = 0, pvx = 0, pvy = 0;
+let spaceDown = false;
+
+// Snap
+let snapOn = true, snap = 20;
+
+// Undo
+let undoStack = [], redoStack = [];
+
+// ── Type metadata ──────────────────────────────────────────
+const META = {
+  wall:        { col:'#4a7abf', label:'Wall',         rect:true  },
+  'wall-moving':{ col:'#9b59b6', label:'Moving Wall', rect:true  },
+  spike:       { col:'#e74c3c', label:'Spike',        rect:true  },
+  ladder:      { col:'#e8a020', label:'Ladder',       rect:true  },
+  snail:       { col:'#2ecc71', label:'Snail',        rect:false },
+  bat:         { col:'#bb8fce', label:'Bat',          rect:false },
+  snowman:     { col:'#85c1e9', label:'Snowman',      rect:false },
+  turret:      { col:'#e67e22', label:'Turret',       rect:false },
+  spawn:       { col:'#f1c40f', label:'Player Spawn', rect:false },
+};
+
+const DFLT_SIZE = {
+  snail:{ w:28,h:20 }, bat:{ w:28,h:20 }, snowman:{ w:26,h:38 }, turret:{ w:24,h:32 }, spawn:{ w:24,h:40 }
+};
+
+const EMOJI = { snail:'🐌', bat:'🦇', snowman:'⛄', turret:'🔴' };
+
+// ── Object factory ─────────────────────────────────────────
+function makeObj(type, x, y, w, h) {
+  const o = { id: nextId++, type, x, y, width: w, height: h };
+  if (type==='snail')        Object.assign(o, { dir:1, speed:0.2, hp:2, maxHp:2 });
+  if (type==='bat')          Object.assign(o, { hp:2, maxHp:2 });
+  if (type==='snowman')      Object.assign(o, { speed:0.5, hp:3, maxHp:3 });
+  if (type==='turret')       Object.assign(o, { fireRate:140, hp:3, maxHp:3, armed:true });
+  if (type==='wall-moving')  Object.assign(o, { speed:1.5, range:100, axis:'h' });
+  return o;
+}
+
+// ── Coords ────────────────────────────────────────────────
+function toW(sx,sy){ return { x:(sx-vx)/zoom, y:(sy-vy)/zoom }; }
+function snapV(v){ return snapOn ? Math.round(v/snap)*snap : Math.round(v); }
+
+// ── Undo ──────────────────────────────────────────────────
+function pushUndo(){
+  undoStack.push(JSON.stringify({objects,spawn,nextId}));
+  if(undoStack.length>80) undoStack.shift();
+  redoStack=[];
+}
+function undo(){
+  if(!undoStack.length) return;
+  redoStack.push(JSON.stringify({objects,spawn,nextId}));
+  restore(JSON.parse(undoStack.pop()));
+}
+function redo(){
+  if(!redoStack.length) return;
+  undoStack.push(JSON.stringify({objects,spawn,nextId}));
+  restore(JSON.parse(redoStack.pop()));
+}
+function restore(s){
+  objects=s.objects; spawn=s.spawn; nextId=s.nextId;
+  selId=null; refreshUI();
+}
+
+// ── Hit test ──────────────────────────────────────────────
+function hit(wx,wy){
+  for(let i=objects.length-1;i>=0;i--){
+    const o=objects[i];
+    const w=o.width||DFLT_SIZE[o.type]?.w||20;
+    const h=o.height||DFLT_SIZE[o.type]?.h||20;
+    if(wx>=o.x&&wx<=o.x+w&&wy>=o.y&&wy<=o.y+h) return o;
+  }
+  const sw=DFLT_SIZE.spawn.w, sh=DFLT_SIZE.spawn.h;
+  if(wx>=spawn.x&&wx<=spawn.x+sw&&wy>=spawn.y&&wy<=spawn.y+sh)
+    return {id:'__spawn__',type:'spawn',...spawn,width:sw,height:sh};
+  return null;
+}
+
+// ── Tool switch ───────────────────────────────────────────
+function setTool(t){
+  tool=t; selId=null;
+  document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('active'));
+  const el=document.getElementById('t-'+t); if(el) el.classList.add('active');
+  const cur = t==='select' ? 'default' : 'crosshair';
+  document.body.className='cur-'+cur;
+  refreshUI();
+}
+
+// ── Mouse ─────────────────────────────────────────────────
+let mouseWX=0, mouseWY=0;
+
+cv.addEventListener('mousedown', e=>{
+  e.preventDefault();
+  const raw=toW(e.offsetX,e.offsetY);
+
+  // Pan: middle-click or space+left
+  if(e.button===1||(e.button===0&&spaceDown)){
+    panning=true; psx=e.clientX; psy=e.clientY; pvx=vx; pvy=vy;
+    document.body.className='cur-grabbing'; return;
+  }
+  if(e.button!==0) return;
+
+  const wx=snapV(raw.x), wy=snapV(raw.y);
+
+  // Right-click delete
+  if(e.button===2){ const h2=hit(raw.x,raw.y); if(h2) del(h2.id); return; }
+
+  if(tool==='select'){
+    const h2=hit(raw.x,raw.y);
+    if(h2){
+      selId=h2.id; moving=true;
+      mOffX=raw.x-h2.x; mOffY=raw.y-h2.y;
+      pushUndo();
+    } else { selId=null; }
+    refreshUI(); return;
+  }
+
+  // Rect tools
+  if(META[tool]?.rect){
+    drawing=true; dsx=wx; dsy=wy; dcx=wx; dcy=wy; return;
+  }
+
+  // Click-place tools
+  pushUndo();
+  if(tool==='spawn'){ spawn={x:wx,y:wy}; refreshUI(); return; }
+  if(DFLT_SIZE[tool]){
+    const sz=DFLT_SIZE[tool];
+    const o=makeObj(tool,wx,wy,sz.w,sz.h);
+    objects.push(o); selId=o.id; refreshUI(); return;
+  }
+});
+
+cv.addEventListener('mousemove', e=>{
+  const raw=toW(e.offsetX,e.offsetY);
+  mouseWX=raw.x; mouseWY=raw.y;
+  document.getElementById('st-xy').textContent=`${Math.round(raw.x)}, ${Math.round(raw.y)}`;
+
+  if(panning){
+    vx=pvx+(e.clientX-psx); vy=pvy+(e.clientY-psy); render(); return;
+  }
+  if(moving&&selId!==null){
+    const wx=snapV(raw.x-mOffX), wy=snapV(raw.y-mOffY);
+    if(selId==='__spawn__'){ spawn.x=wx; spawn.y=wy; }
+    else { const o=objects.find(o=>o.id===selId); if(o){o.x=wx;o.y=wy;} }
+    refreshProps(); render(); return;
+  }
+  if(drawing){ dcx=snapV(raw.x); dcy=snapV(raw.y); render(); return; }
+  render();
+});
+
+cv.addEventListener('mouseup', e=>{
+  if(panning){
+    panning=false;
+    document.body.className='cur-'+(tool==='select'?'default':'crosshair'); return;
+  }
+  if(moving){ moving=false; refreshUI(); return; }
+  if(drawing&&e.button===0){
+    drawing=false;
+    const x1=Math.min(dsx,dcx), y1=Math.min(dsy,dcy);
+    const w=Math.max(Math.abs(dcx-dsx),snap||4);
+    const h=Math.max(Math.abs(dcy-dsy),snap||4);
+    if(w>2&&h>2){
+      pushUndo();
+      const o=makeObj(tool,x1,y1,w,h);
+      objects.push(o); selId=o.id; refreshUI();
+    }
+    render();
+  }
+});
+
+cv.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  const raw=toW(e.offsetX,e.offsetY);
+  const h2=hit(raw.x,raw.y); if(h2) del(h2.id);
+});
+
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const f=e.deltaY<0?1.12:0.89;
+  const wx=(e.offsetX-vx)/zoom, wy=(e.offsetY-vy)/zoom;
+  zoom=Math.max(0.04,Math.min(5,zoom*f));
+  vx=e.offsetX-wx*zoom; vy=e.offsetY-wy*zoom;
+  document.getElementById('zoom-lbl').textContent=Math.round(zoom*100)+'%';
+  render();
+},{passive:false});
+
+// ── Keyboard ──────────────────────────────────────────────
+window.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+  if(e.key===' '){ e.preventDefault(); spaceDown=true; }
+  if((e.key==='Delete'||e.key==='Backspace')&&selId) del(selId);
+  if(e.ctrlKey&&e.key==='z'){ e.preventDefault(); undo(); }
+  if(e.ctrlKey&&e.key==='y'){ e.preventDefault(); redo(); }
+  const map={v:'select',w:'wall',m:'wall-moving',s:'spike',l:'ladder','1':'snail','2':'bat','3':'snowman','4':'turret',p:'spawn'};
+  if(!e.ctrlKey&&map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()]);
+});
+window.addEventListener('keyup',e=>{ if(e.key===' ') spaceDown=false; });
+
+// ── Delete ────────────────────────────────────────────────
+function del(id){
+  if(!id) return; pushUndo();
+  objects=objects.filter(o=>o.id!==id); selId=null; refreshUI();
+}
+function deleteSelected(){ del(selId); }
+
+// ── Render ────────────────────────────────────────────────
+function render(){
+  const W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Dark outer bg
+  ctx.fillStyle='#06060d'; ctx.fillRect(0,0,W,H);
+
+  ctx.save();
+  ctx.translate(vx,vy); ctx.scale(zoom,zoom);
+
+  // World bg
+  ctx.fillStyle='#0c0c1a'; ctx.fillRect(0,0,WORLD_W,WORLD_H);
+
+  // Grid
+  if(snapOn&&zoom>0.06){
+    ctx.lineWidth=0.5/zoom;
+    // Fine grid
+    if(zoom>0.12){
+      ctx.strokeStyle='rgba(70,70,110,0.3)';
+      ctx.beginPath();
+      for(let x=0;x<=WORLD_W;x+=snap){ctx.moveTo(x,0);ctx.lineTo(x,WORLD_H);}
+      for(let y=0;y<=WORLD_H;y+=snap){ctx.moveTo(0,y);ctx.lineTo(WORLD_W,y);}
+      ctx.stroke();
+    }
+    // Major lines every 200
+    ctx.strokeStyle='rgba(100,100,160,0.22)';
+    ctx.lineWidth=1/zoom;
+    ctx.beginPath();
+    for(let x=0;x<=WORLD_W;x+=200){ctx.moveTo(x,0);ctx.lineTo(x,WORLD_H);}
+    for(let y=0;y<=WORLD_H;y+=200){ctx.moveTo(0,y);ctx.lineTo(WORLD_W,y);}
+    ctx.stroke();
+    // 200px ruler labels
+    if(zoom>0.1){
+      ctx.fillStyle='rgba(100,100,160,0.5)';
+      ctx.font=`${10/zoom}px monospace`;
+      ctx.textAlign='left';
+      for(let x=200;x<WORLD_W;x+=200) ctx.fillText(x,x+2,-2/zoom/zoom);
+      for(let y=200;y<WORLD_H;y+=200) ctx.fillText(y,2/zoom,y-2);
+    }
+  }
+
+  // World border
+  ctx.strokeStyle='#3a3a6a'; ctx.lineWidth=2/zoom; ctx.strokeRect(0,0,WORLD_W,WORLD_H);
+
+  // ── Floor hint line ──
+  ctx.strokeStyle='rgba(255,200,100,0.08)'; ctx.lineWidth=1/zoom;
+  ctx.setLineDash([8/zoom,8/zoom]);
+  ctx.beginPath(); ctx.moveTo(0,WORLD_H-30); ctx.lineTo(WORLD_W,WORLD_H-30); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Objects
+  for(const o of objects) drawObj(o);
+
+  // Player spawn
+  drawSpawn();
+
+  // Ghost while drawing
+  if(drawing){
+    const x1=Math.min(dsx,dcx), y1=Math.min(dsy,dcy);
+    const w=Math.max(Math.abs(dcx-dsx),snap), h=Math.max(Math.abs(dcy-dsy),snap);
+    const c=META[tool]?.col||'#fff';
+    ctx.save();
+    ctx.globalAlpha=0.4; ctx.fillStyle=c; ctx.fillRect(x1,y1,w,h);
+    ctx.globalAlpha=1; ctx.strokeStyle=c; ctx.lineWidth=2/zoom; ctx.strokeRect(x1,y1,w,h);
+    // Size label
+    ctx.fillStyle='#fff'; ctx.font=`bold ${11/zoom}px monospace`; ctx.textAlign='center';
+    ctx.fillText(`${w}×${h}`, x1+w/2, y1+h/2);
+    ctx.restore();
+  }
+
+  // Crosshair
+  if(!drawing&&!moving&&tool!=='select'){
+    const sx=snapV(mouseWX), sy=snapV(mouseWY);
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=0.5/zoom;
+    ctx.setLineDash([4/zoom,4/zoom]);
+    ctx.beginPath();
+    ctx.moveTo(sx,0);ctx.lineTo(sx,WORLD_H);
+    ctx.moveTo(0,sy);ctx.lineTo(WORLD_W,sy);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function drawObj(o){
+  const sel=o.id===selId;
+  const c=META[o.type]?.col||'#fff';
+  const w=o.width||DFLT_SIZE[o.type]?.w||20;
+  const h=o.height||DFLT_SIZE[o.type]?.h||20;
+  ctx.save();
+
+  if(o.type==='spike'){
+    ctx.fillStyle=c+'22'; ctx.fillRect(o.x,o.y,w,h);
+    ctx.fillStyle=c;
+    const cnt=Math.max(1,Math.floor(w/10));
+    const tw=w/cnt;
+    for(let i=0;i<cnt;i++){
+      ctx.beginPath();
+      ctx.moveTo(o.x+i*tw,o.y+h);
+      ctx.lineTo(o.x+(i+.5)*tw,o.y);
+      ctx.lineTo(o.x+(i+1)*tw,o.y+h);
+      ctx.closePath(); ctx.fill();
+    }
+
+  } else if(o.type==='ladder'){
+    ctx.fillStyle=c+'18'; ctx.fillRect(o.x,o.y,w,h);
+    ctx.strokeStyle=c; ctx.lineWidth=1.5/zoom;
+    ctx.beginPath();
+    ctx.moveTo(o.x+5,o.y); ctx.lineTo(o.x+5,o.y+h);
+    ctx.moveTo(o.x+w-5,o.y); ctx.lineTo(o.x+w-5,o.y+h);
+    ctx.stroke();
+    ctx.lineWidth=1/zoom;
+    for(let ry=o.y+10;ry<o.y+h;ry+=16){
+      ctx.beginPath(); ctx.moveTo(o.x+5,ry); ctx.lineTo(o.x+w-5,ry); ctx.stroke();
+    }
+
+  } else if(o.type==='wall'){
+    ctx.fillStyle=c+'2a'; ctx.fillRect(o.x,o.y,w,h);
+    ctx.fillStyle=c+'55'; ctx.fillRect(o.x,o.y,w,3);
+    ctx.strokeStyle=c+'99'; ctx.lineWidth=1/zoom; ctx.strokeRect(o.x,o.y,w,h);
+
+  } else if(o.type==='wall-moving'){
+    ctx.fillStyle=c+'25'; ctx.fillRect(o.x,o.y,w,h);
+    ctx.strokeStyle=c; ctx.lineWidth=1.5/zoom;
+    ctx.setLineDash([5/zoom,4/zoom]); ctx.strokeRect(o.x,o.y,w,h); ctx.setLineDash([]);
+    // Arrow showing axis
+    const ax=o.x+w/2, ay=o.y+h/2, ar=Math.min(w,h)*.28;
+    ctx.fillStyle=c+'cc'; ctx.strokeStyle=c+'cc'; ctx.lineWidth=1.5/zoom;
+    if(o.axis==='h'){
+      arrow(o.x+w/2-ar, ay, o.x+w/2+ar, ay);
+    } else {
+      arrow(ax, o.y+h/2-ar, ax, o.y+h/2+ar);
+    }
+
+  } else {
+    // Point object
+    ctx.fillStyle=c+'2a'; ctx.strokeStyle=c; ctx.lineWidth=1.5/zoom;
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(o.x,o.y,w,h,3/zoom);
+    else ctx.rect(o.x,o.y,w,h);
+    ctx.fill(); ctx.stroke();
+    // Emoji
+    const em=EMOJI[o.type];
+    if(em&&zoom>0.12){
+      const fs=Math.min(h*.65,14)/zoom;
+      ctx.font=`${fs}px serif`; ctx.textAlign='center';
+      ctx.fillText(em, o.x+w/2, o.y+h/2+fs*.35);
+    }
+  }
+
+  // Selection ring + handles
+  if(sel){
+    ctx.strokeStyle='#ffffff'; ctx.lineWidth=2/zoom; ctx.setLineDash([]);
+    ctx.strokeRect(o.x-3/zoom, o.y-3/zoom, w+6/zoom, h+6/zoom);
+    ctx.fillStyle='#fff';
+    const hs=5/zoom;
+    [[o.x,o.y],[o.x+w,o.y],[o.x,o.y+h],[o.x+w,o.y+h]].forEach(([hx,hy])=>{
+      ctx.fillRect(hx-hs/2, hy-hs/2, hs, hs);
+    });
+  }
+
+  ctx.restore();
+}
+
+function drawSpawn(){
+  const x=spawn.x, y=spawn.y;
+  const w=DFLT_SIZE.spawn.w, h=DFLT_SIZE.spawn.h;
+  const sel=selId==='__spawn__';
+  ctx.save();
+  ctx.fillStyle='#f1c40f18';
+  ctx.strokeStyle='#f1c40f'; ctx.lineWidth=1.5/zoom;
+  ctx.setLineDash([5/zoom,4/zoom]);
+  ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
+  ctx.fillRect(x,y,w,h);
+  if(zoom>0.12){
+    const fs=10/zoom;
+    ctx.font=`${fs}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#f1c40f';
+    ctx.fillText('SPAWN', x+w/2, y+h/2+fs*.35);
+  }
+  if(sel){
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2/zoom; ctx.setLineDash([]);
+    ctx.strokeRect(x-3/zoom,y-3/zoom,w+6/zoom,h+6/zoom);
+  }
+  ctx.restore();
+}
+
+function arrow(x1,y1,x2,y2){
+  const a=Math.atan2(y2-y1,x2-x1);
+  const hs=7/zoom;
+  ctx.beginPath();
+  ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-hs*Math.cos(a-.45), y2-hs*Math.sin(a-.45));
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-hs*Math.cos(a+.45), y2-hs*Math.sin(a+.45));
+  ctx.stroke();
+}
+
+// ── UI refresh ────────────────────────────────────────────
+function refreshUI(){ refreshProps(); refreshList(); statusBar(); render(); }
+
+function getSelObj(){
+  if(!selId) return null;
+  if(selId==='__spawn__') return {id:'__spawn__',type:'spawn',...spawn,width:DFLT_SIZE.spawn.w,height:DFLT_SIZE.spawn.h};
+  return objects.find(o=>o.id===selId)||null;
+}
+
+function refreshProps(){
+  const area=document.getElementById('props-area');
+  const delRow=document.getElementById('del-row');
+  const o=getSelObj();
+  if(!o){ area.innerHTML='<div class="no-sel">Nothing selected.<br>Click an object to edit.</div>'; delRow.style.display='none'; return; }
+  delRow.style.display='block';
+
+  const c=META[o.type]?.col||'#fff';
+  let h=`<div id="props-body">`;
+  h+=`<div class="prow"><label style="color:${c};width:auto;font-size:12px;font-weight:bold">${META[o.type]?.label||o.type}</label></div>`;
+
+  const row=(lbl,key,type,extra='')=>
+    `<div class="prow"><label>${lbl}</label><input type="${type}" value="${o[key]??''}" data-key="${key}" onchange="setProp(this)" ${extra}></div>`;
+  const chk=(lbl,key)=>
+    `<div class="prow"><label>${lbl}</label><input type="checkbox" data-key="${key}" onchange="setProp(this)" ${o[key]?'checked':''}></div>`;
+  const sel=(lbl,key,opts)=>
+    `<div class="prow"><label>${lbl}</label><select data-key="${key}" onchange="setProp(this)">${opts}</select></div>`;
+
+  h+=row('X','x','number');
+  h+=row('Y','y','number');
+
+  if(META[o.type]?.rect){ h+=row('W','width','number'); h+=row('H','height','number'); }
+
+  if(o.type==='wall-moving'){
+    h+=row('Speed','speed','number','step="0.5"');
+    h+=row('Range','range','number');
+    h+=sel('Axis','axis',
+      `<option value="h" ${o.axis==='h'?'selected':''}>↔ Horizontal</option>
+       <option value="v" ${o.axis==='v'?'selected':''}>↕ Vertical</option>`);
+  }
+  if(o.type==='snail'){
+    h+=row('HP','hp','number');
+    h+=row('Speed','speed','number','step="0.1"');
+    h+=sel('Dir','dir',
+      `<option value="1"  ${o.dir===1? 'selected':''}>→ Right</option>
+       <option value="-1" ${o.dir===-1?'selected':''}>← Left</option>`);
+  }
+  if(o.type==='bat')     { h+=row('HP','hp','number'); }
+  if(o.type==='snowman') { h+=row('HP','hp','number'); h+=row('Speed','speed','number','step="0.1"'); }
+  if(o.type==='turret')  {
+    h+=row('HP','hp','number');
+    h+=row('FireRate','fireRate','number');
+    h+=chk('Armed','armed');
+  }
+  h+=`</div>`;
+  area.innerHTML=h;
+}
+
+function setProp(el){
+  const key=el.dataset.key;
+  const o=getSelObj(); if(!o) return;
+  let val = el.type==='checkbox' ? el.checked
+           : el.type==='number'  ? parseFloat(el.value)
+           : el.value;
+  if(key==='dir'&&o.type==='snail') val=parseFloat(val);
+  if(o.id==='__spawn__'){ spawn[key]=val; }
+  else { const obj=objects.find(ob=>ob.id===o.id); if(obj) obj[key]=val; }
+  render(); refreshList();
+}
+
+function refreshList(){
+  const body=document.getElementById('obj-list');
+  document.getElementById('obj-cnt').textContent=objects.length;
+  let html='';
+  // Group by type
+  const types=[...new Set(objects.map(o=>o.type))];
+  for(const t of types){
+    const list=objects.filter(o=>o.type===t);
+    const c=META[t]?.col||'#fff';
+    html+=list.map(o=>{
+      const s=o.id===selId;
+      return `<div class="oitem ${s?'sel':''}" onclick="pickObj(${o.id})">
+        <div class="odot" style="background:${c}"></div>
+        <span style="color:${s?'#fff':'var(--text)'}">
+          ${META[t]?.label||t} <span style="color:var(--dim);font-size:10px">${Math.round(o.x)},${Math.round(o.y)}</span>
+        </span></div>`;
+    }).join('');
+  }
+  const ss=selId==='__spawn__';
+  html+=`<div class="oitem ${ss?'sel':''}" onclick="pickObj('__spawn__')">
+    <div class="odot" style="background:#f1c40f"></div>
+    <span>Player Spawn <span style="color:var(--dim);font-size:10px">${spawn.x},${spawn.y}</span></span>
+  </div>`;
+  body.innerHTML=html||'<div class="no-sel">No objects yet.</div>';
+}
+
+function pickObj(id){ selId=id; refreshUI(); }
+
+function statusBar(){
+  document.getElementById('st-n').textContent=objects.length;
+  const o=getSelObj();
+  document.getElementById('st-sel').textContent=o
+    ? `${META[o.type]?.label||o.type} (${Math.round(o.x)}, ${Math.round(o.y)})`
+    : 'none';
+}
+
+// ── Settings ──────────────────────────────────────────────
+document.getElementById('snap-on').addEventListener('change',function(){ snapOn=this.checked; render(); });
+document.getElementById('snap-px').addEventListener('change',function(){ snap=Math.max(1,parseInt(this.value)||20); render(); });
+
+// ── Save / Load ───────────────────────────────────────────
+function saveLevel(){
+  const name=document.getElementById('level-name').value.trim()||'my_level';
+  localStorage.setItem('yt_lvl_'+name, JSON.stringify({objects,spawn,nextId}));
+  // Visual feedback
+  const btn=event.target; const orig=btn.textContent;
+  btn.textContent='✅ Saved!'; setTimeout(()=>btn.textContent=orig,1500);
+}
+
+function loadPrompt(){
+  const keys=Object.keys(localStorage).filter(k=>k.startsWith('yt_lvl_')).map(k=>k.slice(7));
+  if(!keys.length){ alert('No saved levels found.'); return; }
+  const choice=prompt('Saved levels:\n\n'+keys.join('\n')+'\n\nType name to load:');
+  if(!choice) return;
+  const raw=localStorage.getItem('yt_lvl_'+choice.trim());
+  if(!raw){ alert('Level "'+choice+'" not found.'); return; }
+  const d=JSON.parse(raw);
+  objects=d.objects||[]; spawn=d.spawn||{x:100,y:2000}; nextId=d.nextId||1;
+  selId=null;
+  document.getElementById('level-name').value=choice.trim();
+  refreshUI();
+}
+
+function clearAll(){
+  if(!confirm('Clear all objects? (Undo is available)')) return;
+  pushUndo(); objects=[]; spawn={x:100,y:2000}; selId=null; refreshUI();
+}
+
+// ── Export ────────────────────────────────────────────────
+function genExport(){
+  const name=document.getElementById('level-name').value.trim()||'my_level';
+  const L=[];
+  L.push(`// ── Level: ${name} ── (generated by Level Editor)`);
+  L.push(`// Paste inside your startLevel / wave function after clearing arrays`);
+  L.push(``);
+  L.push(`player.x = ${spawn.x};`);
+  L.push(`player.y = ${spawn.y};`);
+  L.push(``);
+
+  const byType={};
+  for(const o of objects){ if(!byType[o.type]) byType[o.type]=[]; byType[o.type].push(o); }
+
+  if(byType.wall?.length){
+    L.push(`walls.push(`);
+    byType.wall.forEach((o,i)=>{
+      const c=i<byType.wall.length-1?',':'';
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: ${o.width}, height: ${o.height} }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  if(byType['wall-moving']?.length){
+    L.push(`walls.push(`);
+    byType['wall-moving'].forEach((o,i)=>{
+      const c=i<byType['wall-moving'].length-1?',':'';
+      const axKey=o.axis==='h'?'startX':'startY';
+      const axVal=o.axis==='h'?o.x:o.y;
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: ${o.width}, height: ${o.height}, moving: true, dir: 1, speed: ${o.speed??1.5}, ${axKey}: ${axVal}, range: ${o.range??100} }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  if(byType.spike?.length){
+    L.push(`spikes.push(`);
+    byType.spike.forEach((o,i)=>{
+      const c=i<byType.spike.length-1?',':'';
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: ${o.width}, height: ${o.height} }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  if(byType.ladder?.length){
+    L.push(`ladders.push(`);
+    byType.ladder.forEach((o,i)=>{
+      const c=i<byType.ladder.length-1?',':'';
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: ${o.width}, height: ${o.height} }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  if(byType.snail?.length){
+    L.push(`snails.push(`);
+    byType.snail.forEach((o,i)=>{
+      const c=i<byType.snail.length-1?',':'';
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: 28, height: 20, dx: 0, dy: 0, dir: ${o.dir??1}, speed: ${o.speed??0.2}, gravity: 0.6, chaseRange: 80, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: ${o.hp??2}, maxHp: ${o.hp??2}, hitFlash: 0, frame: 0, frameTimer: 0 }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  if(byType.bat?.length){
+    L.push(`bats.push(`);
+    byType.bat.forEach((o,i)=>{
+      const c=i<byType.bat.length-1?',':'';
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: 28, height: 20, dx: 0, dy: 0, hp: ${o.hp??2}, maxHp: ${o.hp??2}, hitFlash: 0 }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  if(byType.snowman?.length){
+    L.push(`snowmen.push(`);
+    byType.snowman.forEach((o,i)=>{
+      const c=i<byType.snowman.length-1?',':'';
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: 26, height: 38, speed: ${o.speed??0.5}, slowRadius: 140, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [], hp: ${o.hp??3}, maxHp: ${o.hp??3}, hitFlash: 0 }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  if(byType.turret?.length){
+    L.push(`turrets.push(`);
+    byType.turret.forEach((o,i)=>{
+      const c=i<byType.turret.length-1?',':'';
+      L.push(`  { x: ${o.x}, y: ${o.y}, cooldown: 0, fireRate: ${o.fireRate??140}, hp: ${o.hp??3}, maxHp: ${o.hp??3}, armed: ${o.armed??true} }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  document.getElementById('export-code').value=L.join('\n');
+}
+
+function copyExport(){
+  const ta=document.getElementById('export-code');
+  if(!ta.value) genExport();
+  navigator.clipboard.writeText(ta.value).then(()=>{
+    const btn=event.target; const orig=btn.textContent;
+    btn.textContent='✅ Copied!'; setTimeout(()=>btn.textContent=orig,1600);
+  });
+}
+
+// ── Canvas resize ─────────────────────────────────────────
+function resize(){
+  cv.width=cw.clientWidth; cv.height=cw.clientHeight; render();
+}
+new ResizeObserver(resize).observe(cw);
+resize();
+
+// Centre world on load
+vx=(cw.clientWidth - WORLD_W*zoom)/2;
+vy=(cw.clientHeight- WORLD_H*zoom)/2;
+
+refreshUI();
+</script>
+</body>
+</html>

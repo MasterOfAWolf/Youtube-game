@@ -161,7 +161,7 @@
 
     </div>
 
-    <button class="back-btn settings-back" onclick="backToMenu()">← Back</button>
+    <button class="back-btn settings-back" onclick="backToMenuOrPause()">← Back</button>
   </div>
 </div>
 <!-- Comment -->
@@ -230,6 +230,7 @@
 <div id="pauseMenu" class="hidden">
   <h2>Paused</h2>
   <button class="back-btn" onclick="togglePause()">Resume</button>
+  <button class="back-btn" onclick="openSettings()">Settings</button>
   <button onclick="backToMenu()">Quit to Menu</button>
   <div id="upgradeList" style="
     margin-top: 14px;

@@ -273,6 +273,40 @@ const MAP_WIDTH = 2800;
 const MAP_HEIGHT = 2100;
 const WALL_THICKNESS = 30;
 
+// Screaming potato sprite sheet
+const screamPotatoSheet = new Image();
+screamPotatoSheet.src = "Assets/Sprites/screaming-potato-sheet.png";
+
+const SCREAM_ANIM = {
+  frameW: 16, frameH: 16,   // size of ONE frame in your sheet
+  frameCount: 5,
+  framesPerRow: 5,
+  frameSpeed: 5,             // ticks per frame
+  drawSize: 22, drawSizeBig: 32,
+};
+
+// Screams — add as many files as you want, one is picked randomly on fire + mid-flight
+const potatoScreams = [
+  new Audio("Assets/Sfx/scream1.mp3"),
+  new Audio("Assets/Sfx/scream2.mp3"),
+  new Audio("Assets/Sfx/scream3.mp3"),
+];
+const potatoImpactSFX    = new Audio("Assets/Sfx/splat.mp3");
+const explosionImpactSFX = new Audio("Assets/Sfx/boom.mp3");
+
+function playPotatoScream() {
+  if (!settings.sfxEnabled) return;
+  const s = potatoScreams[Math.floor(Math.random() * potatoScreams.length)];
+  s.currentTime = 0;
+  s.play().catch(() => {});
+}
+function playPotatoImpact(explosive = false) {
+  if (!settings.sfxEnabled) return;
+  const s = explosive ? explosionImpactSFX : potatoImpactSFX;
+  s.currentTime = 0;
+  s.play().catch(() => {});
+}
+
 //Debugging amd testing Module
 
 function initDebugTests() {
@@ -2316,9 +2350,16 @@ function firePotatoCannon() {
     size:      baked ? 13 : 8,
     explosive: baked,
     alive:     true,
-    trail:     []
+    trail:     [],
+    animFrame: 0,
+    animTimer: 0,
+    rotation: 0,
+    screamTimer: 0,
+    screamInterval: 22 + Math.floor(Math.random() * 18)
   });
   
+  playPotatoScream();
+
   cannonCooldown = playerUpgrades.cannonRapidEnabled
   ? Math.floor(CANNON_COOLDOWN_FRAMES / 2)
   : CANNON_COOLDOWN_FRAMES;
@@ -2338,6 +2379,21 @@ function updateCannonProjectiles() {
     p.trail.push({ x: p.x, y: p.y });
     if (p.trail.length > 9) p.trail.shift();
 
+    // Animation
+p.animTimer++;
+if (p.animTimer >= SCREAM_ANIM.frameSpeed) {
+  p.animTimer = 0;
+  p.animFrame = (p.animFrame + 1) % SCREAM_ANIM.frameCount;
+}
+p.rotation += p.vx * 0.055;
+
+// Mid-flight scream
+p.screamTimer++;
+if (p.screamTimer >= p.screamInterval) {
+  p.screamTimer = 0;
+  p.screamInterval = 20 + Math.floor(Math.random() * 20);
+  playPotatoScream();
+}
     // Physics
 // Physics
     p.x += p.vx;
@@ -2364,6 +2420,7 @@ function updateCannonProjectiles() {
 
     // World bounds
     if (p.x < 0 || p.x > world.width || p.y > world.height + 300) {
+      playPotatoImpact(p.explosive);
       p.alive = false; continue;
     }
 
@@ -2378,6 +2435,7 @@ if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
     p.bounced = true;
   } else {
     if (p.explosive) createExplosion(p.x, p.y);
+    playPotatoImpact(p.explosive);
     p.alive = false;
   }
   continue;
@@ -2476,6 +2534,7 @@ if (!hit) {
     createExplosion(p.x, p.y);
   }
   p.alive = false;
+  playPotatoImpact(p.explosive);
       }
     }
   }
@@ -2576,96 +2635,58 @@ function updateExplosions() {
   }
 }
 
+
 function drawPotatoCannon() {
-  // Always draw projectiles — homing shots fire even without the potato
-  for (const p of cannonProjectiles) {
-    if (!p.alive) continue;
-    for (let j = 0; j < p.trail.length; j++) {
-      const frac = j / p.trail.length;
-      const alpha = frac * 0.55;
-      const sz = p.size * frac * 0.65;
-      ctx.fillStyle = p.homing
-        ? `rgba(223,139,254,${alpha})`
-        : p.explosive ? `rgba(255,110,0,${alpha})` : `rgba(160,100,40,${alpha})`;
-      ctx.beginPath();
-      ctx.arc(p.trail[j].x, p.trail[j].y, Math.max(sz, 1), 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.save();
-    if (p.homing) {ctx.shadowColor = "#8E44AD"; ctx.shadowBlur = 14; ctx.fillStyle = "#fa1593";}
-    else if (p.explosive) { ctx.shadowColor = "#ff5500"; ctx.shadowBlur = 18; ctx.fillStyle = "#ff8800"; }
-    else { ctx.fillStyle = "#b58b4a"; }
-    const s = p.size;
-    ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = p.homing ? "#df8bfe" : p.explosive ? "#ffdd88" : "#d4aa6a";
-    ctx.beginPath(); ctx.arc(p.x - s * 0.3, p.y - s * 0.3, s * 0.4, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
 
-  if (!hasPotato) return; // barrel only draws with potato
+  if (!hasPotato) return;
 
-  const cx     = player.x + player.width  / 2;
-  const cy     = player.y + player.height / 2;
-  const baked  = potatoState === "baked";
+  const cx = player.x + player.width  / 2;
+  const cy = player.y + player.height / 2;
+  const baked = potatoState === "baked";
 
-
-// --- Draw cannon barrel ---
-ctx.save();
-ctx.translate(cx, cy);
-ctx.rotate(cannonAimAngle);
-
-const cannonW = 59;
-const cannonH = 12
-
-if (baked) {
-  ctx.shadowColor = "#ff6600";
-  ctx.shadowBlur  = 16;
-}
-
-// Flip sprite vertically when aiming left so it doesn't appear upside-down
-if (Math.abs(cannonAimAngle) > Math.PI / 2) {
-  ctx.scale(1, -1);
-}
-
-ctx.drawImage(cannonImg, -5, -cannonH / 2, cannonW, cannonH);
-
-ctx.restore();
+  // --- Draw cannon barrel ---
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(cannonAimAngle);
+  const cannonW = 59;
+  const cannonH = 12;
+  if (baked) { ctx.shadowColor = "#ff6600"; ctx.shadowBlur = 16; }
+  if (Math.abs(cannonAimAngle) > Math.PI / 2) { ctx.scale(1, -1); }
+  ctx.drawImage(cannonImg, -5, -cannonH / 2, cannonW, cannonH);
+  ctx.restore();
 
   // --- Draw projectiles ---
   for (const p of cannonProjectiles) {
     if (!p.alive) continue;
-
-    // Trail
-    for (let j = 0; j < p.trail.length; j++) {
-      const frac  = j / p.trail.length;
-      const alpha = frac * 0.55;
-      const sz    = p.size * frac * 0.65;
-      ctx.fillStyle = p.explosive
-        ? `rgba(255,110,0,${alpha})`
-        : `rgba(160,100,40,${alpha})`;
-      ctx.beginPath();
-      ctx.arc(p.trail[j].x, p.trail[j].y, Math.max(sz, 1), 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Main ball (rectangle sprite placeholder)
-    ctx.save();
-    if (p.explosive) {
-      ctx.shadowColor = "#ff5500";
-      ctx.shadowBlur  = 18;
-    }
-    ctx.fillStyle = p.explosive ? "#ff8800" : "#b58b4a";
-    // Draw as small rectangle (swap for sprite when asset is ready)
-    const s = p.size;
-    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2);
-
-    // Inner highlight
-    ctx.fillStyle = p.explosive ? "#ffdd88" : "#d4aa6a";
-    ctx.fillRect(p.x - s + 2, p.y - s + 2, s - 2, s - 2);
-
-    ctx.restore();
+    drawScreamingPotato(p);  // ← pass p, not the whole array
   }
 }
+  function drawScreamingPotato(p) {
+    const drawSize = p.explosive ? SCREAM_ANIM.drawSizeBig : SCREAM_ANIM.drawSize;
+    const half = drawSize / 2;
+    const col = p.animFrame % SCREAM_ANIM.framesPerRow;
+    const row = Math.floor(p.animFrame / SCREAM_ANIM.framesPerRow);
+  
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rotation);
+    if (p.explosive) { ctx.shadowColor = "#ff5500"; ctx.shadowBlur = 18; }
+    ctx.imageSmoothingEnabled = false;
+  
+    if (screamPotatoSheet.complete && screamPotatoSheet.naturalWidth > 0) {
+      ctx.drawImage(
+        screamPotatoSheet,
+        col * SCREAM_ANIM.frameW, row * SCREAM_ANIM.frameH,
+        SCREAM_ANIM.frameW, SCREAM_ANIM.frameH,
+        -half, -half, drawSize, drawSize
+      );
+    } else {
+      // Fallback while sheet loads
+      ctx.fillStyle = p.explosive ? "#ff8800" : "#b58b4a";
+      ctx.fillRect(-half, -half, drawSize, drawSize);
+    }
+    ctx.restore();
+  }
 
 function drawExplosions() {
   for (const e of explosions) {
@@ -9012,6 +9033,28 @@ function backToMenu() {
   // Hide canvas to be safe
   document.getElementById("game").style.display = "none";
 }
+
+function backToPause() {
+
+  document.getElementById("pauseMenu").classList.remove("hidden");
+  document.getElementById("levelSelect").classList.add("hidden");
+  document.getElementById("waveSelect").classList.add("hidden");
+  document.getElementById("credits").classList.add("hidden");
+  document.getElementById("freeSelect").classList.add("hidden");
+  document.getElementById("settings").classList.add("hidden");
+  document.getElementById("menu").classList.add("hidden");
+  document.getElementById("controls").classList.add("hidden");
+  document.getElementById("controllerControls").classList.add("hidden");
+}
+
+function backToMenuOrPause() {
+  if (gameRunning === true) {
+    backToPause();
+  } else {
+    backToMenu();
+  }
+}
+
 
 function checkPotatoPickup() {
   if (potato.collected) return;
