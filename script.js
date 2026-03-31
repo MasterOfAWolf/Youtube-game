@@ -9017,7 +9017,7 @@ function togglePause() {
   if (!gameRunning) return;
   gamePaused = !gamePaused;
   const menu = document.getElementById("pauseMenu");
-
+  const settings = document.getElementById("settings");
   if (gamePaused) {
     menu.classList.remove("hidden");
 
@@ -9035,6 +9035,7 @@ function togglePause() {
     }
   } else {
     menu.classList.add("hidden");
+    settings.classList.add("hidden");
   }
 }
 
@@ -9891,146 +9892,6 @@ if (player.attackCharging) {
     if (player.attackChargeTime > player.maxChargeTime) player.attackChargeTime = player.maxChargeTime;
 }
 
-// Swing
-/*if (player.attackTimer > 0) {
-    player.attackTimer--;
-
-    const t = 1 - player.attackTimer / player.attackDuration;
-    const angle = -Math.PI + t * Math.PI;
-
-    const pivotX = player.x + player.width / 2;
-    const pivotY = player.y + player.height / 2;
-    const radius = 70;
-
-    const swordTipX = pivotX + Math.cos(angle) * radius;
-    const swordTipY = pivotY + Math.sin(angle) * radius;
-
-    const attackBox = {
-        x: swordTipX - 40,
-        y: swordTipY - 10,
-        width: 70,
-        height: 20
-    };
-
-    // Hit snails
-    for (let i = snails.length - 1; i >= 0; i--) {
-        let s = snails[i];
-        
-        if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
-            const died = damageEnemy(s, 1, {
-                x: player.attackKnockback * 2 * Math.sign(s.x - pivotX),
-                y: -player.attackKnockback * 1.3
-            });
-            
-            if (died) {
-                setTimeout(() => {
-                    let index = snails.indexOf(s);
-                    if (index > -1) {
-                        snails.splice(index, 1);
-                        onEnemyKilled('snail');
-                    }
-                }, 300);
-            }
-            
-            player.attackHitObjects.add(s);
-        }
-    }
-    
-    // Hit super snails
-    for (let i = SuperSnails.length - 1; i >= 0; i--) {
-        let s = SuperSnails[i];
-        
-        if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
-            const died = damageEnemy(s, 1, {
-                x: player.attackKnockback * 2 * Math.sign(s.x - pivotX),
-                y: -player.attackKnockback * 1.3
-            });
-            
-            if (died) {
-                setTimeout(() => {
-                    let index = SuperSnails.indexOf(s);
-                    if (index > -1) {
-                        SuperSnails.splice(index, 1);
-                        onEnemyKilled('superSnail');
-                    }
-                }, 300);
-            }
-            
-            player.attackHitObjects.add(s);
-        }
-    }
-    
-    // Hit yetis
-    for (let y of yetis) {
-        if (!y.alive) continue;
-        
-        if (isColliding(attackBox, y) && !player.attackHitObjects.has(y)) {
-            const died = damageEnemy(y, 1, {
-                x: player.attackKnockback * 2 * Math.sign(y.x - pivotX),
-                y: -player.attackKnockback * 1.3
-            });
-            
-            if (died) {
-                y.alive = false;
-                onEnemyKilled('yeti');
-            }
-            
-            player.attackHitObjects.add(y);
-        }
-    }
-    
-    // Hit snowmen
-    for (let i = snowmen.length - 1; i >= 0; i--) {
-        let s = snowmen[i];
-        
-        if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
-            const died = damageEnemy(s, 1, {
-                x: player.attackKnockback * 2 * Math.sign(s.x - pivotX),
-                y: -player.attackKnockback * 1.3
-            });
-            
-            if (died) {
-                setTimeout(() => {
-                    let index = snowmen.indexOf(s);
-                    if (index > -1) {
-                        snowmen.splice(index, 1);
-                        onEnemyKilled('snowman');
-                    }
-                }, 300);
-            }
-            
-            player.attackHitObjects.add(s);
-        }
-    }
-    
-    // Hit turrets (turrets can now be destroyed!)
-    for (let i = turrets.length - 1; i >= 0; i--) {
-        let t = turrets[i];
-        
-        if (isColliding(attackBox, t) && !player.attackHitObjects.has(t)) {
-            const died = damageEnemy(t, 1, {
-                x: 0,
-                y: 0
-            });
-            
-            if (died) {
-                turrets.splice(i, 1);
-                onEnemyKilled('turret');
-            }
-            
-            player.attackHitObjects.add(t);
-        }
-    }
-      // Hit boxes
-    for (let box of boxes) {
-        if (isColliding(attackBox, box) && !player.attackHitObjects.has(box)) {
-            box.dx += player.attackKnockback * 2 * Math.sign(box.x - pivotX);
-            box.dy -= -player.attackKnockback * 2 * Math.sign(box.y - pivotY);
-            player.attackHitObjects.add(box);
-        }
-    }
-}
-*/
 // Decrease cooldown
 if (player.attackCooldown > 0) player.attackCooldown--;
 
@@ -10045,10 +9906,12 @@ if (player.attackCooldown > 0) player.attackCooldown--;
   }
 
   // Apply velocity
+
+  if (player.dy > 14) player.dy = 14;
+
   player.x += player.dx;
   player.y += player.dy;
   
-      if (player.dy > 14) player.dy = 14;
 
   // Dash override
   if (player.dashDuration > 0) {
