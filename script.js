@@ -2426,6 +2426,11 @@ if (p.screamTimer >= p.screamInterval) {
 
    // Wall collision
 if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
+
+  if (p.explosive || (p.homing && playerUpgrades.homingExplosive)) {
+    createExplosion(p.x, p.y);
+  }
+  
   if (playerUpgrades.cannonBounceEnabled && !p.bounced) {
     // figure out which axis we hit by checking each direction separately
     const hitH = collidesWithWall(p.x + p.vx - p.size, p.y - p.size, p.size * 2, p.size * 2);
