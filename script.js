@@ -87,6 +87,9 @@ const settings = {
   reducedMotion: false,
   highContrast: false,
   largeHUD: false,
+
+  // Dev / Commands
+  commandsEnabled: false,
 };
 
 const tutorialState = {
@@ -1000,6 +1003,10 @@ document.getElementById("settingHighContrast").addEventListener("change", functi
 document.getElementById("settingLargeHUD").addEventListener("change", function() {
   settings.largeHUD = this.checked;
 });
+document.getElementById("settingCommands").addEventListener("change", function() {
+  settings.commandsEnabled = this.checked;
+});
+
 // Map keys to buttons
 const keyMap = {
   "ArrowLeft": "btnLeft",
@@ -1016,6 +1023,40 @@ const keyMap = {
 };
 
 document.addEventListener("keydown", e => {
+  // --- CHAT INPUT INTERCEPT ---
+  if (chat.open) {
+    e.preventDefault();
+    if (e.key === "Escape") {
+      chat.open = false;
+      chat.input = "";
+    } else if (e.key === "Enter") {
+      const raw = chat.input.trim();
+      chat.input = "";
+      chat.open = false;
+      if (raw !== "") {
+        if (raw.startsWith("/") && settings.commandsEnabled) {
+          runCommand(raw);
+        } else {
+          chatLog("[You] " + raw, "#e8e0f8");
+        }
+      }
+    } else if (e.key === "Backspace") {
+      chat.input = chat.input.slice(0, -1);
+    } else if (e.key.length === 1) {
+      if (chat.input.length < 80) chat.input += e.key;
+    }
+    return; // don't pass keypresses to the game while typing
+  }
+
+  // Open chat with Enter or / (only while game is running and not paused)
+  if ((e.key === "Enter" || (e.key === "/" && settings.commandsEnabled)) && gameRunning && !gamePaused && !levelUpPending) {
+    chat.open = true;
+    chat.input = e.key === "/" ? "/" : "";
+    for (const k in keys) keys[k] = false;
+    e.preventDefault();
+    return;
+  }
+
   keys[e.key.toLowerCase()] = true;
   const btnId = keyMap[e.key];
   if (btnId) {
@@ -1025,6 +1066,7 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("keyup", e => {
+  if (chat.open) return;
   keys[e.key.toLowerCase()] = false;
   const btnId = keyMap[e.key];
   if (btnId) {
@@ -2436,7 +2478,8 @@ if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
     const hitH = collidesWithWall(p.x + p.vx - p.size, p.y - p.size, p.size * 2, p.size * 2);
     const hitV = collidesWithWall(p.x - p.size, p.y + p.vy - p.size, p.size * 2, p.size * 2);
     if (hitV) p.vy *= -1;
-    if (hitH) p.vx *= -1;
+    if (hitH) p.vx *= 1;
+    if (p.explosive) createExplosion(p.x, p.y);
     p.bounced = true;
   } else {
     if (p.explosive) createExplosion(p.x, p.y);
@@ -6508,6 +6551,8 @@ const playerUpgrades = {
   orbiters: [],         // orbiting projectiles
   homingEnabled: false, // periodic homing shot
   homingTimer: 0,
+  // Wolf companion
+  wolf: null,  // null = not unlocked
   dashDamageEnabled: false,
   homingRate: 1,          // ← new: multiplier for fire rate
   homingExplosive: false, // ← new
@@ -6540,6 +6585,60 @@ const XP_TABLE = {
 
 // Full upgrade pool — each entry is one possible card
 const UPGRADE_POOL = [
+  {
+    id: "wolf",
+    name: "Master of the Wolf",
+    desc: "A loyal wolf companion follows you and attacks nearby enemies",
+    icon: "🐺",
+    apply() {
+      playerUpgrades.wolf = {
+        x: player.x - 40, y: player.y,
+        width: 32, height: 24,
+        hp: 8, maxHp: 8,
+        speed: 3.2,
+        damage: 1,
+        attackRate: 40,
+        attackCooldown: 0,
+        range: 180,
+        facing: 1,
+        frame: 0, frameTimer: 0,
+        moving: false, lunging: false,
+        biteFlash: 0, hitFlash: 0,
+        iframes: 0,
+        dy: 0,
+        dead: false,
+        elite: false,
+      };
+      potatoMessage = "🐺 a wolf emerges from the shadows";
+      potatoMessageTimer = 200;
+    }
+  },
+  {
+    id: "wolfElite",
+    name: "Alpha Wolf",
+    desc: "Wolf becomes elite — more HP, faster attacks, bigger range",
+    icon: "🐺⚡",
+    apply() {
+      const w = playerUpgrades.wolf;
+      if (!w) return;
+      w.elite = true;
+      w.hp = w.maxHp = 20;
+      w.damage = 2;
+      w.attackRate = 22;
+      w.range = 280;
+      w.speed = 4.5;
+      w.dead = false; // revive if dead
+      potatoMessage = "🐺 the wolf awakens";
+      potatoMessageTimer = 200;
+    }
+  },
+  {
+    id: "wolfRevive",
+    name: "Pack Bond",
+    desc: "Wolf automatically revives 10 seconds after dying",
+    icon: "🐺❤️",
+    apply() { playerUpgrades.wolfAutoRevive = true; }
+  },
   {
   id: "dashInvul",
   name: "Ghost Dash",
@@ -7403,14 +7502,16 @@ function triggerLevelUp() {
   // Infinitely-stackable ones (orbiters, speed, etc.) are always available;
   // one-shot ones are excluded if already owned.
 const oneShot = new Set([
-  "homing", "dashDamage", "extraJump", "potato",
-  "dashInvul", "swordVamp", "homingExplosive",
+  "homing", "dashDamage", "extraJump", "potato", "orbiter", "orbiter2", "orbiter3",
+  "dashInvul", "swordVamp", "homingExplosive", "wolf", "wolfElite", "wolfRevive",
   "cannonRapid", "cannonBounce", "orbiterFast"
 ]);
 
 const available = UPGRADE_POOL.filter(u => {
   if (oneShot.has(u.id) && ownedUpgradeIds.has(u.id)) return false;
   // Branching requirements
+  if (u.id === "wolfElite"  && !ownedUpgradeIds.has("wolf")) return false;
+  if (u.id === "wolfRevive" && !ownedUpgradeIds.has("wolf")) return false;
   if (u.id === "orbiter2"       && !ownedUpgradeIds.has("orbiter"))    return false;
   if (u.id === "orbiter3"       && !ownedUpgradeIds.has("orbiter2"))   return false;
   if (u.id === "orbiterFast"    && !ownedUpgradeIds.has("orbiter"))    return false;
@@ -7585,7 +7686,8 @@ player.attackKnockback = 2;
   gamePaused = false;
   gameRunning = false;
   player.attacking = false;
-
+  playerUpgrades.wolf = null;
+  playerUpgrades.wolfAutoRevive = false;
 tutorialActive = false;
   
  xp = 0;
@@ -9200,13 +9302,72 @@ player.dy += (Math.random() - 0.5) * 1.0;
 player.dy *= 1 + (Math.random() - 0.5) * 0.02;
 
    if (Math.random() < 0.002) {
-  const whispers = [
-    "🥔 it is too late",
-    "🥔 gravity is lying",
-    "🥔 the boxes remember",
-    "🥔 keep going",
-    "🥔 do not trust the ladder"
-  ];
+const whispers = [
+  "🥔 it is too late",
+  "🥔 gravity is lying",
+  "🥔 the boxes remember",
+  "🥔 keep going",
+  "🥔 do not trust the ladder",
+  "🥔 i have always been here",
+  "🥔 the snails know",
+  "🥔 you are not the first",
+  "🥔 something is watching the cheese",
+  "🥔 the wolf dreams in numbers",
+  "🥔 i felt that",
+  "🥔 don't look at the background",
+
+  "🥔 the floor moved again",
+  "🥔 it blinked first",
+  "🥔 the walls are getting closer",
+  "🥔 you missed one",
+  "🥔 it remembers your steps",
+  "🥔 the cheese is a lie",
+  "🥔 something followed you in",
+  "🥔 the air feels heavy",
+  "🥔 count backwards now",
+  "🥔 it heard you think",
+  "🥔 the exit moved",
+  "🥔 you're looping",
+
+  "🥔 don't stop now",
+  "🥔 it almost saw you",
+  "🥔 the shadows are late",
+  "🥔 you dropped something important",
+  "🥔 it's behind the next tile",
+  "🥔 you weren't supposed to see that",
+  "🥔 the lights are wrong",
+  "🥔 it knows your pattern",
+  "🥔 something is off-grid",
+  "🥔 you took too long",
+  "🥔 it is closer now",
+  "🥔 the code is breathing",
+
+  "🥔 try again but faster",
+  "🥔 you changed something",
+  "🥔 it noticed",
+  "🥔 the silence is loud",
+  "🥔 one of these is not real",
+  "🥔 the ladder is watching you",
+  "🥔 your path is predictable",
+  "🥔 something is desynced",
+  "🥔 the map shifted",
+  "🥔 you forgot to check",
+  "🥔 it's still there",
+  "🥔 are you sure?",
+
+  "🥔 the potato sees all",
+  "🥔 this was inevitable",
+  "🥔 it learns every run",
+  "🥔 you can't reset this",
+  "🥔 the background moved again",
+  "🥔 something is wrong with the cheese",
+  "🥔 it waits patiently",
+  "🥔 the end is not the end",
+  "🥔 there is another layer",
+  "🥔 keep digging",
+  "🥔 you're getting closer",
+  "🥔 it is getting louder"
+];
   potatoHUDLine = whispers[Math.floor(Math.random() * whispers.length)];
 }
 
@@ -9911,70 +10072,57 @@ if (player.attackCooldown > 0) player.attackCooldown--;
   }
 
   // Apply velocity
-
-  if (player.dy > 14) player.dy = 14;
-
-  player.x += player.dx;
-  player.y += player.dy;
-  
+  if (player.dy > 14) player.dy = 14;  // cap BEFORE moving
 
   // Dash override
   if (player.dashDuration > 0) {
     player.dx = player.facing * player.dashSpeed;
-    player.dy *= 0.15; // suppress gravity during dash
+    player.dy *= 0.15;
     player.dashDuration--;
     if (player.dashDuration === 0) player.dashActive = false;
   }
   if (player.dashCooldown > 0) player.dashCooldown--;
-  
+
   // Reset ground/wall flags
   player.onGround = false;
   player.onWall = false;
 
-  // --- Collision detection ---
+  // ── X pass ──
+  player.x += player.dx;
   for (let wall of walls) {
-    if (
-      player.x < wall.x + wall.width &&
-      player.x + player.width > wall.x &&
-      player.y < wall.y + wall.height &&
-      player.y + player.height > wall.y
-    ) {
-      const overlapX = Math.min(
-        player.x + player.width - wall.x,
-        wall.x + wall.width - player.x
-      );
+    if (!rectsOverlap(player, wall)) continue;
+    const overlapX = Math.min(
+      player.x + player.width - wall.x,
+      wall.x + wall.width - player.x
+    );
+    if (player.x < wall.x) player.x -= overlapX;
+    else                    player.x += overlapX;
+    player.dx = 0;
+    player.onWall = true;
+    player.wallDir = player.x < wall.x ? 1 : -1;
+  }
+
+  // ── Y pass (substepped so fast falls don't tunnel) ──
+  const steps = Math.ceil(Math.abs(player.dy) / 8);
+  const stepDY = player.dy / steps;
+  for (let s = 0; s < steps; s++) {
+    player.y += stepDY;
+    for (let wall of walls) {
+      if (!rectsOverlap(player, wall)) continue;
       const overlapY = Math.min(
         player.y + player.height - wall.y,
         wall.y + wall.height - player.y
       );
-
-      if (overlapX < overlapY) {
-        // Horizontal collision
-        if (player.x < wall.x) {
-          player.x -= overlapX;
-          player.wallDir = 1;
-        } else {
-          player.x += overlapX;
-          player.wallDir = -1;
-        }
-        player.dx = 0;
-        player.onWall = true;
+      if (player.y < wall.y) {
+        player.y -= overlapY;
+        player.dy = 0;
+        player.onGround = true;
       } else {
-        // Vertical collision
-        if (player.y < wall.y) {
-          player.y -= overlapY;
-          player.dy = 0;
-          player.onGround = true;
-        } else {
-          player.y += overlapY;
-          player.dy = 0;
-          if (!player.prevOnGround && player.onGround)
-player.prevOnGround = player.onGround;
-        }
+        player.y += overlapY;
+        player.dy = 0;
       }
     }
   }
-
   if (player.chaosStall > 0) {
   player.dy = 0;
   player.chaosStall--;
@@ -10330,6 +10478,9 @@ playerUpgrades.dashDamageEnabled = false;
 playerUpgrades.extraJumpsMax = 0;
 playerUpgrades.dashInvulEnabled = false;
 playerUpgrades.extraJumpsLeft = 0;
+playerUpgrades.wolf = null;
+playerUpgrades.wolfAutoRevive = false;
+playerUpgrades.homingExplosive = false;
 ownedUpgradeIds.clear();
   cannonProjectiles = [];
   explosions = [];
@@ -10349,6 +10500,275 @@ ownedUpgradeIds.clear();
   // Current map's wave configuration
   currentMapWaves: null
 };
+}
+
+function updateWolf() {
+  const w = playerUpgrades.wolf;
+  if (!w || w.dead) return;
+
+  // Rare idle wolf sounds
+if (Math.random() < 0.0008) {
+  const idles = ["🐺 *howls at nothing*", "🐺 *sniffs the air*", "🐺 *whines softly*", "🐺 *stares intensely*", "🐺 awoooo"];
+  chatLog(idles[Math.floor(Math.random() * idles.length)], "#c0a0ff");
+}
+
+  // Auto-revive
+if (w.dead && playerUpgrades.wolfAutoRevive) {
+  w.reviveTimer = (w.reviveTimer || 0) + 1;
+  if (w.reviveTimer >= 600) { // 10 seconds
+    w.dead = false; w.hp = w.maxHp;
+    w.x = player.x; w.y = player.y;
+    w.reviveTimer = 0;
+    potatoMessage = "🐺 the wolf returns";
+    potatoMessageTimer = 140;
+  }
+  return;
+}
+
+  // ── Regen invincibility frames ──
+  if (w.iframes > 0) w.iframes--;
+
+  // ── Follow player ──
+  const tx = player.x + player.width / 2 + (player.facing * -55);
+  const ty = player.y + player.height - w.height;
+  const dx = tx - w.x, dy = ty - w.y;
+  const dist = Math.hypot(dx, dy);
+
+  if (dist > 12) {
+    const spd = Math.min(w.speed, dist);
+    w.x += (dx / dist) * spd;
+    w.y += (dy / dist) * spd;
+    w.facing = dx > 0 ? 1 : -1;
+    w.moving = true;
+  } else {
+    w.moving = false;
+  }
+
+  // ── Teleport if too far away ──
+  const wdist = Math.hypot(tx - w.x, ty - w.y);
+  if (wdist > 600) {
+    w.x = player.x + (player.facing * -40);
+    w.y = player.y;
+    w.dy = 0;
+  }
+  
+  // ── Simple gravity + ground snap ──
+  w.dy = (w.dy || 0) + 0.5;
+  w.y += w.dy;
+  if (collidesWithWall(w.x, w.y, w.width, w.height)) {
+    while (collidesWithWall(w.x, w.y, w.width, w.height)) w.y--;
+    w.dy = 0;
+  }
+
+  // ── Animate ──
+  w.frameTimer = (w.frameTimer || 0) + 1;
+  if (w.frameTimer >= 6) { w.frameTimer = 0; w.frame = (w.frame + 1) % 4; }
+
+  // ── Attack cooldown ──
+  if (w.attackCooldown > 0) w.attackCooldown--;
+
+  // ── Hunt nearest enemy ──
+  const allEnemies = [
+    ...snails, ...SuperSnails, ...bats,
+    ...snowmen, ...chairs, ...tables,
+    ...yetis.filter(y => y.alive),
+  ];
+
+  let nearest = null, nearestDist = w.range;
+  for (const e of allEnemies) {
+    const d = Math.hypot((e.x + (e.width||0)/2) - w.x, (e.y + (e.height||0)/2) - w.y);
+    if (d < nearestDist) { nearest = e; nearestDist = d; }
+  }
+
+  if (nearest) {
+    // Lunge toward target
+    const ex = nearest.x + (nearest.width||0)/2;
+    const ey = nearest.y + (nearest.height||0)/2;
+    const ddx = ex - w.x, ddy = ey - w.y;
+    const dd  = Math.hypot(ddx, ddy) || 1;
+    w.x += (ddx/dd) * w.speed * 1.6;
+    w.y += (ddy/dd) * w.speed * 0.4;
+    w.facing = ddx > 0 ? 1 : -1;
+    w.lunging = true;
+
+    // Bite
+    if (w.attackCooldown <= 0) {
+      const biteBox = {
+        x: w.x + (w.facing > 0 ? w.width - 4 : -18),
+        y: w.y, width: 22, height: w.height
+      };
+      if (isColliding(biteBox, nearest)) {
+        damageEnemy(nearest, w.damage, { x: w.facing * 3, y: -2 });
+        w.attackCooldown = w.attackRate;
+        w.biteFlash = 8;
+        // Wolf bark on bite (occasional)
+      if (Math.random() < 0.15) {
+        const barks = ["🐺 *grr*", "🐺 *snap*", "🐺 *growl*", "🐺 *bark*", "🐺 *snarl*"];
+        chatLog(barks[Math.floor(Math.random() * barks.length)], "#c0a0ff");
+        }
+        // Check death for each list
+        const lists = [
+          { list: snails,      key: 'snail'      },
+          { list: SuperSnails, key: 'superSnail'  },
+          { list: bats,        key: 'bat'         },
+          { list: snowmen,     key: 'snowman'     },
+          { list: chairs,      key: 'chair'       },
+          { list: tables,      key: 'table'       },
+        ];
+        for (const { list, key } of lists) {
+          const idx = list.indexOf(nearest);
+          if (idx > -1 && nearest.hp <= 0) { list.splice(idx, 1); onEnemyKilled(key); break; }
+        }
+        if (nearest.alive === false) onEnemyKilled('yeti');
+      }
+    }
+  } else {
+    w.lunging = false;
+  }
+
+  if (w.biteFlash > 0) w.biteFlash--;
+
+  // ── Take damage from enemies touching wolf ──
+  if (w.iframes <= 0) {
+    for (const e of allEnemies) {
+      if (isColliding(w, e)) {
+        w.hp--;
+        w.iframes = 45;
+        w.hitFlash = 12;
+        if (w.hp <= 0) {
+          w.dead = true;
+          potatoMessage = "🐺 the wolf has fallen";
+          potatoMessageTimer = 180;
+        }
+        break;
+      }
+    }
+  }
+  if (w.hitFlash > 0) w.hitFlash--;
+}
+
+function drawWolf() {
+  const w = playerUpgrades.wolf;
+  if (!w || w.dead) return;
+
+  ctx.save();
+
+  // Flash white when hit
+  if (w.hitFlash > 0 && Math.floor(w.hitFlash / 3) % 2 === 0) {
+    ctx.globalAlpha = 0.35;
+  }
+
+  const fx = w.facing; // 1 = right, -1 = left
+  const cx = w.x + w.width / 2;
+  const cy = w.y + w.height / 2;
+
+  ctx.translate(cx, cy);
+  if (fx < 0) ctx.scale(-1, 1);
+
+  // Body bob while moving
+  const bob = w.moving ? Math.sin(Date.now() / 120) * 1.5 : 0;
+
+  // ── Body ──
+  ctx.fillStyle = w.elite ? "#5a4fcf" : "#7a6a5a";
+  ctx.beginPath();
+  ctx.ellipse(0, bob, w.width/2 - 2, w.height/2 - 3, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── Head ──
+  ctx.fillStyle = w.elite ? "#6a5fdf" : "#8a7a6a";
+  ctx.beginPath();
+  ctx.ellipse(w.width/2 - 4, -w.height/4 + bob, 9, 8, 0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── Snout ──
+  ctx.fillStyle = w.elite ? "#8a7aef" : "#a09080";
+  ctx.fillRect(w.width/2 + 1, -w.height/4 + bob - 2, 8, 5);
+
+  // ── Nose ──
+  ctx.fillStyle = "#1a1a1a";
+  ctx.beginPath();
+  ctx.arc(w.width/2 + 8, -w.height/4 + bob, 2, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── Eye ──
+  ctx.fillStyle = w.elite ? "#ffee00" : "#ffdd00";
+  ctx.beginPath();
+  ctx.arc(w.width/2 + 1, -w.height/4 + bob - 3, 2.5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.arc(w.width/2 + 1.5, -w.height/4 + bob - 3, 1.2, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── Ear ──
+  ctx.fillStyle = w.elite ? "#4a3fbf" : "#6a5a4a";
+  ctx.beginPath();
+  ctx.moveTo(w.width/2 - 3, -w.height/4 + bob - 5);
+  ctx.lineTo(w.width/2 + 3, -w.height/4 + bob - 13);
+  ctx.lineTo(w.width/2 + 8, -w.height/4 + bob - 5);
+  ctx.closePath(); ctx.fill();
+
+  // ── Tail ──
+  const tailWag = Math.sin(Date.now() / 150) * 0.5;
+  ctx.strokeStyle = w.elite ? "#5a4fcf" : "#7a6a5a";
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-w.width/2 + 2, bob);
+  ctx.quadraticCurveTo(-w.width/2 - 8, bob - 10 + tailWag * 8, -w.width/2 - 4, bob - 18 + tailWag * 6);
+  ctx.stroke();
+
+  // ── Legs (walking animation) ──
+  ctx.strokeStyle = w.elite ? "#4a3fbf" : "#6a5a4a";
+  ctx.lineWidth = 3;
+  const legSwing = w.moving ? Math.sin(Date.now() / 90) * 6 : 0;
+  // front legs
+  ctx.beginPath();
+  ctx.moveTo(w.width/4, bob + w.height/4);
+  ctx.lineTo(w.width/4 + legSwing, bob + w.height/2 + 4);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(w.width/4 + 4, bob + w.height/4);
+  ctx.lineTo(w.width/4 + 4 - legSwing, bob + w.height/2 + 4);
+  ctx.stroke();
+  // back legs
+  ctx.beginPath();
+  ctx.moveTo(-w.width/4, bob + w.height/4);
+  ctx.lineTo(-w.width/4 - legSwing, bob + w.height/2 + 4);
+  ctx.stroke();
+
+  // ── Bite flash ──
+  if (w.biteFlash > 0) {
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w.width/2 + 5, -w.height/4 + bob);
+    ctx.lineTo(w.width/2 + 14, -w.height/4 + bob + 4);
+    ctx.stroke();
+  }
+
+  // ── Elite glow ──
+  if (w.elite) {
+    ctx.shadowColor = "#8888ff";
+    ctx.shadowBlur = 18;
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = "#8888ff";
+    ctx.beginPath();
+    ctx.ellipse(0, bob, w.width/2 + 4, w.height/2 + 2, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+
+  // ── HP bar ──
+  if (settings.enemyHealthBars && w.hp < w.maxHp) {
+    const bw = w.width + 8, bh = 4;
+    const bx = w.x - 4, by = w.y - 8;
+    ctx.fillStyle = "#300"; ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = w.elite ? "#88f" : "#4f4";
+    ctx.fillRect(bx, by, bw * (w.hp / w.maxHp), bh);
+  }
 }
 
 function updateOrbiters() {
@@ -10902,6 +11322,288 @@ ctx.fillRect(cx - 7, hatY - 6, 3, 14);
   }
 }
 
+// ============================================================
+//  CHAT + COMMAND SYSTEM
+// ============================================================
+
+const chat = {
+  open: false,
+  input: "",
+  cursorBlink: 0,
+  messages: [],
+  MAX_MESSAGES: 14,
+  FADE_START: 300,   // frames before a message starts fading (~5s at 60fps)
+  FADE_SPEED: 0.018,
+};
+
+function chatLog(text, color = "#e8e0f8") {
+  const MAX_CHARS = 44; // approx chars that fit the box width
+
+  // Split into word-wrapped lines
+  const words = text.split(" ");
+  const lines = [];
+  let current = "";
+  for (const word of words) {
+    const test = current ? current + " " + word : word;
+    if (test.length > MAX_CHARS) {
+      if (current) lines.push(current);
+      current = word;
+    } else {
+      current = test;
+    }
+  }
+  if (current) lines.push(current);
+
+  for (const line of lines) {
+    chat.messages.push({ text: line, color, alpha: 1, life: 0 });
+  }
+  // Trim oldest if over limit
+  while (chat.messages.length > chat.MAX_MESSAGES) chat.messages.shift();
+}
+
+// ---- COMMANDS ----
+const COMMANDS = {
+  reset: {
+    run() {
+      // Toggle-based command effects
+      settings.invincible = false;
+      settings.showHitboxes = false;
+      settings.showFPS = false;
+      settings.particles = true;
+      settings.lighting = true;
+      lightingEnabled = true;
+      settings.speedMultiplier = 1;
+  
+      // Restore player gravity to default
+      if (gameRunning) player.gravity = 0.6;
+  
+      chatLog("🔄 Reset: invincible off, hitboxes off, FPS off,", "#f0d060");
+      chatLog("   particles on, lighting on, speed x1, gravity default.", "#f0d060");
+    }
+  },
+
+  help: {
+    run() {
+      chatLog("Commands: /help /give /spawn /set /heal /god /kill", "#a0d0ff");
+chatLog("  /reset /clear /tp /wave /echo", "#a0d0ff");
+}
+  },
+
+  give: {
+    run(args) {
+      const id = args[0]?.toLowerCase();
+      if (!id) { chatLog("Usage: /give <upgradeName>", "#ff8888"); return; }
+      const upgrade = UPGRADE_POOL.find(u => u.id.toLowerCase() === id);
+      if (!upgrade) {
+        chatLog("Unknown upgrade. Valid: " + UPGRADE_POOL.map(u => u.id).join(", "), "#ff8888");
+        return;
+      }
+      upgrade.apply();
+      chatLog(upgrade.icon + " Gave: " + upgrade.name, "#80ff80");
+    }
+  },
+
+  spawn: {
+    run(args) {
+      const type = args[0];
+      const hp   = parseInt(args[1]) || undefined;
+      const valid = ["snail","superSnail","bat","yeti","snowman","turret","chair","table"];
+      if (!type || !valid.includes(type)) {
+        chatLog("Usage: /spawn <" + valid.join("|") + "> [hp]", "#ff8888");
+        return;
+      }
+      if (!gameRunning) { chatLog("Start a level first.", "#ff8888"); return; }
+      spawnEnemy(type, hp);
+      chatLog("Spawned " + type + (hp ? " (hp:" + hp + ")" : ""), "#80ff80");
+    }
+  },
+
+  set: {
+    run(args) {
+      const key = args[0];
+      const val = args[1];
+      if (!key || val === undefined) { chatLog("Usage: /set <var> <value>", "#ff8888"); return; }
+      const bool = val !== "false" && val !== "0";
+      const num  = parseFloat(val);
+      const vars = {
+        lighting:   () => { settings.lighting = bool; lightingEnabled = bool; },
+        particles:  () => { settings.particles = bool; },
+        hitboxes:   () => { settings.showHitboxes = bool; },
+        fps:        () => { settings.showFPS = bool; },
+        invincible: () => { settings.invincible = bool; },
+        speed:      () => { if (!isNaN(num)) settings.speedMultiplier = num; },
+        gravity:    () => { if (!isNaN(num)) player.gravity = num; },
+        hp:         () => { if (!isNaN(num)) player.hp = Math.max(0, Math.min(num, player.maxHp)); },
+        maxhp:      () => { if (!isNaN(num)) { player.maxHp = num; player.hp = Math.min(player.hp, player.maxHp); } },
+        ambient:    () => { if (!isNaN(num)) ambientLight = Math.max(0, Math.min(1, num)); },
+        musicvol:   () => { if (!isNaN(num)) { settings.musicVolume = Math.max(0,Math.min(1,num)); if(typeof bgMusic!=="undefined") bgMusic.volume = settings.musicVolume; } },
+      };
+      const fn = vars[key.toLowerCase()];
+      if (fn) { fn(); chatLog("Set " + key + " = " + val, "#80ff80"); }
+      else { chatLog('Unknown var "' + key + '". Try: ' + Object.keys(vars).join(", "), "#ff8888"); }
+    }
+  },
+
+  heal: {
+    run(args) {
+      if (!gameRunning) { chatLog("Start a level first.", "#ff8888"); return; }
+      const amount = parseInt(args[0]) || player.maxHp;
+      player.hp = Math.min(player.maxHp, player.hp + amount);
+      chatLog("❤️ Healed " + amount + " HP (now " + player.hp + "/" + player.maxHp + ")", "#ff6080");
+    }
+  },
+
+  god: {
+    run() {
+      settings.invincible = !settings.invincible;
+      chatLog("God mode " + (settings.invincible ? "ON 🛡️" : "OFF"), "#f0d060");
+    }
+  },
+
+  kill: {
+    run() {
+      if (!gameRunning) { chatLog("Start a level first.", "#ff8888"); return; }
+      let count = 0;
+      const lists = [snails, SuperSnails, bats, yetis, snowmen, turrets, chairs, tables];
+      for (const list of lists) { count += list.length; list.length = 0; }
+      chatLog("💀 Killed " + count + " enemies", "#ff8888");
+    }
+  },
+
+  clear: {
+    run() { chat.messages = []; }
+  },
+
+  tp: {
+    run(args) {
+      if (!gameRunning) { chatLog("Start a level first.", "#ff8888"); return; }
+      const x = parseFloat(args[0]);
+      const y = parseFloat(args[1]);
+      if (isNaN(x) || isNaN(y)) { chatLog("Usage: /tp <x> <y>", "#ff8888"); return; }
+      player.x = x; player.y = y; player.dx = 0; player.dy = 0;
+      chatLog("Teleported to (" + x + ", " + y + ")", "#80ff80");
+    }
+  },
+
+  wave: {
+    run(args) {
+      if (typeof waveNumber === "undefined") { chatLog("Not in wave mode.", "#ff8888"); return; }
+      const n = parseInt(args[0]);
+      if (!isNaN(n)) waveNumber = n - 1;
+      chatLog("⏭ Skipped to wave " + (waveNumber + 1), "#f0d060");
+    }
+  },
+
+  echo: {
+    run(args) { chatLog(args.join(" "), "#f0d060"); }
+  },
+};
+
+function runCommand(raw) {
+  const parts = raw.slice(1).trim().split(/\s+/);
+  const name  = parts[0].toLowerCase();
+  const args  = parts.slice(1);
+  const cmd   = COMMANDS[name];
+  if (!cmd) {
+    chatLog('Unknown command "/' + name + '". Type /help for a list.', "#ff8888");
+    return;
+  }
+  try { cmd.run(args); }
+  catch(err) { chatLog("Error: " + err.message, "#ff8888"); }
+}
+
+// ---- DRAW CHAT ----
+function drawChat() {
+  chat.cursorBlink = (chat.cursorBlink + 1) % 60;
+
+  for (const msg of chat.messages) {
+    msg.life++;
+    if (msg.life > chat.FADE_START) {
+      msg.alpha = Math.max(0, msg.alpha - chat.FADE_SPEED);
+    }
+  }
+  if (!chat.open) {
+    chat.messages = chat.messages.filter(m => m.alpha > 0.01);
+  }
+
+  const MSG_H   = 17;
+  const PADDING = 7;
+  const BOX_W   = 320;
+  const BASE_X  = 10;
+
+  const visible = chat.messages.filter(m => m.alpha > 0.01);
+  const totalRows = visible.length + (chat.open ? 1 : 0);
+  if (totalRows === 0) return;
+
+  const BOX_H  = totalRows * MSG_H + PADDING * 2;
+  const BASE_Y = canvas.height - 12 - BOX_H;
+  const maxAlpha = Math.max(...visible.map(m => m.alpha), chat.open ? 1 : 0);
+
+  ctx.save();
+
+  // Background
+  ctx.globalAlpha = maxAlpha * 0.55;
+  ctx.fillStyle = "#050510";
+  ctx.beginPath();
+  ctx.roundRect(BASE_X, BASE_Y, BOX_W, BOX_H, 5);
+  ctx.fill();
+
+  // Messages
+  ctx.font = "bold 11px monospace";
+  ctx.textBaseline = "top";
+  let row = 0;
+  for (const msg of visible) {
+    ctx.globalAlpha = msg.alpha;
+    ctx.fillStyle = msg.color;
+    ctx.fillText(msg.text, BASE_X + PADDING, BASE_Y + PADDING + row * MSG_H);
+    row++;
+  }
+
+  // Input box
+  if (chat.open) {
+    const iy = BASE_Y + PADDING + row * MSG_H;
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#1a1428";
+    ctx.fillRect(BASE_X + 3, iy - 1, BOX_W - 6, MSG_H + 1);
+    ctx.fillStyle = "#a080d0";
+    ctx.fillText(">", BASE_X + PADDING, iy);
+    const cursor = chat.cursorBlink < 30 ? "|" : "";
+    ctx.fillStyle = "#ffffff";
+    const maxChars = Math.floor((BOX_W - PADDING * 2 - 14) / 6.6);
+    const shown = chat.input.length > maxChars ? "…" + chat.input.slice(-maxChars + 1) : chat.input;
+    ctx.fillText(shown + cursor, BASE_X + PADDING + 14, iy);
+    ctx.strokeStyle = "#5a4878";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(BASE_X + 3, iy - 1, BOX_W - 6, MSG_H + 1);
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// ---- COMMAND MODE HUD ICON ----
+function drawCommandHUD() {
+  if (!settings.commandsEnabled) return;
+  const w = 44, h = 18;
+  const x = canvas.width - w - 8;
+  const y = 8;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(10,5,20,0.75)";
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 4);
+  ctx.fill();
+  ctx.strokeStyle = "#5a4878";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = "#a080d0";
+  ctx.font = "bold 10px monospace";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  ctx.fillText(">_", x + w / 2, y + h / 2 + 1);
+  ctx.textAlign = "left";
+  ctx.restore();
+}
 
 //Draw Everything
 function draw() {
@@ -11043,6 +11745,8 @@ function drawSnails() {
   for (let b of boxes) {
   drawBox(b);
 }
+
+drawWolf();
   drawChairs();
   drawTables();
   drawVehicles();
@@ -11345,6 +12049,9 @@ if (settings.showCoords) {
 if (settings.showMinimap) {
   drawMinimap();
 }
+
+drawCommandHUD();
+  drawChat();
 }
 
 saveInitialState();
@@ -11385,6 +12092,7 @@ function gameLoop(currentTime) {
     updateSeesaws();
     updateSnowmen();
     updateLadders();
+    updateWolf();
     updateSpikes();
     updateIcicles();
     updateTurrets();
