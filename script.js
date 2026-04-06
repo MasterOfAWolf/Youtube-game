@@ -310,6 +310,74 @@ function playPotatoImpact(explosive = false) {
   s.play().catch(() => {});
 }
 
+// ============================================================
+//  SETTINGS PERSISTENCE
+// ============================================================
+
+function saveSettings() {
+  localStorage.setItem("gameSettings", JSON.stringify(settings));
+  // Also save the toggles that live outside the settings object
+  localStorage.setItem("crtEnabled", document.getElementById("crtToggle").checked);
+  localStorage.setItem("pixelEnabled", document.getElementById("pixelToggle").checked);
+  localStorage.setItem("musicEnabled", document.getElementById("musicToggle").checked);
+}
+
+function loadSettings() {
+  const saved = localStorage.getItem("gameSettings");
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      // Merge into settings (keeps any new keys added in future)
+      Object.assign(settings, parsed);
+    } catch(e) { /* corrupt data, ignore */ }
+  }
+
+  // Apply settings object to all checkboxes/sliders
+  document.getElementById("settingLighting").checked     = settings.lighting;
+  document.getElementById("settingParticles").checked    = settings.particles;
+  document.getElementById("settingHealthBars").checked   = settings.enemyHealthBars;
+  document.getElementById("settingScreenShake").checked  = settings.screenShake;
+  document.getElementById("settingIndicators").checked   = settings.offScreenIndicators;
+  document.getElementById("settingSFX").checked          = settings.sfxEnabled;
+  document.getElementById("settingMusicVolume").value    = settings.musicVolume;
+  document.getElementById("musicVolumeLabel").textContent = Math.round(settings.musicVolume * 100) + "%";
+  document.getElementById("settingHitboxes").checked     = settings.showHitboxes;
+  document.getElementById("settingSwapJumpDash").checked = settings.swapJumpDash;
+  document.getElementById("settingVibration").checked    = settings.vibration;
+  document.getElementById("settingDeadzone").value       = settings.joystickDeadzone;
+  document.getElementById("deadzoneLabel").textContent   = settings.joystickDeadzone.toFixed(2);
+  document.getElementById("settingFPS").checked          = settings.showFPS;
+  document.getElementById("settingCoords").checked       = settings.showCoords;
+  document.getElementById("settingMinimap").checked      = settings.showMinimap;
+  document.getElementById("settingTooltips").checked     = settings.tutorialTooltips;
+  document.getElementById("settingReducedMotion").checked = settings.reducedMotion;
+  document.getElementById("settingHighContrast").checked = settings.highContrast;
+  document.getElementById("settingLargeHUD").checked     = settings.largeHUD;
+  document.getElementById("settingCommands").checked     = settings.commandsEnabled;
+
+  // Apply side effects that normally fire from listeners
+  lightingEnabled = settings.lighting;
+  if (settings.highContrast) document.body.classList.add("high-contrast");
+
+  // CRT / pixel / music toggles (stored separately)
+  const crtOn   = localStorage.getItem("crtEnabled") === "true";
+  const pixelOn = localStorage.getItem("pixelEnabled") === "true";
+  const musicOn = localStorage.getItem("musicEnabled");
+
+  document.getElementById("crtToggle").checked   = crtOn;
+  document.getElementById("pixelToggle").checked = pixelOn;
+  document.body.classList.toggle("crt", crtOn);
+  document.body.classList.toggle("pixelated", pixelOn);
+
+  if (musicOn !== null) {
+    document.getElementById("musicToggle").checked = musicOn === "true";
+  }
+}
+
+// Load on startup
+loadSettings();
+
+
 //Debugging amd testing Module
 
 function initDebugTests() {
@@ -935,26 +1003,33 @@ document.getElementById("musicToggle").addEventListener("change", function () {
 document.getElementById("settingLighting").addEventListener("change", function() {
   settings.lighting = this.checked;
   lightingEnabled = this.checked;
+  saveSettings();
 });
 document.getElementById("settingParticles").addEventListener("change", function() {
   settings.particles = this.checked;
+  saveSettings();
 });
 document.getElementById("settingHealthBars").addEventListener("change", function() {
   settings.enemyHealthBars = this.checked;
+  saveSettings();
 });
 document.getElementById("settingScreenShake").addEventListener("change", function() {
   settings.screenShake = this.checked;
+  saveSettings();
 });
 document.getElementById("settingIndicators").addEventListener("change", function() {
   settings.offScreenIndicators = this.checked;
+  saveSettings();
 });
 document.getElementById("settingSFX").addEventListener("change", function() {
   settings.sfxEnabled = this.checked;
+  saveSettings();
 });
 document.getElementById("settingMusicVolume").addEventListener("input", function() {
   settings.musicVolume = parseFloat(this.value);
   bgMusic.volume = settings.musicVolume;
   document.getElementById("musicVolumeLabel").textContent = Math.round(this.value * 100) + "%";
+  saveSettings();
 });
 /*document.getElementById("settingInvincible").addEventListener("change", function() {
   settings.invincible = this.checked;
@@ -967,44 +1042,56 @@ document.getElementById("settingInfiniteDash").addEventListener("change", functi
 });  */
 document.getElementById("settingHitboxes").addEventListener("change", function() {
   settings.showHitboxes = this.checked;
+  saveSettings();
 });
 /*document.getElementById("settingSpeed").addEventListener("input", function() {
   settings.speedMultiplier = parseFloat(this.value);
 });  */
 document.getElementById("settingSwapJumpDash").addEventListener("change", function() {
   settings.swapJumpDash = this.checked;
+  saveSettings();
 });
 document.getElementById("settingVibration").addEventListener("change", function() {
   settings.vibration = this.checked;
+  saveSettings();
 });
 document.getElementById("settingDeadzone").addEventListener("input", function() {
   settings.joystickDeadzone = parseFloat(this.value);
   document.getElementById("deadzoneLabel").textContent = parseFloat(this.value).toFixed(2);
+  saveSettings();
 });
 document.getElementById("settingFPS").addEventListener("change", function() {
   settings.showFPS = this.checked;
+  saveSettings();
 });
 document.getElementById("settingCoords").addEventListener("change", function() {
   settings.showCoords = this.checked;
+  saveSettings();
 });
 document.getElementById("settingMinimap").addEventListener("change", function() {
   settings.showMinimap = this.checked;
+  saveSettings();
 });
 document.getElementById("settingTooltips").addEventListener("change", function() {
   settings.tutorialTooltips = this.checked;
+  saveSettings();
 });
 document.getElementById("settingReducedMotion").addEventListener("change", function() {
   settings.reducedMotion = this.checked;
+  saveSettings();
 });
 document.getElementById("settingHighContrast").addEventListener("change", function() {
   settings.highContrast = this.checked;
   document.body.classList.toggle("high-contrast", this.checked);
+  saveSettings();
 });
 document.getElementById("settingLargeHUD").addEventListener("change", function() {
   settings.largeHUD = this.checked;
+  saveSettings();
 });
 document.getElementById("settingCommands").addEventListener("change", function() {
   settings.commandsEnabled = this.checked;
+  saveSettings();
 });
 
 // Map keys to buttons
@@ -3322,12 +3409,12 @@ function loadMap_Level1() {
 
   /* ------------------ MAIN GROUND PATH ------------------ */
     walls.push(
-    { x: 30, y: 570, width: 600, height: 20 },
+    { x: 30, y: 570, width: 580, height: 20 },
     { x: 700, y: 570, width: 500, height: 20 },
     { x: 1300, y: 570, width: 600, height: 20 },
     { x: 2000, y: 570, width: 700, height: 20 },
     { x: 2690, y: 570, width: 20, height: 1380 },
-    { x: 30, y: 570, width: 620, height: 20 }
+
   );
 
     chairs.push(createChair(500, 540));
@@ -11965,31 +12052,27 @@ if (devMapView) {
   // HUD — fixed to screen
   ctx.fillStyle = "#fff";
   ctx.font = `${hudFontSize - 2}px monospace`;
-  ctx.fillText("Lives: " + playerLives, 10, 40);
+  ctx.fillText("Lives: " + playerLives, 10, 20);
 
   // Dash cooldown indicator
 if (player.dashCooldown > 0) {
   ctx.fillStyle = "#aaa";
   ctx.font = `${hudFontSize - 3}px monospace`;
-  ctx.fillText("DASH cooling...", 10, 60);
+  ctx.fillText("DASH cooling...", 10, 40);
 } else if (player.onGround || !player.dashUsedInAir) {
   ctx.fillStyle = "#00eeff";
   ctx.font = `${hudFontSize - 3}px monospace`;
-  ctx.fillText("DASH ready [Shift]", 10, 60);
+  ctx.fillText("DASH ready [Shift]", 10, 40);
 } else {
   ctx.fillStyle = "#555";
   ctx.font = `${hudFontSize - 3}px monospace`;
-  ctx.fillText("DASH used", 10, 60);
+  ctx.fillText("DASH used", 10, 40);
 }
 
   // --- POTATO HUD WHISPER ---
   ctx.fillStyle = "#ffcc66";
   ctx.font = `${hudFontSize - 2}px monospace`;
   ctx.fillText(potatoHUDLine, 10, 80);
-
-  // Version label
-  ctx.fillStyle = "#fff";
-  ctx.fillText("Version 16", 10, 20);
 
   // --- GAME OVER OVERLAY ---
   if (gameOver) {
