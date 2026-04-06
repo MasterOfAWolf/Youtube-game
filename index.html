@@ -55,6 +55,13 @@
 
 <div id="menu">
   <h1>Youtube Game</h1>
+
+  <div class="name-row">
+    <label for="playerNameInput">Your Name</label>
+    <input type="text" id="playerNameInput" maxlength="20" placeholder="Enter name...">
+  </div>
+
+  <!-- <button onclick="openMultiplayer()">🌐 Multiplayer</button> -->
   <button onclick="openLevelSelect()">Start Game</button>
   <button onclick="openControls()">Controls</button>
   <button onclick="openSettings()">Settings</button>
@@ -89,6 +96,30 @@
 <button onclick="startWaveModeLevel(4)"> Box Chaos - Wave Mode</button> This is a single-line comment -->
 
     <button class="back-btn" onclick="openLevelSelect()">Back</button>
+</div>
+
+<div id="multiplayerLobby" class="hidden">
+  <h2>🌐 Multiplayer</h2>
+
+  <div class="lobby-section">
+    <button class="lobby-big-btn" onclick="lobbyCreateRoom()">➕ Create Room</button>
+  </div>
+
+  <div class="lobby-section">
+    <div class="lobby-join-row">
+      <input type="text" id="roomCodeInput" maxlength="4" placeholder="ABCD" class="room-code-input">
+      <button onclick="lobbyJoinRoom()">Join</button>
+    </div>
+  </div>
+
+  <div id="lobbyRoom" class="hidden">
+    <div class="lobby-room-code">Room: <span id="lobbyRoomCode">----</span></div>
+    <div id="lobbyPlayerList" class="lobby-player-list"></div>
+    <button id="lobbyStartBtn" class="hidden lobby-big-btn" onclick="lobbyStartGame()">▶ Start Game</button>
+    <div id="lobbyStatus" class="lobby-status">Waiting for players...</div>
+  </div>
+
+  <button class="back-btn" onclick="backToMenu()">Back</button>
 </div>
 
 <div id="settings" class="hidden">

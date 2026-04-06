@@ -99,6 +99,171 @@ const localPlayerId = "player_" + Math.random().toString(36).slice(2, 8);
 // Display name — can be set from a future lobby screen
 let localPlayerName = localStorage.getItem("playerName") || "Player";
 
+// ── PLAYER NAME INPUT ──
+const playerNameInput = document.getElementById("playerNameInput");
+playerNameInput.value = localPlayerName;
+
+playerNameInput.addEventListener("input", function() {
+  const val = this.value.trim();
+  if (val.length > 0) {
+    localPlayerName = val;
+    localStorage.setItem("playerName", val);
+  }
+});
+
+// Prevent game keys firing while typing name
+playerNameInput.addEventListener("keydown", e => e.stopPropagation());
+
+// ── NETWORK ──
+const Network = {
+  socket: null,
+  connected: false,
+  remotePlayers: new Map(),
+  serverUrl: "wss://your-app.railway.app", // ← update this once deployed
+
+  connect(onOpen) {
+    this.socket = new WebSocket(this.serverUrl);
+
+    this.socket.onopen = () => {
+      this.connected = true;
+      if (onOpen) onOpen();
+    };
+
+    this.socket.onclose = () => {
+      this.connected = false;
+      chatLog("🌐 Disconnected from server", "#ff8888");
+    };
+
+    this.socket.onerror = () => {
+      this.connected = false;
+      document.getElementById("lobbyStatus").textContent = "Could not connect to server.";
+    };
+
+    this.socket.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+      this.handleMessage(msg);
+    };
+  },
+
+  send(data) {
+    if (this.connected && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify(data));
+    }
+  },
+
+  handleMessage(msg) {
+    switch (msg.type) {
+
+      case "created":
+      case "joined":
+        document.getElementById("lobbyRoomCode").textContent = msg.code;
+        document.getElementById("lobbyRoom").classList.remove("hidden");
+        document.getElementById("lobbyStatus").textContent =
+          msg.type === "created" ? "Share this code with friends!" : "Connected!";
+        lobbySetPlayerList(msg.players);
+        if (msg.type === "created") {
+          document.getElementById("lobbyStartBtn").classList.remove("hidden");
+        }
+        break;
+
+      case "playerJoined":
+        chatLog("🎮 " + msg.name + " joined", "#80ff80");
+        lobbySetPlayerList(msg.players);
+        break;
+
+      case "playerLeft":
+        chatLog("👋 " + msg.name + " left", "#aaaaaa");
+        this.remotePlayers.delete(msg.id);
+        break;
+
+      case "playerList":
+        lobbySetPlayerList(msg.players);
+        break;
+
+      case "youAreHost":
+        document.getElementById("lobbyStartBtn").classList.remove("hidden");
+        document.getElementById("lobbyStatus").textContent = "You are now the host.";
+        break;
+
+      case "playerUpdate":
+        if (msg.id !== localPlayerId) {
+          if (!this.remotePlayers.has(msg.id)) {
+            this.remotePlayers.set(msg.id, {});
+          }
+          applyPlayerSnapshot(this.remotePlayers.get(msg.id), msg.snapshot);
+        }
+        break;
+
+      case "gameStarted":
+        hideAllMenus();
+        startWaveModeLevel(msg.level || 1);
+        break;
+
+      case "chat":
+        chatLog("[" + msg.name + "] " + msg.text, "#c8c0e8");
+        break;
+
+      case "error":
+        document.getElementById("lobbyStatus").textContent = msg.message;
+        break;
+    }
+  },
+
+  tick() {
+    if (!this.connected) return;
+    this.send({
+      type: "playerUpdate",
+      id: localPlayerId,
+      snapshot: getPlayerSnapshot()
+    });
+  }
+};
+
+function lobbySetPlayerList(players) {
+  const list = document.getElementById("lobbyPlayerList");
+  list.innerHTML = "";
+  for (const p of players) {
+    const entry = document.createElement("div");
+    entry.className = "lobby-player-entry" + (p.isHost ? " is-host" : "");
+    entry.textContent = "🎮 " + p.name;
+    list.appendChild(entry);
+  }
+}
+// ── MULTIPLAYER LOBBY ──
+function openMultiplayer() {
+  hideAllMenus();
+  document.getElementById("multiplayerLobby").classList.remove("hidden");
+  document.getElementById("lobbyRoom").classList.add("hidden");
+}
+function lobbyCreateRoom() {
+  Network.connect(() => {
+    Network.send({ type: "create", id: localPlayerId, name: localPlayerName });
+  });
+}
+
+function lobbyJoinRoom() {
+  const code = document.getElementById("roomCodeInput").value.trim().toUpperCase();
+  if (code.length !== 4) {
+    document.getElementById("lobbyStatus").textContent = "Enter a 4-letter code.";
+    return;
+  }
+  document.getElementById("lobbyStatus").textContent = "Connecting...";
+  Network.connect(() => {
+    Network.send({ type: "join", id: localPlayerId, name: localPlayerName, code });
+  });
+}
+
+function lobbyStartGame() {
+  Network.send({ type: "startGame", level: 1 });
+}
+
+document.getElementById("roomCodeInput").addEventListener("input", function() {
+  this.value = this.value.toUpperCase();
+});
+// Prevent game keys while typing room code
+document.getElementById("roomCodeInput").addEventListener("keydown", e => e.stopPropagation());
+
 const tutorialState = {
   active: false,
   completedZones: new Set(),
@@ -128,6 +293,37 @@ const TEST_STATUS = {
 
 const TUTORIAL_TRIGGERS = [];
 
+const G = {
+SuperSnails: [],
+snails: [],
+bats: [],
+yetis: [],
+snowmen:     [],
+turrets:     [],
+chairs:      [],
+tables:      [],
+bullets:     [],
+fireballs:   [],
+snowballs:   [],
+icicles:     [],
+explosions:  [],
+waveSystem: {
+  enabled: false,
+  currentWave: 0,
+  enemiesRemaining: 0,
+  waveActive: false,
+  timeBetweenWaves: 180 * 5,
+  waveTimer: 0,
+  totalEnemiesKilled: 0,
+  
+  spawnQueue: [],
+  spawnTimer: 0,
+  
+  // Current map's wave configuration
+  currentMapWaves: null
+}
+};
+
 let wasOff = true; 
 let lightingEnabled = true;
 let lights = [];
@@ -143,26 +339,16 @@ let walls = [];
 let cheeses = [];
 let boxes = [];
 let items = [];
-let chairs = [];
 let initialChairs = [];
-let bats = [];
 let ladders = [];
 let spikes = [];
-let bullets = [];
 let timeElapsed = 0;
 let cheeseCooldown = 0;
 const CHEESE_COOLDOWN = 3600; // 60 seconds
 let gameLoopId = null;
-let snowmen = [];
 let ovens = [];
 let potato = [];
 let snowParticles = [];
-let fireballs = [];
-let icicles = [];
-let yetis = [];
-let snowballs = [];
-let turrets = [];
-let tables = [];
 let initialTables = [];
 let seesaws = [];
 let potatoMessage = "";
@@ -175,7 +361,6 @@ let playerVehicle = null;    // vehicle the player is currently in
 let playerInVehicle = false;
 
 let cannonProjectiles = [];
-let explosions = [];
 let cannonAimAngle = 0;       // radians, updated every frame from mouse or joystick
 let cannonCooldown = 0;       // prevents spray-firing
 const CANNON_COOLDOWN_FRAMES = 18;
@@ -507,12 +692,12 @@ function initDebugTests() {
           frame: 0, frameTimer: 0,
           knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0
         };
-        snails.push(this._snail);
+        G.snails.push(this._snail);
       },
       check() { return this._snail && this._snail.hp === 2; },
       cleanup() {
-        const i = snails.indexOf(this._snail);
-        if (i > -1) snails.splice(i, 1);
+        const i = G.snails.indexOf(this._snail);
+        if (i > -1) G.snails.splice(i, 1);
       }
     },
     {
@@ -529,13 +714,13 @@ function initDebugTests() {
           frame: 0, frameTimer: 0,
           knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0
         };
-        snails.push(this._snail);
+        G.snails.push(this._snail);
         damageEnemy(this._snail, 1, { x: 0, y: 0 });
       },
       check() { return this._snail && this._snail.hp === 2; },
       cleanup() {
-        const i = snails.indexOf(this._snail);
-        if (i > -1) snails.splice(i, 1);
+        const i = G.snails.indexOf(this._snail);
+        if (i > -1) G.snails.splice(i, 1);
       }
     },
     {
@@ -547,12 +732,12 @@ function initDebugTests() {
       setup() {
         this._bat = createBat(1100, 300, 2);
         this._bat._startX = this._bat.x;
-        bats.push(this._bat);
+        G.bats.push(this._bat);
       },
       check() { return this._bat && Math.abs(this._bat.x - this._bat._startX) > 2; },
       cleanup() {
-        const i = bats.indexOf(this._bat);
-        if (i > -1) bats.splice(i, 1);
+        const i = G.bats.indexOf(this._bat);
+        if (i > -1) G.bats.splice(i, 1);
       }
     },
     {
@@ -563,19 +748,19 @@ function initDebugTests() {
       _turret: null,
       _prevFireballs: 0,
       setup() {
-        this._prevFireballs = fireballs.length;
+        this._prevFireballs = G.fireballs.length;
         this._turret = {
           x: player.x + 100, y: player.y,
           width: 40, height: 40,
           cooldown: 0, fireRate: 1,
           hp: 5, maxHp: 5, hitFlash: 0, armed: true
         };
-        turrets.push(this._turret);
+        G.turrets.push(this._turret);
       },
-      check() { return fireballs.length > this._prevFireballs; },
+      check() { return G.fireballs.length > this._prevFireballs; },
       cleanup() {
-        const i = turrets.indexOf(this._turret);
-        if (i > -1) turrets.splice(i, 1);
+        const i = G.turrets.indexOf(this._turret);
+        if (i > -1) G.turrets.splice(i, 1);
       }
     },
 
@@ -616,10 +801,10 @@ function initDebugTests() {
       timer: 0,
       _prevCount: 0,
       setup() {
-        this._prevCount = explosions.length;
+        this._prevCount = G.explosions.length;
         createExplosion(500, 500);
       },
-      check() { return explosions.length > this._prevCount; }
+      check() { return G.explosions.length > this._prevCount; }
     },
 
     // --- WAVE SYSTEM ---
@@ -2074,7 +2259,7 @@ function drawMinimap() {
 
   // Enemies
   ctx.fillStyle = "#f44";
-  for (const e of [...snails, ...SuperSnails, ...bats, ...turrets, ...snowmen, ...tables, ...yetis, ...chairs]) {
+  for (const e of [...G.snails, ...G.SuperSnails, ...G.bats, ...G.turrets, ...G.snowmen, ...G.tables, ...G.yetis, ...G.chairs]) {
     ctx.fillRect(MX + e.x * scaleX - 1, MY + e.y * scaleY - 1, 3, 3);
   }
 
@@ -2099,7 +2284,7 @@ function drawShadows(light) {
   const casters = [
     ...walls.map(w => ({ ...w, type: 'wall' })),
     ...boxes.map(b => ({ x: b.x, y: b.y, width: b.width, height: b.height, type: 'box' })),
-    ...yetis.filter(y => y.alive).map(y => ({ x: y.x, y: y.y, width: y.width, height: y.height, type: 'yeti' }))
+    ...G.yetis.filter(y => y.alive).map(y => ({ x: y.x, y: y.y, width: y.width, height: y.height, type: 'yeti' }))
   ];
   
   ctx.fillStyle = `rgba(0, 0, 0, ${0.7 - ambientLight})`;
@@ -2575,10 +2760,10 @@ if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
     const kb  = { x: p.vx * 0.4, y: -3 };
 
     const enemyChecks = [
-      { list: snails,     key: 'snail' },
-      { list: SuperSnails,key: 'superSnail' },
-      { list: bats,       key: 'bat' },
-      { list: snowmen,    key: 'snowman' },
+      { list: G.snails,     key: 'snail' },
+      { list: G.SuperSnails,key: 'superSnail' },
+      { list: G.bats,       key: 'bat' },
+      { list: G.snowmen,    key: 'snowman' },
     ];
 
 for (const { list, key } of enemyChecks) {
@@ -2602,8 +2787,8 @@ if (!hit) {
   );
 }
 
-    // Yetis
-    if (!hit) for (const y of yetis) {
+    // G.yetis
+    if (!hit) for (const y of G.yetis) {
       if (!y.alive) continue;
       if (isColliding(hitBox, y)) {
         damageEnemy(y, p.explosive ? 4 : 1, kb);
@@ -2612,36 +2797,36 @@ if (!hit) {
       }
     }
 
-    // Turrets
-    if (!hit) for (let j = turrets.length - 1; j >= 0; j--) {
-      if (isColliding(hitBox, turrets[j])) {
-        damageEnemy(turrets[j], dmg, { x: 0, y: 0 });
-        if (turrets[j].hp <= 0) { turrets.splice(j, 1); onEnemyKilled('turret'); }
+    // G.turrets
+    if (!hit) for (let j = G.turrets.length - 1; j >= 0; j--) {
+      if (isColliding(hitBox, G.turrets[j])) {
+        damageEnemy(G.turrets[j], dmg, { x: 0, y: 0 });
+        if (G.turrets[j].hp <= 0) { G.turrets.splice(j, 1); onEnemyKilled('turret'); }
         hit = true; break;
       }
     }
 
-        // Chairs — knock and damage
-    if (!hit) for (let j = chairs.length - 1; j >= 0; j--) {
-      const c = chairs[j];
+        // G.chairs — knock and damage
+    if (!hit) for (let j = G.chairs.length - 1; j >= 0; j--) {
+      const c = G.chairs[j];
       if (isColliding(hitBox, c)) {
         const kbDir = { x: p.vx * 0.5, y: -4 };
         damageEnemy(c, dmg, kbDir);
         // Extra physics shove on top of knockback
         c.dx += p.vx * 0.6;
         c.dy += p.vy * 0.3 - 3;
-        if (c.hp <= 0) { chairs.splice(j, 1); onEnemyKilled('chair'); }
+        if (c.hp <= 0) { G.chairs.splice(j, 1); onEnemyKilled('chair'); }
         if (p.explosive) createExplosion(p.x, p.y);
         hit = true; break;
       }
     }
-    // Tables — flip them when hit!
-    if (!hit) for (let j = tables.length - 1; j >= 0; j--) {
-      const t = tables[j];
+    // G.tables — flip them when hit!
+    if (!hit) for (let j = G.tables.length - 1; j >= 0; j--) {
+      const t = G.tables[j];
       if (isColliding(hitBox, t)) {
         damageEnemy(t, dmg, { x: p.vx * 0.4, y: -5 });
         if (!t.flipping) triggerTableFlip(t, p.vx * 0.6);
-        if (t.hp <= 0) { tables.splice(j, 1); onEnemyKilled('table'); }
+        if (t.hp <= 0) { G.tables.splice(j, 1); onEnemyKilled('table'); }
         if (p.explosive) createExplosion(p.x, p.y);
         hit = true; break;
       }
@@ -2668,38 +2853,38 @@ if (!hit) {
 
 // --- Explosion (baked potato only) ---
 function createExplosion(x, y) {
-  explosions.push({ x, y, radius: 0, maxRadius: 85, timer: 28, maxTimer: 28 });
+  G.explosions.push({ x, y, radius: 0, maxRadius: 85, timer: 28, maxTimer: 28 });
 
   const R   = 85;
   const dmg = 3;
   const kb  = (ex, ey) => ({ x: (ex - x) * 0.12, y: -5 });
 
-  for (let j = snails.length - 1; j >= 0; j--) {
-    const s = snails[j];
+  for (let j = G.snails.length - 1; j >= 0; j--) {
+    const s = G.snails[j];
     if (Math.hypot((s.x + s.width/2) - x, (s.y + s.height/2) - y) < R) {
       damageEnemy(s, dmg, kb(s.x, s.y));
-      if (s.hp <= 0) { snails.splice(j, 1); onEnemyKilled('snail'); }
+      if (s.hp <= 0) { G.snails.splice(j, 1); onEnemyKilled('snail'); }
     }
   }
-  for (let j = SuperSnails.length - 1; j >= 0; j--) {
-    const s = SuperSnails[j];
+  for (let j = G.SuperSnails.length - 1; j >= 0; j--) {
+    const s = G.SuperSnails[j];
     if (Math.hypot((s.x + s.width/2) - x, (s.y + s.height/2) - y) < R) {
       damageEnemy(s, dmg, kb(s.x, s.y));
-      if (s.hp <= 0) { SuperSnails.splice(j, 1); onEnemyKilled('superSnail'); }
+      if (s.hp <= 0) { G.SuperSnails.splice(j, 1); onEnemyKilled('superSnail'); }
     }
   }
-  for (const yeti of yetis) {
+  for (const yeti of G.yetis) {
     if (!yeti.alive) continue;
     if (Math.hypot((yeti.x + yeti.width/2) - x, (yeti.y + yeti.height/2) - y) < R) {
       damageEnemy(yeti, 4, kb(yeti.x, yeti.y));
       if (yeti.hp <= 0) { yeti.alive = false; onEnemyKilled('yeti'); }
     }
   }
-  for (let j = snowmen.length - 1; j >= 0; j--) {
-    const s = snowmen[j];
+  for (let j = G.snowmen.length - 1; j >= 0; j--) {
+    const s = G.snowmen[j];
     if (Math.hypot((s.x + s.width/2) - x, (s.y + s.height/2) - y) < R) {
       damageEnemy(s, dmg, kb(s.x, s.y));
-      if (s.hp <= 0) { snowmen.splice(j, 1); onEnemyKilled('snowman'); }
+      if (s.hp <= 0) { G.snowmen.splice(j, 1); onEnemyKilled('snowman'); }
     }
   }
   for (const b of boxes) {
@@ -2712,9 +2897,9 @@ function createExplosion(x, y) {
       b.dy -= (1 - dist / R) * 10;
     }
   }
-  // Chairs caught in explosion radius
-  for (let j = chairs.length - 1; j >= 0; j--) {
-    const c = chairs[j];
+  // G.chairs caught in explosion radius
+  for (let j = G.chairs.length - 1; j >= 0; j--) {
+    const c = G.chairs[j];
     const dx   = (c.x + c.width/2)  - x;
     const dy   = (c.y + c.height/2) - y;
     const dist = Math.hypot(dx, dy);
@@ -2723,12 +2908,12 @@ function createExplosion(x, y) {
       damageEnemy(c, 3, { x: (dx / dist) * force * 0.4, y: -5 });
       c.dx += (dx / dist) * force;
       c.dy -= (1 - dist / R) * 9;
-      if (c.hp <= 0) { chairs.splice(j, 1); onEnemyKilled('chair'); }
+      if (c.hp <= 0) { G.chairs.splice(j, 1); onEnemyKilled('chair'); }
     }
   }
-  // Tables caught in explosion: flip them spectacularly
-  for (let j = tables.length - 1; j >= 0; j--) {
-    const t = tables[j];
+  // G.tables caught in explosion: flip them spectacularly
+  for (let j = G.tables.length - 1; j >= 0; j--) {
+    const t = G.tables[j];
     const dx   = (t.x + t.width/2)  - x;
     const dy   = (t.y + t.height/2) - y;
     const dist = Math.hypot(dx, dy);
@@ -2736,7 +2921,7 @@ function createExplosion(x, y) {
       const force = (1 - dist / R) * 16;
       damageEnemy(t, 3, { x: (dx / dist) * force * 0.3, y: -6 });
       if (!t.flipping) triggerTableFlip(t, (dx / (dist||1)) * force * 0.5);
-      if (t.hp <= 0) { tables.splice(j, 1); onEnemyKilled('table'); }
+      if (t.hp <= 0) { G.tables.splice(j, 1); onEnemyKilled('table'); }
     }
   }
   // Screen shake + VHS glitch
@@ -2754,11 +2939,11 @@ function createExplosion(x, y) {
 
 // --- Update explosion animations ---
 function updateExplosions() {
-  for (let i = explosions.length - 1; i >= 0; i--) {
-    const e = explosions[i];
+  for (let i = G.explosions.length - 1; i >= 0; i--) {
+    const e = G.explosions[i];
     e.timer--;
     e.radius = e.maxRadius * (1 - e.timer / e.maxTimer);
-    if (e.timer <= 0) explosions.splice(i, 1);
+    if (e.timer <= 0) G.explosions.splice(i, 1);
   }
 }
 
@@ -2852,7 +3037,7 @@ function drawPotatoCannon() {
   }
 
 function drawExplosions() {
-  for (const e of explosions) {
+  for (const e of G.explosions) {
     const frac = 1 - e.timer / e.maxTimer;
     const alpha = 1 - frac;
 
@@ -3216,11 +3401,11 @@ function loadMap_Tutorial() {
 
   // ── ZONE 5: SWORD ─────────────────────────────
   walls.push({ x: 1490, y: FLOOR, width: 230, height: WT });
-  snails.push({ x: 1560, y: FLOOR - 28, width: 28, height: 20,
+  G.snails.push({ x: 1560, y: FLOOR - 28, width: 28, height: 20,
     dx: 0, dy: 0, dir: 1, speed: 0.2, gravity: 0.6, chaseRange: 80,
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
-  snails.push({ x: 1640, y: FLOOR - 28, width: 28, height: 20,
+  G.snails.push({ x: 1640, y: FLOOR - 28, width: 28, height: 20,
     dx: 0, dy: 0, dir: -1, speed: 0.2, gravity: 0.6, chaseRange: 80,
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
@@ -3239,7 +3424,7 @@ function loadMap_Tutorial() {
     { x: 1785, label: '🐌 SNAIL',       desc: 'Ground patroller.\nChases, bounces off walls.',  color: '#69f0ae' },
     { x: 1870, label: '💚 SUPER SNAIL', desc: 'Wall-climber! Jumps\nand crawls ceilings.',       color: '#00e676' },
     { x: 1960, label: '🦇 BAT',         desc: 'Flies at you.\nSword it from any angle.',         color: '#b39ddb' },
-    { x: 2050, label: '🔴 TURRET',      desc: 'Fires fireballs in range.\nDestroy it with sword!', color: '#ef5350' },
+    { x: 2050, label: '🔴 TURRET',      desc: 'Fires G.fireballs in range.\nDestroy it with sword!', color: '#ef5350' },
     { x: 2140, label: '⛄ SNOWMAN',     desc: 'Emits a SLOW FIELD.\nStay back or use potato!',  color: '#e0f7fa' },
     { x: 2210, label: '🦣 YETI',        desc: 'Boss-tier. Throws\nsnowballs. Very tanky.',       color: '#e0e0e0' },
     { x: 2000, label: '🪑 CHAIR',  desc: 'Bouncy furniture enemy.\nKnockback sends it flying.', color: '#ffcc80' },
@@ -3250,23 +3435,23 @@ function loadMap_Tutorial() {
     tutorialState.museumLabels.push({ wx: me.x, wy: FLOOR - 45, label: me.label, desc: me.desc, color: me.color, width: 50 });
   }
   // Display enemies — zero speed, very high HP so they can't be killed
-  chairs.push({ ...createChair(2005, FLOOR - 93), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
-tables.push({ ...createTable(2305, FLOOR - 101), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
-  snails.push({ x: 1790, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0, dir: 1,
+  G.chairs.push({ ...createChair(2005, FLOOR - 93), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
+  G.tables.push({ ...createTable(2305, FLOOR - 101), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
+  G.snails.push({ x: 1790, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0, dir: 1,
     speed: 0, gravity: 0, chaseRange: 0, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     hp: 999, maxHp: 999, hitFlash: 0, frame: 0, frameTimer: 0, tutorialDisplay: true});
-  SuperSnails.push({ x: 1875, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0,
+  G.SuperSnails.push({ x: 1875, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0,
     speed: 0, gravity: 0, dir: 1, jumpPower: 0, mode: 'ground',
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     jumpTimer: 99999, lastWallSide: null, prevMode: 'ground', hp: 999, maxHp: 999, hitFlash: 0, tutorialDisplay: true });
-  bats.push({ x: 1965, y: FLOOR - 115, width: 28, height: 20, dx: 0, dy: 0,
+  G.bats.push({ x: 1965, y: FLOOR - 115, width: 28, height: 20, dx: 0, dy: 0,
     hp: 999, maxHp: 999, hitFlash: 0, tutorialDisplay: true });
-  turrets.push({ x: 2058, y: FLOOR - 77, cooldown: 999999, fireRate: 999999,
+  G.turrets.push({ x: 2058, y: FLOOR - 77, cooldown: 999999, fireRate: 999999,
     hp: 999, maxHp: 999, armed: false, tutorialDisplay: true });
-  snowmen.push({ x: 2145, y: FLOOR - 83, width: 26, height: 38, speed: 0,
+  G.snowmen.push({ x: 2145, y: FLOOR - 83, width: 26, height: 38, speed: 0,
     slowRadius: 140, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [],
     hp: 999, maxHp: 999, hitFlash: 0, tutorialDisplay: true });
-  yetis.push({ x: 2212, y: FLOOR - 114, width: 48, height: 64, dx: 0, dy: 0,
+  G.yetis.push({ x: 2212, y: FLOOR - 114, width: 48, height: 64, dx: 0, dy: 0,
     dead: false, speed: 0, chaseRange: 0, hp: 999, alive: true,
     throwCooldown: 999999, facing: 1, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     maxHp: 999, hitFlash: 0, tutorialDisplay: true });
@@ -3286,7 +3471,7 @@ tables.push({ ...createTable(2305, FLOOR - 101), hp: 999, maxHp: 999, dx: 0, dy:
   spikes.push({ x: 2415, y: FLOOR - 26, width: 40, height: 26 });
   walls.push({ x: 2360, y: FLOOR - 100, width: 100, height: 14,
     moving: true, dir: 1, speed: 1.5, startX: 2360, range: 80 });
-  turrets.push({ x: 2480, y: FLOOR - 32, cooldown: 0, fireRate: 140,
+  G.turrets.push({ x: 2480, y: FLOOR - 32, cooldown: 0, fireRate: 140,
     hp: 3, maxHp: 3, armed: true });
   tutorialState.zoneSigns.push({
     wx: 2302, wy: FLOOR - 200, title: '[ ZONE 7 ]  HAZARDS',
@@ -3303,7 +3488,7 @@ tables.push({ ...createTable(2305, FLOOR - 101), hp: 999, maxHp: 999, dx: 0, dy:
   potato.collected = false;
   hasPotato = false;
   ovens.push({ x: 2710, y: FLOOR - 60, width: 40, height: 50, active: true, baked: false, glow: 0 });
-  snails.push({ x: 2680, y: FLOOR - 28, width: 28, height: 20,
+  G.snails.push({ x: 2680, y: FLOOR - 28, width: 28, height: 20,
     dx: 0, dy: 0, dir: -1, speed: 0.4, gravity: 0.6, chaseRange: 200,
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     hp: 3, maxHp: 3, hitFlash: 0, frame: 0, frameTimer: 0 });
@@ -3409,8 +3594,8 @@ function loadMap_Level1() {
 
   );
 
-    chairs.push(createChair(500, 540));
-  chairs.push(createChair(1200, 540));
+    G.chairs.push(createChair(500, 540));
+  G.chairs.push(createChair(1200, 540));
   /* ------------------ LOWER PLATFORMS ------------------ */
   walls.push(
     { x: 200, y: 450, width: 160, height: 20 },
@@ -3494,7 +3679,7 @@ boxes.push(createBox(400, 200, BOX_TYPE.ICE));
   { x: 200, y: 840, width: 40, height: 50,  active: false, baked: false,  glow: 0 }
 );
 
-   turrets.push(
+   G.turrets.push(
     { x: 100, y: 650, cooldown: 0, fireRate: 200 },
   );
   
@@ -3529,8 +3714,8 @@ boxes.push(
   createBox(950, 748, BOX_TYPE.NORMAL),
   createBox(1780, 788, BOX_TYPE.NORMAL)
 );
-  /* ------------------ SNAILS (GROUND PRESSURE) ------------------ */
-  snails.push(
+  /* ------------------ G.snails (GROUND PRESSURE) ------------------ */
+  G.snails.push(
     { x: 350, y: 540, width: 28, height: 20, dx: 0, dy: 0, dir: 1, speed: 0.7, gravity: 0.6, chaseRange: 400, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, frame: 0,
   frameTimer: 0},
     { x: 850, y: 540, width: 28, height: 20, dx: 0, dy: 0, dir: -1, speed: 0.65, gravity: 0.6, chaseRange: 400, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, frame: 0,
@@ -3541,7 +3726,7 @@ boxes.push(
    
 
   /* ------------------ SUPER SNAIL (MID-LATE THREAT) ------------------ */
-  SuperSnails.push({
+  G.SuperSnails.push({
     x: 1000,
     y: 870,
     width: 28,
@@ -3561,8 +3746,8 @@ boxes.push(
     prevMode: "ground"
   });
 
-  /* ------------------ TURRETS (CLEAR TELEGRAPHING) ------------------ */
-  turrets.push(
+  /* ------------------ G.turrets (CLEAR TELEGRAPHING) ------------------ */
+  G.turrets.push(
     { x: 1200, y: 420, cooldown: 0, fireRate: 120 },
     { x: 1900, y: 880, cooldown: 0, fireRate: 150 }
   );
@@ -3612,7 +3797,7 @@ boxes.push(
   { x: 1780, y: 788, width: 32, height: 32, dx: 0, dy: 0 }
 );
 
-snails.push(
+G.snails.push(
   {
     x: 2100,
     y: 1720,
@@ -3632,8 +3817,8 @@ snails.push(
   }
 );
 
-// === TABLES — placed on wide platforms in Level 1 ===
-tables.push(
+// === G.tables — placed on wide platforms in Level 1 ===
+G.tables.push(
   createTable(420, 540),   // on the main floor — early encounter
   createTable(1100, 660),  // on a mid-air ledge
   createTable(1780, 790),  // right side
@@ -3644,15 +3829,15 @@ tables.push(
 
 function loadMap_Level2() {
   walls = [];
-  turrets = [];
+  G.turrets = [];
   seesaws = [];
   boxes = [];
-  snails = [];
-  SuperSnails = [];
+  G.snails = [];
+  G.SuperSnails = [];
   spikes = [];
   ladders = [];
-  chairs = [];
-  tables = [];
+  G.chairs = [];
+  G.tables = [];
   addMapBounds();
 
   /* ==================== LEVEL 2: THE TOWER ====================
@@ -3700,7 +3885,7 @@ function loadMap_Level2() {
   );
 
   // Left route snail
-  snails.push({
+  G.snails.push({
     x: 140, y: 1520, width: 28, height: 20,
     dx: 0, dy: 0, dir: 1, speed: 0.7,
     chaseRange: 400, gravity: 0.6,
@@ -3742,7 +3927,7 @@ function loadMap_Level2() {
   );
 
   // Right route enemy
-  SuperSnails.push({
+  G.SuperSnails.push({
     x: 1450, y: 1420, width: 28, height: 20,
     dx: 0, dy: 0, speed: 1.8, gravity: 0.5,
     dir: -1, jumpPower: -14, mode: "ground",
@@ -3773,7 +3958,7 @@ function loadMap_Level2() {
   );
 
   // Turret guarding center
-  turrets.push(
+  G.turrets.push(
     { x: 720, y: 1370, cooldown: 0, fireRate: 110, hp: 2, maxHp: 2, hitFlash: 0 }
   );
 
@@ -3822,7 +4007,7 @@ function loadMap_Level2() {
   );
 
   // Enemies in seesaw section
-  snails.push(
+  G.snails.push(
     {
       x: 550, y: 1118, width: 28, height: 20,
       dx: 0, dy: 0, dir: 1, speed: 0.8,
@@ -3858,8 +4043,8 @@ function loadMap_Level2() {
     { x: 1670, y: 624, width: 40, height: 26 }
   );
 
-  // Turrets in corridor
-  turrets.push(
+  // G.turrets in corridor
+  G.turrets.push(
     { x: 1300, y: 820, cooldown: 0, fireRate: 90, hp: 2, maxHp: 2, hitFlash: 0 },
     { x: 1700, y: 620, cooldown: 0, fireRate: 80, hp: 2, maxHp: 2, hitFlash: 0 }
   );
@@ -3882,7 +4067,7 @@ function loadMap_Level2() {
   );
 
   // Super snail guardian
-  SuperSnails.push({
+  G.SuperSnails.push({
     x: 650, y: 620, width: 28, height: 20,
     dx: 0, dy: 0, speed: 2.0, gravity: 0.5,
     dir: 1, jumpPower: -14, mode: "ground",
@@ -3922,7 +4107,7 @@ function loadMap_Level2() {
   );
 
   // Final guardian
-  SuperSnails.push({
+  G.SuperSnails.push({
     x: 1250, y: 220, width: 28, height: 20,
     dx: 0, dy: 0, speed: 2.2, gravity: 0.5,
     dir: -1, jumpPower: -14, mode: "ground",
@@ -3955,14 +4140,14 @@ function loadMap_Level2() {
 
 function loadMap_Level3() {
   walls = [];
-  turrets = [];
+  G.turrets = [];
   seesaws = [];
   boxes = [];
-  snails = [];
-  SuperSnails = [];
+  G.snails = [];
+  G.SuperSnails = [];
   spikes = [];
-  icicles = [];
-  tables = [];
+  G.icicles = [];
+  G.tables = [];
 
 walls.push({ x: 0, y: 0, width: 2800, height: 30, ice: true },
 { x: 0, y: 0, width: 30, height: 2100, ice: true },
@@ -4007,7 +4192,7 @@ walls.push({ x: 80, y: 980, width: 120, height: 20, ice: true });
 */
 
   // --- ENEMIES ---
-  yetis.push({
+  G.yetis.push({
   x: 1200,
   y: 1250,
   width: 48,
@@ -4031,7 +4216,7 @@ walls.push({ x: 80, y: 980, width: 120, height: 20, ice: true });
   knockbackDy: 0
 });
 
-  snails.push(
+  G.snails.push(
     {
       x: 750, y: 1430, width: 32, height: 24,
       dx: 0, dy: 0, dir: 1, speed: 0.9,
@@ -4041,7 +4226,7 @@ walls.push({ x: 80, y: 980, width: 120, height: 20, ice: true });
     }
   );
 
-  SuperSnails.push(
+  G.SuperSnails.push(
     {
       x: 1450, y: 980, width: 28, height: 20,
       dx: 0, dy: 0, speed: 2.1, gravity: 0.6,
@@ -4052,13 +4237,13 @@ walls.push({ x: 80, y: 980, width: 120, height: 20, ice: true });
   );
 
   // --- TURRET PRESSURE ---
-  turrets.push(
+  G.turrets.push(
     { x: 1650, y: 870, cooldown: 0, fireRate: 90 },
     { x: 150, y: 1600, cooldown: 0, fireRate: 90 },
     { x: 1050, y: 2000, cooldown: 0, fireRate: 90 }
   );
  
-  snowmen.push(
+  G.snowmen.push(
    { x: 1000,
     y: 1000,
     width: 26,
@@ -4072,7 +4257,7 @@ walls.push({ x: 80, y: 980, width: 120, height: 20, ice: true });
    }
 );
 
-  icicles.push (
+  G.icicles.push (
 {
   x: 900,
   y: 30,          // ceiling position
@@ -4163,14 +4348,14 @@ function drawOffScreenIndicators() {
   
   // Get all alive enemies
 const allEnemies = [
-    ...snails.map(e => ({ e, list: snails, key: 'snail' })),
-    ...SuperSnails.map(e => ({ e, list: SuperSnails, key: 'superSnail' })),
-    ...yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
-    ...snowmen.map(e => ({ e, list: snowmen, key: 'snowman' })),
-    ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
-    ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
-    ...tables.map(e => ({ e, list: tables, key: 'table' })),
-    ...bats.map(e => ({ e, list: bats, key: 'bat' })),
+    ...G.snails.map(e => ({ e, list: G.snails, key: 'snail' })),
+    ...G.SuperSnails.map(e => ({ e, list: G.SuperSnails, key: 'superSnail' })),
+    ...G.yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
+    ...G.snowmen.map(e => ({ e, list: G.snowmen, key: 'snowman' })),
+    ...G.turrets.map(e => ({ e, list: G.turrets, key: 'turret' })),
+    ...G.chairs.map(e => ({ e, list: G.chairs, key: 'chair' })),
+    ...G.tables.map(e => ({ e, list: G.tables, key: 'table' })),
+    ...G.bats.map(e => ({ e, list: G.bats, key: 'bat' })),
   ];
   
   for (let enemy of allEnemies) {
@@ -4651,7 +4836,7 @@ function updatePlacedStructures() {
     // Launch anything that lands on it
     const rect = { x: s.wx, y: s.wy, width: BUILD_CELL, height: BUILD_CELL };
 
-    const targets = [player, ...snails, ...SuperSnails, ...chairs, ...tables];
+    const targets = [player, ...G.snails, ...G.SuperSnails, ...G.chairs, ...G.tables];
     for (const t of targets) {
       if (!isColliding(rect, t)) continue;
       const feet = t.y + (t.height || 32);
@@ -4992,10 +5177,10 @@ function updateVehicles() {
     if (Math.abs(v.vx) > 2) {
       const bounds = getVehicleBounds(v);
       const lists = [
-        { list: snails,      key: 'snail'      },
-        { list: SuperSnails, key: 'superSnail' },
-        { list: chairs,      key: 'chair'      },
-        { list: tables,      key: 'table'      },
+        { list: G.snails,      key: 'snail'      },
+        { list: G.SuperSnails, key: 'superSnail' },
+        { list: G.chairs,      key: 'chair'      },
+        { list: G.tables,      key: 'table'      },
       ];
       for (const { list, key } of lists) {
         for (let i = list.length - 1; i >= 0; i--) {
@@ -5212,7 +5397,7 @@ function drawVehicles() {
 function checkEnemyVehicleDamage() {
   for (const v of vehicles) {
     const bounds = getVehicleBounds(v);
-    const allEnemies = [...snails, ...SuperSnails, ...bats];
+    const allEnemies = [...G.snails, ...G.SuperSnails, ...G.bats];
 
     for (const e of allEnemies) {
       if (!rectsOverlap(bounds, e)) continue;
@@ -5392,8 +5577,8 @@ if (
   }
 }
 
-    // --- BOX COLLISIONS WITH SNAILS ---
-    for (let s of [...snails, ...SuperSnails]) {
+    // --- BOX COLLISIONS WITH G.snails ---
+    for (let s of [...G.snails, ...G.SuperSnails]) {
       if (isColliding(box, s)) resolveBoxCollision(box, s);
     }
 
@@ -5967,12 +6152,12 @@ function trySpawnCheese() {
 }
 
 function updateBats() {
-  for (let i = bats.length - 1; i >= 0; i--) {
-    let bat = bats[i];
+  for (let i = G.bats.length - 1; i >= 0; i--) {
+    let bat = G.bats[i];
     
-    // Remove dead bats
+    // Remove dead G.bats
     if (bat.hp <= 0) {
-      bats.splice(i, 1);
+      G.bats.splice(i, 1);
       onEnemyKilled('bat');
       continue;
     }
@@ -6289,7 +6474,7 @@ function drawTutorialHUD() {
 }
   
 function drawBats() {
-  for (let bat of bats) {
+  for (let bat of G.bats) {
     ctx.save();
     
     // Hit flash
@@ -6349,7 +6534,7 @@ function drawBats() {
 
 // Add bat to wave spawn
 function spawnBat(x, y, hp) {
-  bats.push(createBat(x, y, hp));
+  G.bats.push(createBat(x, y, hp));
   createSpawnEffect(x, y);
 }
 
@@ -6397,32 +6582,32 @@ player.dashUsedInAir = false;  // one air dash per jump
 player.dashActive = false;
 
 function addEnemyHealth() {
-  // Snails get 1-2 HP
-  for (let s of snails) {
+  // G.snails get 1-2 HP
+  for (let s of G.snails) {
     if (!s.hp) s.hp = 1;
     if (!s.maxHp) s.maxHp = s.hp;
   }
   
-  // Super Snails get 3-4 HP
-  for (let s of SuperSnails) {
+  // Super G.snails get 3-4 HP
+  for (let s of G.SuperSnails) {
     if (!s.hp) s.hp = 3;
     if (!s.maxHp) s.maxHp = s.hp;
   }
   
-  // Yetis already have HP in your code (5)
-  for (let y of yetis) {
+  // G.yetis already have HP in your code (5)
+  for (let y of G.yetis) {
     if (!y.hp) y.hp = 5;
     if (!y.maxHp) y.maxHp = y.hp;
   }
   
-  // Snowmen get 4 HP
-  for (let s of snowmen) {
+  // G.snowmen get 4 HP
+  for (let s of G.snowmen) {
     if (!s.hp) s.hp = 4;
     if (!s.maxHp) s.maxHp = s.hp;
   }
   
-  // Turrets get 2 HP (can be destroyed!)
-  for (let t of turrets) {
+  // G.turrets get 2 HP (can be destroyed!)
+  for (let t of G.turrets) {
     if (!t.hp) t.hp = 2;
     if (!t.maxHp) t.maxHp = t.hp;
   }
@@ -6457,8 +6642,8 @@ function drawEnemyHealthBars() {
   if (!settings.enemyHealthBars) return;
   ctx.save();
   
-  // Snails
-  for (let s of snails) {
+  // G.snails
+  for (let s of G.snails) {
     if (!s.hp || s.hp <= 0) continue;
     
     const barWidth = 24;
@@ -6480,7 +6665,7 @@ function drawEnemyHealthBars() {
     ctx.lineWidth = 1;
     ctx.strokeRect(x, y, barWidth, barHeight);
   }
-  for (let c of chairs) {
+  for (let c of G.chairs) {
     if (!c.hp || c.hp <= 0) continue;
     const barWidth = 32;
     const barHeight = 4;
@@ -6495,7 +6680,7 @@ function drawEnemyHealthBars() {
     ctx.lineWidth = 1;
     ctx.strokeRect(x, y, barWidth, barHeight);
   }
-  for (let b of bats) {
+  for (let b of G.bats) {
     if (!b.hp || b.hp <= 0) continue;
     
     const barWidth = 24;
@@ -6517,8 +6702,8 @@ function drawEnemyHealthBars() {
     ctx.lineWidth = 1;
     ctx.strokeRect(x, y, barWidth, barHeight);
   }
-  // Super Snails
-  for (let s of SuperSnails) {
+  // Super G.snails
+  for (let s of G.SuperSnails) {
     if (!s.hp || s.hp <= 0) continue;
     
     const barWidth = 28;
@@ -6538,8 +6723,8 @@ function drawEnemyHealthBars() {
     ctx.strokeRect(x, y, barWidth, barHeight);
   }
   
-  // Yetis
-  for (let y of yetis) {
+  // G.yetis
+  for (let y of G.yetis) {
     if (!y.alive || !y.hp || y.hp <= 0) continue;
     
     const barWidth = 40;
@@ -6559,8 +6744,8 @@ function drawEnemyHealthBars() {
     ctx.strokeRect(x, yPos, barWidth, barHeight);
   }
   
-  // Snowmen
-  for (let s of snowmen) {
+  // G.snowmen
+  for (let s of G.snowmen) {
     if (!s.hp || s.hp <= 0) continue;
     
     const barWidth = 30;
@@ -6580,8 +6765,8 @@ function drawEnemyHealthBars() {
     ctx.strokeRect(x, y, barWidth, barHeight);
   }
   
-  // Turrets
-  for (let t of turrets) {
+  // G.turrets
+  for (let t of G.turrets) {
     if (!t.hp || t.hp <= 0) continue;
     
     const barWidth = 32;
@@ -6606,15 +6791,15 @@ function drawEnemyHealthBars() {
 
 // Update hit flash effect
 function updateEnemyHitFlashes() {
-  for (let s of [...snails, ...SuperSnails, ...snowmen, ...tables]) {
+  for (let s of [...G.snails, ...G.SuperSnails, ...G.snowmen, ...G.tables]) {
     if (s.hitFlash > 0) s.hitFlash--;
   }
   
-  for (let y of yetis) {
+  for (let y of G.yetis) {
     if (y.hitFlash > 0) y.hitFlash--;
   }
   
-  for (let t of turrets) {
+  for (let t of G.turrets) {
     if (t.hitFlash > 0) t.hitFlash--;
   }
 }
@@ -6923,22 +7108,6 @@ const UPGRADE_POOL = [
 // Track which upgrades the player already has (for de-duplication where needed)
 const ownedUpgradeIds = new Set();
 
-let waveSystem = {
-  enabled: false,
-  currentWave: 0,
-  enemiesRemaining: 0,
-  waveActive: false,
-  timeBetweenWaves: 180 * 5,
-  waveTimer: 0,
-  totalEnemiesKilled: 0,
-  
-  spawnQueue: [],
-  spawnTimer: 0,
-  
-  // Current map's wave configuration
-  currentMapWaves: null
-};
-
 // === WAVE DEFINITIONS PER MAP ===
 
 const waveConfigurations = {
@@ -6995,7 +7164,7 @@ const waveConfigurations = {
     {
       name: "Boss Wave",
       enemies: [
-        { type: "snail", count: 4, hp: 2 }, // tougher snails
+        { type: "snail", count: 4, hp: 2 }, // tougher G.snails
         { type: "superSnail", count: 3, hp: 4 },
         { type: "turret", count: 2, hp: 3 },
         { type: "bat", count: 2, hp: 2 },
@@ -7190,13 +7359,13 @@ function startWaveMode(levelNumber) {
   waveSystem.currentMapWaves = waveConfigurations[levelKey] || waveConfigurations.level1;
   
   // Clear existing enemies
-  snails = [];
-  SuperSnails = [];
-  yetis = [];
-  snowmen = [];
-  turrets = [];
-  bats = [];
-  tables = [];
+  G.snails = [];
+  G.SuperSnails = [];
+  G.yetis = [];
+  G.snowmen = [];
+  G.turrets = [];
+  G.bats = [];
+  G.tables = [];
   
   potatoMessage = "🌊 WAVE MODE STARTING...";
   potatoMessageTimer = 120;
@@ -7321,7 +7490,7 @@ function spawnEnemy(type, hp) {
   
   switch(type) {
     case 'snail':
-      snails.push({
+      G.snails.push({
         x: pos.x + Math.random() * 100,
         y: pos.y,
         width: 28,
@@ -7344,7 +7513,7 @@ function spawnEnemy(type, hp) {
       break;
       
     case 'superSnail':
-      SuperSnails.push({
+      G.SuperSnails.push({
         x: pos.x + Math.random() * 100,
         y: pos.y,
         width: 28,
@@ -7369,7 +7538,7 @@ function spawnEnemy(type, hp) {
       break;
       
     case 'turret':
-      turrets.push({
+      G.turrets.push({
         x: pos.x,
         y: pos.y,
         width: 40,  // REQUIRED for collision
@@ -7384,7 +7553,7 @@ function spawnEnemy(type, hp) {
       
     case 'yeti':
       if (isChristmasMap()) {
-        yetis.push({
+        G.yetis.push({
           x: pos.x,
           y: pos.y + 1100,
           width: 48,
@@ -7418,13 +7587,13 @@ case 'table': {
   newTable.frameSpeed = 8;
   newTable.hp    = hp || 4;
   newTable.maxHp = hp || 4;
-  tables.push(newTable);
+  G.tables.push(newTable);
   break;
 }
       
     case 'snowman':
       if (isChristmasMap()) {
-        snowmen.push({
+        G.snowmen.push({
           x: pos.x,
           y: pos.y + 1100,
           width: 26,
@@ -7488,13 +7657,13 @@ function updateWaveSystem() {
   if (waveSystem.waveActive && waveSystem.spawnQueue.length === 0) {
     let aliveCount = 0;
     
-    aliveCount += snails.filter(s => s.hp > 0).length;
-    aliveCount += SuperSnails.filter(s => s.hp > 0).length;
-    aliveCount += yetis.filter(y => y.alive && y.hp > 0).length;
-    aliveCount += snowmen.filter(s => s.hp > 0).length;
-    aliveCount += turrets.filter(t => t.hp > 0).length;
-    aliveCount += bats.filter(b => b.hp > 0).length;
-    aliveCount += tables.filter(t => t.hp > 0).length;
+    aliveCount += G.snails.filter(s => s.hp > 0).length;
+    aliveCount += G.SuperSnails.filter(s => s.hp > 0).length;
+    aliveCount += G.yetis.filter(y => y.alive && y.hp > 0).length;
+    aliveCount += G.snowmen.filter(s => s.hp > 0).length;
+    aliveCount += G.turrets.filter(t => t.hp > 0).length;
+    aliveCount += G.bats.filter(b => b.hp > 0).length;
+    aliveCount += G.tables.filter(t => t.hp > 0).length;
     if (aliveCount === 0) {
       waveSystem.waveActive = false;
       waveSystem.waveTimer = waveSystem.timeBetweenWaves;
@@ -7635,13 +7804,13 @@ function drawWaveUI() {
   
   if (waveSystem.waveActive) {
     let aliveCount = 0;
-    aliveCount += snails.filter(s => s.hp > 0).length;
-    aliveCount += SuperSnails.filter(s => s.hp > 0).length;
-    aliveCount += yetis.filter(y => y.alive && y.hp > 0).length;
-    aliveCount += snowmen.filter(s => s.hp > 0).length;
-    aliveCount += turrets.filter(t => t.hp > 0).length;
-    aliveCount += bats.filter(b => b.hp > 0).length;
-    aliveCount += tables.filter(t => t.hp > 0).length;
+    aliveCount += G.snails.filter(s => s.hp > 0).length;
+    aliveCount += G.SuperSnails.filter(s => s.hp > 0).length;
+    aliveCount += G.yetis.filter(y => y.alive && y.hp > 0).length;
+    aliveCount += G.snowmen.filter(s => s.hp > 0).length;
+    aliveCount += G.turrets.filter(t => t.hp > 0).length;
+    aliveCount += G.bats.filter(b => b.hp > 0).length;
+    aliveCount += G.tables.filter(t => t.hp > 0).length;
     
     ctx.font = "18px Arial";
     ctx.fillText(`Enemies: ${aliveCount}`, canvas.width - 20, 55);
@@ -7699,6 +7868,7 @@ const world = {
 };
 
 function hideAllMenus() {
+  document.getElementById("multiplayerLobby").classList.add("hidden");
   document.getElementById("menu").classList.add("hidden");
   document.getElementById("levelSelect").classList.add("hidden");
   document.getElementById("waveSelect").classList.add("hidden");
@@ -7839,13 +8009,13 @@ debugTests = [];
 
   generatedTiles = [];
   enemies = [];
-  fireballs = [];
+  G.fireballs = [];
   timeElapsed = 0;
  hasPotato = false;
   potato.collected = true;
   cheeses = [];
   cannonProjectiles = [];
-  explosions = [];
+  G.explosions = [];
   cannonCooldown = 0;
   syncJoystickVisibility();
   potatoMessage = "";
@@ -7853,11 +8023,11 @@ debugTests = [];
   potatoHUDLine = "";
   potatoState = "none";
   // "none" | "raw" | "baked"
-  if (initialChairs && initialChairs.length) chairs = initialChairs.map(c => ({ ...c }));
-  if (initialTables && initialTables.length) tables = initialTables.map(t => ({ ...t }));
+  if (initialChairs && initialChairs.length) G.chairs = initialChairs.map(c => ({ ...c }));
+  if (initialTables && initialTables.length) G.tables = initialTables.map(t => ({ ...t }));
   if (initialBoxes && initialBoxes.length) boxes = initialBoxes.map(b => ({ ...b }));
-  if (initialSnails && initialSnails.length) snails = initialSnails.map(s => ({ ...s }));
-  if (initialSuperSnails && initialSuperSnails.length) SuperSnails = initialSuperSnails.map(s => ({ ...s }));
+  if (initialSnails && initialSnails.length) G.snails = initialSnails.map(s => ({ ...s }));
+  if (initialSuperSnails && initialSuperSnails.length) G.SuperSnails = initialSuperSnails.map(s => ({ ...s }));
   if (initialWalls && initialWalls.length) walls = initialWalls.map(w => ({ ...w }));
   if (initialSpikes && initialSpikes.length) spikes = initialSpikes.map(s => ({ ...s }));
   if (initialLadders && initialLadders.length) ladders = initialLadders.map(l => ({ ...l }));
@@ -7928,7 +8098,7 @@ function seesawSurfaceY(s, x) {
     height: player.height
   };
 
-  for (let s of snails.concat(SuperSnails)) {
+  for (let s of G.snails.concat(SuperSnails)) {
     if (
       attackBox.x < s.x + s.width &&
       attackBox.x + attackBox.width > s.x &&
@@ -7946,13 +8116,13 @@ function seesawSurfaceY(s, x) {
 
 function saveInitialState() {
   initialBoxes = boxes.map(b => ({ ...b }));
-  initialSnails = snails.map(s => ({ ...s }));
-  initialSuperSnails = SuperSnails.map(s => ({ ...s }));
+  initialSnails = G.snails.map(s => ({ ...s }));
+  initialSuperSnails = G.SuperSnails.map(s => ({ ...s }));
   initialWalls = walls.map(w => ({ ...w }));
   initialSpikes = spikes.map(s => ({ ...s }));
   initialLadders = ladders.map(l => ({ ...l }));
-  initialChairs = chairs.map(c => ({ ...c }));
-  initialTables = tables.map(t => ({ ...t }));
+  initialChairs = G.chairs.map(c => ({ ...c }));
+  initialTables = G.tables.map(t => ({ ...t }));
   
   
 }
@@ -7968,8 +8138,8 @@ function bakePotato(oven) {
 }
 
 function updateFireballs() {
-    for (let i = fireballs.length - 1; i >= 0; i--) {
-        const f = fireballs[i];
+    for (let i = G.fireballs.length - 1; i >= 0; i--) {
+        const f = G.fireballs[i];
 
         // Apply velocity
         f.x += f.vx;
@@ -7997,7 +8167,7 @@ function updateFireballs() {
       potatoMessage = "🥔 the oven awakens";
       potatoMessageTimer = 120;
 
-      fireballs.splice(i, 1); // consume fireball
+      G.fireballs.splice(i, 1); // consume fireball
       continue;
     }
     }     
@@ -8026,7 +8196,7 @@ function updateFireballs() {
 
         // Collision with walls
         if (collidesWithWall(f.x, f.y, f.size, f.size)) {
-            fireballs.splice(i, 1);
+            G.fireballs.splice(i, 1);
             continue;
         }
 
@@ -8043,7 +8213,7 @@ function updateFireballs() {
               box.x += (dx / mag) * (knockback * 2);
               box.y += (dy / mag) * -knockback;
 
-                fireballs.splice(i, 1); // destroy fireball
+                G.fireballs.splice(i, 1); // destroy fireball
                 break; // stop checking boxes
             }
         }
@@ -8055,14 +8225,14 @@ function updateFireballs() {
             player.y + player.height > f.y
         ) {
             damagePlayer("Fireball");
-            fireballs.splice(i, 1);
+            G.fireballs.splice(i, 1);
           
         }
     }
 }
 
 function updateYetis() {
-  for (let y of yetis) {
+  for (let y of G.yetis) {
     if (!y.alive) continue;
 
     const dx = player.x - y.x;
@@ -8081,7 +8251,7 @@ function updateYetis() {
 
     y.x += y.dx;
 
-    // Throw snowballs
+    // Throw G.snowballs
     if (dist < 450 && y.throwCooldown <= 0) {
       throwSnowball(y);
       y.throwCooldown = 90; // cooldown frames
@@ -8097,7 +8267,7 @@ function throwSnowball(y) {
   const dy = player.y - y.y;
   const dist = Math.hypot(dx, dy) || 1;
 
-  snowballs.push({
+  G.snowballs.push({
   x: y.x + y.width / 2 - 6,
   y: y.y + 20 - 6,
   width: 12,
@@ -8109,7 +8279,7 @@ function throwSnowball(y) {
 }
 
 function updateSnowballs() {
-  for (let s of snowballs) {
+  for (let s of G.snowballs) {
     if (!s.alive) continue;
 
     s.x += s.dx;
@@ -8130,7 +8300,7 @@ function updateSnowballs() {
 }
 
 function updateTurrets() {
-    for (let turret of turrets) {
+    for (let turret of G.turrets) {
         if (turret.cooldown > 0) {
             turret.cooldown--;
             continue;
@@ -8147,7 +8317,7 @@ function updateTurrets() {
 
         // Shoot fireball
         const speed = 11;
-        fireballs.push({
+        G.fireballs.push({
             x: turret.x + 16,
             y: turret.y + 16,
             vx: (dx / dist) * speed,
@@ -8189,7 +8359,7 @@ function drawSpikes() {
 function updateIcicles() {
   if (!isChristmasMap()) return;
 
-  for (let i of icicles) {
+  for (let i of G.icicles) {
 
     // --- RESPAWN LOGIC ---
     if (!i.active) {
@@ -8235,7 +8405,7 @@ function updateIcicles() {
 
 // === SMART SNAIL MODULE (Enhanced AI) ===
 function updateSnails() {
-  for (let s of snails) {
+  for (let s of G.snails) {
     
     if (s.knockbackTimer > 0) {
   s.x += s.knockbackDx;
@@ -8304,7 +8474,7 @@ function updateSnails() {
           }
         }
       }
-      for (let snail of snails) {
+      for (let snail of G.snails) {
 
   snail.frameTimer++;
 
@@ -8352,7 +8522,7 @@ function updateSnails() {
   }
 }
 // === ENEMY MODULE (Smart Snail) ===
-let snails = [
+Gsnails = [
   { 
     x: 700, 
     y: 538, 
@@ -8389,8 +8559,8 @@ potato = {
 let hasPotato = false;
 
 
-// === SUPER SNAILS ===
-let SuperSnails = [
+// === SUPER G.snails ===
+G.SuperSnails = [
   {
     x: 600,
     y: 500,
@@ -8421,7 +8591,7 @@ const SUPER_JUMP_COOLDOWN_MAX = 180; // ~3 sec at 60fps
 
 
 function updateSuperSnails() {
-  for (let s of SuperSnails) {
+  for (let s of G.SuperSnails) {
 
     if (s.prevMode    === undefined) s.prevMode    = s.mode;
     if (s.lastWallSide === undefined) s.lastWallSide = null;
@@ -8601,12 +8771,12 @@ function updateSuperSnails() {
 }
 
 function drawSuperSnails() {
-      if (SuperSnails.hitFlash > 0) {
+      if (G.SuperSnails.hitFlash > 0) {
       ctx.fillStyle = "#f00"; // red
     } else {
       ctx.fillStyle = "#4dff68"; // normal green
     }
-  for (let s of SuperSnails) {
+  for (let s of G.SuperSnails) {
     ctx.fillRect(s.x, s.y, s.width, s.height);
   }
 }
@@ -8660,7 +8830,7 @@ function drawLadders() {
 }
 
 function drawYetis() {
-  for (let y of yetis) {
+  for (let y of G.yetis) {
     if (!y.alive) continue;
 
         if (yetis.hitFlash > 0) {
@@ -8758,7 +8928,7 @@ function drawOven() {
 
 function drawSnowballs() {
   ctx.fillStyle = "#fff";
-  for (let s of snowballs) {
+  for (let s of G.snowballs) {
     if (!s.alive) continue;
     ctx.beginPath();
     ctx.arc(
@@ -8834,7 +9004,7 @@ function resetGame() {
   resetPlayer();
 
   cannonProjectiles = [];
-  explosions = [];
+  G.explosions = [];
   cannonCooldown = 0;
   syncJoystickVisibility();
   // --- POTATO RESET ---
@@ -9008,8 +9178,8 @@ if (
   }
 }
 
-    // --- BOX COLLISIONS WITH SNAILS ---
-    for (let s of [...snails, ...SuperSnails]) {
+    // --- BOX COLLISIONS WITH G.snails ---
+    for (let s of [...G.snails, ...G.SuperSnails]) {
       if (isColliding(box, s)) resolveBoxCollision(box, s);
     }
 
@@ -9280,6 +9450,7 @@ function backToControls() {
 function backToMenu() {
 
   stopGameLoop();  
+  document.getElementById("multiplayerLobby").classList.add("hidden");
   document.getElementById("pauseMenu").classList.add("hidden");
   document.getElementById("levelSelect").classList.add("hidden");
   document.getElementById("waveSelect").classList.add("hidden");
@@ -9384,7 +9555,7 @@ function bakePotato(oven) {
 
 
 function updateSnowmen() {
-  for (let s of snowmen) {
+  for (let s of G.snowmen) {
     const dx = player.x - s.x;
     const dist = Math.abs(dx);
 
@@ -9424,7 +9595,7 @@ const whispers = [
   "🥔 keep going",
   "🥔 do not trust the ladder",
   "🥔 i have always been here",
-  "🥔 the snails know",
+  "🥔 the G.snails know",
   "🥔 you are not the first",
   "🥔 something is watching the cheese",
   "🥔 the wolf dreams in numbers",
@@ -9497,7 +9668,7 @@ function applySnowmanSlow() {
 
   // 🥔 Potato = no snow slow
 if (!hasPotato) {
-  for (let s of snowmen) {
+  for (let s of G.snowmen) {
     const cx = s.x + s.width / 2;
     const cy = s.y + s.height / 2;
 
@@ -9533,7 +9704,7 @@ function tryDash() {
 }
 
 // === TABLE MODULE ===
-// Tables are heavy furniture enemies that patrol, can be stood on,
+// G.tables are heavy furniture enemies that patrol, can be stood on,
 // and enter a dramatic FLIP STATE when damaged — spinning through the
 // air and slamming down to deal area-of-effect damage.
 
@@ -9568,7 +9739,7 @@ function createTable(x, y) {
 
     // Visual detail
     woodGrain: Math.floor(Math.random() * 3),  // 0-2 grain style
-    clothColor: null,         // some tables have tablecloths
+    clothColor: null,         // some G.tables have tablecloths
   };
 }
 
@@ -9585,7 +9756,7 @@ function triggerTableFlip(t, launchDx) {
 }
 
 function updateTables() {
-  for (let t of tables) {
+  for (let t of G.tables) {
     if (t.hitFlash  > 0) t.hitFlash--;
     if (t.flipDamageCooldown > 0) t.flipDamageCooldown--;
 
@@ -9620,37 +9791,37 @@ function updateTables() {
         const cy = t.y + t.height / 2;
         const flipHit = { x: cx - spinR, y: cy - spinR, width: spinR*2, height: spinR*2 };
 
-        // Hurt snails
-        for (let i = snails.length - 1; i >= 0; i--) {
-          const s = snails[i];
+        // Hurt G.snails
+        for (let i = G.snails.length - 1; i >= 0; i--) {
+          const s = G.snails[i];
           if (isColliding(flipHit, s)) {
             damageEnemy(s, 1, { x: (s.x - cx)*0.15, y: -4 });
-            if (s.hp <= 0) { snails.splice(i, 1); onEnemyKilled('snail'); }
+            if (s.hp <= 0) { G.snails.splice(i, 1); onEnemyKilled('snail'); }
           }
         }
-        // Hurt SuperSnails
-        for (let i = SuperSnails.length - 1; i >= 0; i--) {
-          const s = SuperSnails[i];
+        // Hurt G.SuperSnails
+        for (let i = G.SuperSnails.length - 1; i >= 0; i--) {
+          const s = G.SuperSnails[i];
           if (isColliding(flipHit, s)) {
             damageEnemy(s, 1, { x: (s.x - cx)*0.15, y: -4 });
-            if (s.hp <= 0) { SuperSnails.splice(i, 1); onEnemyKilled('superSnail'); }
+            if (s.hp <= 0) { G.SuperSnails.splice(i, 1); onEnemyKilled('superSnail'); }
           }
         }
-        // Hurt turrets
-        for (let i = turrets.length - 1; i >= 0; i--) {
-          if (isColliding(flipHit, turrets[i])) {
-            damageEnemy(turrets[i], 1, {x:0,y:0});
-            if (turrets[i].hp <= 0) { turrets.splice(i, 1); onEnemyKilled('turret'); }
+        // Hurt G.turrets
+        for (let i = G.turrets.length - 1; i >= 0; i--) {
+          if (isColliding(flipHit, G.turrets[i])) {
+            damageEnemy(G.batsturrets[i], 1, {x:0,y:0});
+            if (turrets[i].hp <= 0) { G.turrets.splice(i, 1); onEnemyKilled('turret'); }
           }
         }
-        // Hurt chairs
-        for (let i = chairs.length - 1; i >= 0; i--) {
-          const c = chairs[i];
+        // Hurt G.chairs
+        for (let i = G.chairs.length - 1; i >= 0; i--) {
+          const c = G.chairs[i];
           if (isColliding(flipHit, c)) {
             damageEnemy(c, 1, { x:(c.x-cx)*0.2, y:-5 });
             c.dx += (c.x-cx)*0.12;
             c.dy -= 3;
-            if (c.hp <= 0) { chairs.splice(i, 1); onEnemyKilled('chair'); }
+            if (c.hp <= 0) { G.chairs.splice(i, 1); onEnemyKilled('chair'); }
           }
         }
         // Hurt player
@@ -9714,26 +9885,26 @@ function updateTables() {
             });
           }
           // Slam shockwave damage
-          for (let i = snails.length - 1; i >= 0; i--) {
-            const s = snails[i];
+          for (let i = G.snails.length - 1; i >= 0; i--) {
+            const s = G.snails[i];
             if (Math.hypot(s.x+s.width/2 - cx, s.y+s.height/2 - cy) < slamR) {
               damageEnemy(s, 2, { x:(s.x-cx)*0.1, y:-6 });
-              if (s.hp <= 0) { snails.splice(i, 1); onEnemyKilled('snail'); }
+              if (s.hp <= 0) { G.snails.splice(i, 1); onEnemyKilled('snail'); }
             }
           }
-          for (let i = SuperSnails.length - 1; i >= 0; i--) {
-            const s = SuperSnails[i];
+          for (let i = G.SuperSnails.length - 1; i >= 0; i--) {
+            const s = G.SuperSnails[i];
             if (Math.hypot(s.x+s.width/2 - cx, s.y+s.height/2 - cy) < slamR) {
               damageEnemy(s, 2, { x:(s.x-cx)*0.1, y:-6 });
-              if (s.hp <= 0) { SuperSnails.splice(i, 1); onEnemyKilled('superSnail'); }
+              if (s.hp <= 0) { G.SuperSnails.splice(i, 1); onEnemyKilled('superSnail'); }
             }
           }
-          for (let i = chairs.length - 1; i >= 0; i--) {
-            const c = chairs[i];
+          for (let i = G.chairs.length - 1; i >= 0; i--) {
+            const c = G.chairs[i];
             if (Math.hypot(c.x+c.width/2 - cx, c.y+c.height/2 - cy) < slamR) {
               damageEnemy(c, 2, { x:(c.x-cx)*0.15, y:-7 });
               c.dx += (c.x-cx)*0.15; c.dy -= 6;
-              if (c.hp <= 0) { chairs.splice(i, 1); onEnemyKilled('chair'); }
+              if (c.hp <= 0) { G.chairs.splice(i, 1); onEnemyKilled('chair'); }
             }
           }
           // Slam hurts player too if they're under it
@@ -9858,7 +10029,7 @@ if (t.onGround) {
 }
 
 function drawTables() {
-  for (let t of tables) {
+  for (let t of G.tables) {
     ctx.save();
 
 const cx = t.x + t.width / 2;
@@ -9928,7 +10099,7 @@ function createChair(x, y) {
 }
 
 function updateChairs() {
-  for (let c of chairs) {
+  for (let c of G.chairs) {
 
     if (c.hitFlash > 0) c.hitFlash--;
 
@@ -10076,7 +10247,7 @@ function updateChairs() {
 }
 
 function drawChairs() {
-  for (let c of chairs) {
+  for (let c of G.chairs) {
     const img = chairFrames[c.frame];
     if (!img || !img.complete) continue;
 
@@ -10387,9 +10558,9 @@ function updatePlayerSwordAttack() {
     height: 20
   };
   
-  // Hit snails
-  for (let i = snails.length - 1; i >= 0; i--) {
-    let s = snails[i];
+  // Hit G.snails
+  for (let i = G.snails.length - 1; i >= 0; i--) {
+    let s = G.snails[i];
     
     if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
       const died = damageEnemy(s, 1, {
@@ -10399,9 +10570,9 @@ function updatePlayerSwordAttack() {
       
       if (died) {
         setTimeout(() => {
-          let index = snails.indexOf(s);
+          let index = G.snails.indexOf(s);
           if (index > -1) {
-            snails.splice(index, 1);
+            G.snails.splice(index, 1);
             onEnemyKilled('snail');
           }
         }, 300);
@@ -10411,9 +10582,9 @@ function updatePlayerSwordAttack() {
     }
   }
   
-  // Hit super snails
-  for (let i = SuperSnails.length - 1; i >= 0; i--) {
-    let s = SuperSnails[i];
+  // Hit super G.snails
+  for (let i = G.SuperSnails.length - 1; i >= 0; i--) {
+    let s = G.SuperSnails[i];
     
     if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
       const died = damageEnemy(s, 1, {
@@ -10423,9 +10594,9 @@ function updatePlayerSwordAttack() {
       
       if (died) {
         setTimeout(() => {
-          let index = SuperSnails.indexOf(s);
+          let index = G.SuperSnails.indexOf(s);
           if (index > -1) {
-            SuperSnails.splice(index, 1);
+            G.SuperSnails.splice(index, 1);
             onEnemyKilled('superSnail');
           }
         }, 300);
@@ -10435,9 +10606,9 @@ function updatePlayerSwordAttack() {
     }
   }
   
-  // Hit bats
-  for (let i = bats.length - 1; i >= 0; i--) {
-    let bat = bats[i];
+  // Hit G.bats
+  for (let i = G.bats.length - 1; i >= 0; i--) {
+    let bat = G.bats[i];
     
     if (isColliding(attackBox, bat) && !player.attackHitObjects.has(bat)) {
       const died = damageEnemy(bat, 1, {
@@ -10447,9 +10618,9 @@ function updatePlayerSwordAttack() {
       
       if (died) {
         setTimeout(() => {
-          let index = bats.indexOf(bat);
+          let index = G.bats.indexOf(bat);
           if (index > -1) {
-            bats.splice(index, 1);
+            G.bats.splice(index, 1);
             onEnemyKilled('bat');
           }
         }, 300);
@@ -10459,8 +10630,8 @@ function updatePlayerSwordAttack() {
     }
   }
   
-  // Hit yetis
-  for (let y of yetis) {
+  // Hit G.yetis
+  for (let y of G.yetis) {
     if (!y.alive) continue;
     
     if (isColliding(attackBox, y) && !player.attackHitObjects.has(y)) {
@@ -10478,9 +10649,9 @@ function updatePlayerSwordAttack() {
     }
   }
   
-  // Hit snowmen
-  for (let i = snowmen.length - 1; i >= 0; i--) {
-    let s = snowmen[i];
+  // Hit G.snowmen
+  for (let i = G.snowmen.length - 1; i >= 0; i--) {
+    let s = G.snowmen[i];
     
     if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
       const died = damageEnemy(s, 1, {
@@ -10490,9 +10661,9 @@ function updatePlayerSwordAttack() {
       
       if (died) {
         setTimeout(() => {
-          let index = snowmen.indexOf(s);
+          let index = G.snowmen.indexOf(s);
           if (index > -1) {
-            snowmen.splice(index, 1);
+            G.snowmen.splice(index, 1);
             onEnemyKilled('snowman');
           }
         }, 300);
@@ -10507,15 +10678,15 @@ function updatePlayerSwordAttack() {
     1,
     { x: player.attackKnockback * 2 * player.facing, y: -player.attackKnockback * 1.5 }
   );
-  // Hit turrets
-  for (let i = turrets.length - 1; i >= 0; i--) {
-    let t = turrets[i];
+  // Hit G.turrets
+  for (let i = G.turrets.length - 1; i >= 0; i--) {
+    let t = G.turrets[i];
     
     if (isColliding(attackBox, t) && !player.attackHitObjects.has(t)) {
-      const died = damageEnemy(t, 1, { x: 0, y: 0 });  // Turrets don't move
+      const died = damageEnemy(t, 1, { x: 0, y: 0 });  // G.turrets don't move
       
       if (died) {
-        turrets.splice(i, 1);
+        G.turrets.splice(i, 1);
         onEnemyKilled('turret');
       }
       
@@ -10535,24 +10706,24 @@ function updatePlayerSwordAttack() {
       player.attackHitObjects.add(box);
     }
   }
-    // Hit chairs
-  for (let i = chairs.length - 1; i >= 0; i--) {
-    let c = chairs[i];
+    // Hit G.chairs
+  for (let i = G.chairs.length - 1; i >= 0; i--) {
+    let c = G.chairs[i];
     if (isColliding(attackBox, c) && !player.attackHitObjects.has(c)) {
       const died = damageEnemy(c, 1, {
         x: player.attackKnockback * 2 * Math.sign(c.x - player.x),
         y: -player.attackKnockback * 1.5
       });
       if (died) {
-        chairs.splice(i, 1);
+        G.chairs.splice(i, 1);
         onEnemyKilled('chair');
       }
       player.attackHitObjects.add(c);
     }
   }
-  // Hit tables — sword triggers a flip!
-  for (let i = tables.length - 1; i >= 0; i--) {
-    let t = tables[i];
+  // Hit G.tables — sword triggers a flip!
+  for (let i = G.tables.length - 1; i >= 0; i--) {
+    let t = G.tables[i];
     if (isColliding(attackBox, t) && !player.attackHitObjects.has(t)) {
       const died = damageEnemy(t, 1, {
         x: player.attackKnockback * 2 * Math.sign(t.x - player.x),
@@ -10561,7 +10732,7 @@ function updatePlayerSwordAttack() {
       // Always flip the table on sword hit regardless of HP
       if (!t.flipping) triggerTableFlip(t, player.attackKnockback * player.facing);
       if (died) {
-        tables.splice(i, 1);
+        G.tables.splice(i, 1);
         onEnemyKilled('table');
       }
       if (hasPotato) {
@@ -10582,21 +10753,21 @@ if (playerUpgrades.swordVampEnabled && !playerUpgrades.swordVampUsed && playerLi
 
 function resetWorld() {
   walls = [];
-  turrets = [];
+  G.turrets = [];
   seesaws = [];
   boxes = [];
-  snails = [];
+  G.snails = [];
   cheeses = [];
-  bats = [];
-  chairs = [];
-  tables = [];
-  SuperSnails = [];
+  G.bats = [];
+  G.chairs = [];
+  G.tables = [];
+  G.SuperSnails = [];
   ladders = [];
   spikes = [];
-  bats = [];
+  G.bats = [];
   hasPotato = false;
-  yetis =[];
-  snowmen =[];
+  G.yetis =[];
+  G.snowmen =[];
 
   vehicles = [];
   playerVehicle = null;
@@ -10614,7 +10785,7 @@ function resetWorld() {
   let potatoMessageTimer = 0;
   let potatoHUDLine = "";
   let potatoState = "none";
-  let fireballs = [];
+  G.fireballs = [];
 
   player.speed *= 1;
   player.jumpPower *= 1;
@@ -10637,7 +10808,7 @@ playerUpgrades.wolfAutoRevive = false;
 playerUpgrades.homingExplosive = false;
 ownedUpgradeIds.clear();
   cannonProjectiles = [];
-  explosions = [];
+  G.explosions = [];
   cannonCooldown = 0;
   syncJoystickVisibility();
   waveSystem = {
@@ -10723,9 +10894,9 @@ if (w.dead && playerUpgrades.wolfAutoRevive) {
 
   // ── Hunt nearest enemy ──
   const allEnemies = [
-    ...snails, ...SuperSnails, ...bats,
-    ...snowmen, ...chairs, ...tables,
-    ...yetis.filter(y => y.alive),
+    ...G.snails, ...G.SuperSnails, ...G.bats,
+    ...G.snowmen, ...G.chairs, ...G.tables,
+    ...G.yetis.filter(y => y.alive),
   ];
 
   let nearest = null, nearestDist = w.range;
@@ -10762,12 +10933,12 @@ if (w.dead && playerUpgrades.wolfAutoRevive) {
         }
         // Check death for each list
         const lists = [
-          { list: snails,      key: 'snail'      },
-          { list: SuperSnails, key: 'superSnail'  },
-          { list: bats,        key: 'bat'         },
-          { list: snowmen,     key: 'snowman'     },
-          { list: chairs,      key: 'chair'       },
-          { list: tables,      key: 'table'       },
+          { list: G.snails,      key: 'snail'      },
+          { list: G.SuperSnails, key: 'superSnail'  },
+          { list: G.bats,        key: 'bat'         },
+          { list: G.snowmen,     key: 'snowman'     },
+          { list: G.chairs,      key: 'chair'       },
+          { list: G.tables,      key: 'table'       },
         ];
         for (const { list, key } of lists) {
           const idx = list.indexOf(nearest);
@@ -10937,14 +11108,14 @@ function updateOrbiters() {
   const baseAngle = playerUpgrades.orbiters[0].angle;
 
   const allEnemies = [
-    ...snails.map(e => ({ e, list: snails, key: 'snail' })),
-    ...SuperSnails.map(e => ({ e, list: SuperSnails, key: 'superSnail' })),
+    ...snails.map(e => ({ e, list: G.snails, key: 'snail' })),
+    ...SuperSnails.map(e => ({ e, list: G.SuperSnails, key: 'superSnail' })),
     ...yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
-    ...snowmen.map(e => ({ e, list: snowmen, key: 'snowman' })),
-    ...turrets.map(e => ({ e, list: turrets, key: 'turret' })),
-    ...chairs.map(e => ({ e, list: chairs, key: 'chair' })),
-    ...tables.map(e => ({ e, list: tables, key: 'table' })),
-    ...bats.map(e => ({ e, list: bats, key: 'bat' })),
+    ...snowmen.map(e => ({ e, list: G.snowmen, key: 'snowman' })),
+    ...turrets.map(e => ({ e, list: G.turrets, key: 'turret' })),
+    ...chairs.map(e => ({ e, list: G.chairs, key: 'chair' })),
+    ...tables.map(e => ({ e, list: G.tables, key: 'table' })),
+    ...bats.map(e => ({ e, list: G.bats, key: 'bat' })),
   ];
 
   for (let i = 0; i < count; i++) {
@@ -11014,9 +11185,9 @@ function updateHomingShot() {
   const cy = player.y + player.height / 2;
 
   const candidates = [
-    ...snails, ...SuperSnails,
-    ...yetis.filter(y => y.alive),
-    ...snowmen, ...turrets, ...chairs, ...tables, ...bats
+    ...G.snails, ...G.SuperSnails,
+    ...G.yetis.filter(y => y.alive),
+    ...G.snowmen, ...G.turrets, ...G.chairs, ...G.tables, ...G.bats
   ];
 
   for (const e of candidates) {
@@ -11057,13 +11228,13 @@ function updateDashDamage() {
   const knockback = { x: player.facing * 9, y: -5 };
 
   const groups = [
-    { list: snails,      key: 'snail' },
-    { list: SuperSnails, key: 'superSnail' },
-    { list: snowmen,     key: 'snowman' },
-    { list: chairs,      key: 'chair' },
-    { list: turrets,     key: 'turret' },
-    { list: tables,      key: 'table' },
-    { list: bats,        key: 'bat' },
+    { list: G.snails,      key: 'snail' },
+    { list: G.SuperSnails, key: 'superSnail' },
+    { list: G.snowmen,     key: 'snowman' },
+    { list: G.chairs,      key: 'chair' },
+    { list: G.turrets,     key: 'turret' },
+    { list: G.tables,      key: 'table' },
+    { list: G.bats,        key: 'bat' },
   ];
 
   for (const { list, key } of groups) {
@@ -11077,7 +11248,7 @@ function updateDashDamage() {
     }
   }
 
-  for (const y of yetis) {
+  for (const y of G.yetis) {
     if (!y.alive || hitSet.has(y)) continue;
     if (!isColliding(hitBox, y)) continue;
     damageEnemy(y, 2, knockback);
@@ -11363,7 +11534,7 @@ function drawIcicles() {
 
   ctx.fillStyle = "#ccf2ff";
 
-  for (let i of icicles) {
+  for (let i of G.icicles) {
     if (!i.active) continue;
 
     ctx.beginPath();
@@ -11376,7 +11547,7 @@ function drawIcicles() {
 }
 
 function drawSnowmen() {
-  for (let s of snowmen) {
+  for (let s of G.snowmen) {
         if (s.hitFlash > 0) {
       ctx.fillStyle = "#f00"; // red
     } else {
@@ -11618,7 +11789,7 @@ chatLog("  /reset /clear /tp /wave /echo", "#a0d0ff");
     run() {
       if (!gameRunning) { chatLog("Start a level first.", "#ff8888"); return; }
       let count = 0;
-      const lists = [snails, SuperSnails, bats, yetis, snowmen, turrets, chairs, tables];
+      const lists = [snails, G.SuperSnails, G.bats, G.yetis, G.snowmen, G.turrets, G.chairs, G.tables];
       for (const list of lists) { count += list.length; list.length = 0; }
       chatLog("💀 Killed " + count + " enemies", "#ff8888");
     }
@@ -11871,7 +12042,7 @@ drawSpikes();
 
   
 function drawSnails() {
-    for (let snail of snails) {
+    for (let snail of G.snails) {
         ctx.save();
         const img = snailFrames[snail.frame];
         
@@ -11935,8 +12106,8 @@ if (potatoMessageTimer > 0) {
   potatoMessageTimer--;
 }
 
-// Draw turrets
-for (let t of turrets) {
+// Draw G.turrets
+for (let t of G.turrets) {
 
   // --- POTATO CHAOS TREMBLE ---
   let shakeX = 0;
@@ -11991,9 +12162,9 @@ ctx.fillRect(t.x + 14, t.y - 6, 4, 6);
   }
 }
 
-// Draw fireballs
+// Draw G.fireballs
 ctx.fillStyle = "#f33";
-for (let f of fireballs) {
+for (let f of G.fireballs) {
     ctx.beginPath();
     ctx.arc(f.x + f.size/2, f.y + f.size/2, f.size/2, 0, Math.PI*2);
     ctx.fill();
@@ -12091,8 +12262,8 @@ if (settings.showHitboxes) {
   ctx.save();
   ctx.strokeStyle = "rgba(255,0,0,0.7)";
   ctx.lineWidth = 1;
-  const allObjs = [...snails, ...SuperSnails, ...bats, ...turrets,
-                   ...snowmen, ...yetis, ...chairs, ...tables, ...boxes, ...spikes];
+  const allObjs = [...G.snails, ...G.SuperSnails, ...G.bats, ...G.turrets,
+                   ...G.snowmen, ...G.yetis, ...G.chairs, ...G.tables, ...G.boxes, ...G.spikes];
   for (const o of allObjs) ctx.strokeRect(o.x, o.y, o.width || 32, o.height || 32);
   // player
   ctx.strokeStyle = "rgba(0,255,0,0.9)";
@@ -12220,6 +12391,7 @@ function gameLoop(currentTime) {
     lastFrameTime = currentTime - excess;
     
   if (!gamePaused) {
+    Network.tick();
     updateGamepad();
     updateWaveSystem();
     updateEnemyHitFlashes();
