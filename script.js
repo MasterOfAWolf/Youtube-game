@@ -92,6 +92,13 @@ const settings = {
   commandsEnabled: false,
 };
 
+// ── MULTIPLAYER IDENTITY ──
+// Unique session ID — will be assigned by server in multiplayer
+const localPlayerId = "player_" + Math.random().toString(36).slice(2, 8);
+
+// Display name — can be set from a future lobby screen
+let localPlayerName = localStorage.getItem("playerName") || "Player";
+
 const tutorialState = {
   active: false,
   completedZones: new Set(),
@@ -1257,28 +1264,13 @@ function bindTouch(buttonId, key) {
   btn.addEventListener("mouseup", () => keys[key] = false);
   btn.addEventListener("mouseleave", () => keys[key] = false);
 }
+
 function pressAttack() {
-  if (player.attackTimer <= 0 && player.attackCooldown <= 0 && !player.attackCharging) {
-    keys["f"] = true;
-    player.attackCharging = true;
-    player.attackChargeTime = 0;
-  }
+  localInput.attack = true;
 }
 
 function releaseAttack() {
-  if (keys["f"]) {
-    keys["f"] = false;
-
-    // manually trigger keyup logic
-    if (player.attackCharging) {
-      player.attackCharging = false;
-      player.attackTimer = player.attackDuration;
-      player.attackCooldown = 20;
-      player.attackKnockback =
-        5 + 5 * Math.min(player.attackChargeTime / player.maxChargeTime, 1);
-      player.attackHitObjects.clear();
-    }
-  }
+  localInput.attack = false;
 }
 
 attackBtn.addEventListener("touchstart", e => {
@@ -1620,11 +1612,11 @@ function updateGamepad() {
 
   // Left stick / D-pad — movement
   const axisX = gp.axes[0];
-  keys["a"] = axisX < -STICK_DEAD || gp.buttons[14]?.pressed; // left
-  keys["d"] = axisX >  STICK_DEAD || gp.buttons[15]?.pressed; // right
+  localInput.left = axisX < -STICK_DEAD || gp.buttons[14]?.pressed; // left
+  localInput.right = axisX >  STICK_DEAD || gp.buttons[15]?.pressed; // right
 
   const axisY = gp.axes[1];
-keys["s"] = axisY > STICK_DEAD || gp.buttons[13]?.pressed; // down
+  localInput.down = axisY > STICK_DEAD || gp.buttons[13]?.pressed; // down
   
   /* Jump — A button (index 0)
   keys["w"] = gp.buttons[0]?.pressed;
@@ -1636,8 +1628,8 @@ keys["s"] = axisY > STICK_DEAD || gp.buttons[13]?.pressed; // down
 
   const jumpBtn  = settings.swapJumpDash ? 5 : 0;
 const dashBtn  = settings.swapJumpDash ? 0 : 5;
-keys["w"] = gp.buttons[jumpBtn]?.pressed;
-if (gp.buttons[dashBtn]?.pressed) tryDash();
+localInput.jump = gp.buttons[jumpBtn]?.pressed;
+localInput.dash = gp.buttons[dashBtn]?.pressed;
 
   
   if (gameOver && gp.buttons[1]?.pressed && !gp._menuBackHeld) {
@@ -1649,7 +1641,7 @@ if (gp.buttons[dashBtn]?.pressed) tryDash();
   if (swordHeld && !player.attackCharging && player.attackTimer <= 0 && player.attackCooldown <= 0) {
     player.attackCharging = true;
     player.attackChargeTime = 0;
-    keys["f"] = true;
+    localInput.attack = true;
   }
   if (!swordHeld && player.attackCharging) {
     player.attackCharging = false;
@@ -1657,7 +1649,7 @@ if (gp.buttons[dashBtn]?.pressed) tryDash();
     player.attackCooldown = 20;
     player.attackKnockback = 5 + 5 * Math.min(player.attackChargeTime / player.maxChargeTime, 1);
     player.attackHitObjects.clear();
-    keys["f"] = false;
+    localInput.attack = false;
   }
 
   // Potato cannon — right stick aim + right trigger (index 7) to fire
@@ -2082,7 +2074,7 @@ function drawMinimap() {
 
   // Enemies
   ctx.fillStyle = "#f44";
-  for (const e of [...snails, ...SuperSnails, ...bats, ...turrets, ...snowmen]) {
+  for (const e of [...snails, ...SuperSnails, ...bats, ...turrets, ...snowmen, ...tables, ...yetis, ...chairs]) {
     ctx.fillRect(MX + e.x * scaleX - 1, MY + e.y * scaleY - 1, 3, 3);
   }
 
@@ -4845,8 +4837,8 @@ function updateVehicles() {
     let groundedWheels = 0;
     
     const throttle = (isOccupied && v.hasEngine) ?
-      ((keys["d"] || keys["ArrowRight"]) ?  1 :
-       (keys["a"] || keys["ArrowLeft"])  ? -1 : 0) : 0;
+      ((localInput.right) ?  1 :
+       (localInput.left)  ? -1 : 0) : 0;
     
     // ── 1. GRAVITY ─────────────────────────────────────────────
     v.vy += 0.55;
@@ -4959,7 +4951,7 @@ function updateVehicles() {
     }
     
     // ── 5. JUMP ────────────────────────────────────────────────
-    if (isOccupied && groundedWheels > 0 && (keys["w"] || keys["ArrowUp"])) {
+    if (isOccupied && groundedWheels > 0 && (localInput.jump)) {
       v.vy = -15;
     }
     
@@ -5068,7 +5060,7 @@ function exitVehicle() {
 
 function checkVehicleEntry() {
   if (playerInVehicle) {
-    if (keys["s"] || keys["ArrowDown"]) exitVehicle();
+    if (localInput.down) exitVehicle();
     return;
   }
 
@@ -5092,7 +5084,7 @@ function checkVehicleEntry() {
     const seatWY = cy + sinA*slx + cosA*sly;
 
     const dist = Math.hypot(player.x + player.width/2 - seatWX, player.y + player.height/2 - seatWY);
-    if (dist < VEHICLE_TILE && (keys["w"] || keys["ArrowUp"])) {
+    if (dist < VEHICLE_TILE && (localInput.jump)) {
       enterVehicle(v);
       return;
     }
@@ -5171,7 +5163,7 @@ function drawVehicles() {
           ctx.fillStyle = "#ff8800";
           ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
           if (playerInVehicle && playerVehicle === v &&
-              (keys["d"] || keys["ArrowRight"] || keys["a"] || keys["ArrowLeft"])) {
+              (localInput.right || localInput.left)) {
             ctx.fillStyle = `rgba(140,100,40,${0.3 + Math.random()*0.4})`;
             ctx.beginPath();
             ctx.arc(-hw - 6, 0, 4 + Math.random()*5, 0, Math.PI*2);
@@ -5841,7 +5833,7 @@ function updateCheeses() {
     if (c.y > world.height + 100) { c.alive = false; continue; }
 
     // Player contact
-    if (isColliding(c, player)) loseLife();
+    if (isColliding(c, player)) damagePlayer("cheese");
   }
 }
 
@@ -6104,7 +6096,7 @@ function updateBats() {
     
     // Damage player on contact
     if (isColliding(bat, player)  && !bat.tutorialDisplay) {
-      loseLife();
+      damagePlayer("Bat");
     }
   }
 }
@@ -7746,6 +7738,47 @@ function collidesWithWall(x, y, w, h) {
   return false;
 }
 
+// Serialize local player state — call this to get what to broadcast over the network
+function getPlayerSnapshot() {
+  return {
+    id:         localPlayerId,
+    name:       localPlayerName,
+    x:          player.x,
+    y:          player.y,
+    dx:         player.dx,
+    dy:         player.dy,
+    facing:     player.facing,
+    lives:      playerLives,
+    attacking:  player.attacking,
+    charging:   player.attackCharging,
+    dashActive: player.dashActive,
+    onGround:   player.onGround,
+    hasPotato:  hasPotato,
+    upgrades: {
+      wolf:               !!playerUpgrades.wolf,
+      homingEnabled:      playerUpgrades.homingEnabled,
+      dashDamageEnabled:  playerUpgrades.dashDamageEnabled,
+      extraJumpsMax:      playerUpgrades.extraJumpsMax,
+      cannonRapidEnabled: playerUpgrades.cannonRapidEnabled,
+      cannonBounceEnabled:playerUpgrades.cannonBounceEnabled,
+    }
+  };
+}
+
+// Apply a received snapshot onto a remote player object (for rendering other players)
+function applyPlayerSnapshot(target, snapshot) {
+  target.x          = snapshot.x;
+  target.y          = snapshot.y;
+  target.dx         = snapshot.dx;
+  target.dy         = snapshot.dy;
+  target.facing     = snapshot.facing;
+  target.lives      = snapshot.lives;
+  target.attacking  = snapshot.attacking;
+  target.charging   = snapshot.charging;
+  target.dashActive = snapshot.dashActive;
+  target.onGround   = snapshot.onGround;
+  target.hasPotato  = snapshot.hasPotato;
+}
 
 function resetGameState() {
   
@@ -8021,7 +8054,7 @@ function updateFireballs() {
             player.y < f.y + f.size &&
             player.y + player.height > f.y
         ) {
-            loseLife();
+            damagePlayer("Fireball");
             fireballs.splice(i, 1);
           
         }
@@ -8085,7 +8118,7 @@ function updateSnowballs() {
 
     // Kill player
     if (rectsOverlap(s, player)) {
-      loseLife();
+      damagePlayer("Snowball");
       s.alive = false;
     }
 
@@ -8135,7 +8168,7 @@ function updateSpikes() {
       player.y < spike.y + spike.height &&
       player.y + player.height > spike.y
     ) {
-      loseLife();
+      damagePlayer("Spike");
       break;
     }
   }
@@ -8185,7 +8218,7 @@ function updateIcicles() {
 
     // --- PLAYER HIT ---
     if (rectsOverlap(i, player)) {
-      loseLife();
+      damagePlayer("Icicle");
       shatterIcicle(i);
       continue;
     }
@@ -8314,7 +8347,7 @@ function updateSnails() {
       player.y < s.y + s.height &&
       player.y + player.height > s.y
     ) {
-      loseLife();
+      damagePlayer("Snail");
     }
   }
 }
@@ -8561,7 +8594,7 @@ function updateSuperSnails() {
       s.dir *= -1;
     }
 
-    if (isColliding(player, s) && !s.tutorialDisplay) loseLife();
+    if (isColliding(player, s) && !s.tutorialDisplay) damagePlayer("Super Snail");
 
     s.prevMode = s.mode;
   }
@@ -8598,9 +8631,9 @@ function updateLadders() {
       player.dy = 0;
 
       // Handle climb inputs
-      if (keys["ArrowUp"] || keys["w"]) {
+      if (localInput.jump) {
         player.y -= climbSpeed;
-      } else if (keys["ArrowDown"] || keys["s"]) {
+      } else if (localInput.down) {
         player.y += climbSpeed;
       }
 
@@ -8744,6 +8777,15 @@ function drawSnowballs() {
 const maxLives = 3;
 let playerLives = maxLives;
 
+// Single authoritative entry point for all player damage.
+// In multiplayer, only the host calls this and broadcasts the result.
+function damagePlayer(source = "unknown") {
+  if (player.iframes > 0) return;   // already recently hit
+  player.iframes = 60;              // ~1 second grace period
+  chatLog("💥 " + source, "#ff6060");
+  loseLife();
+}
+
 // Function to handle losing a life
 function loseLife() {
   if (settings.invincible) return;
@@ -8776,6 +8818,7 @@ function resetPlayer() {
   player.y = 50;
   player.dx = 0;
   player.dy = 0;
+  player.iframes = 0;
 }
 
 // --- GAME OVER MODULE ---
@@ -8813,7 +8856,7 @@ function resetGame() {
 const floatFactor = 0.1; // fraction of gravity applied while holding up
 
 function applyAirFloat() {
-  if ((keys["ArrowUp"] || keys["w"]|| keys[" "]) && !player.onGround) {
+  if ((localInput.jump) && !player.onGround) {
     // Reduce downward speed while in the air
     if (player.dy > 0) {
       player.dy *= (1 - floatFactor); 
@@ -9184,25 +9227,10 @@ document.addEventListener("keydown", e => {
 
     // Start charging if not attacking or on cooldown
     if (e.key === "Shift") { e.preventDefault(); tryDash(); }
-  
-    if ((keys["f"]) && player.attackTimer <= 0 && player.attackCooldown <= 0 && !player.attackCharging) {
-        player.attackCharging = true;
-        player.attackChargeTime = 0;
-    }
 });
 
 document.addEventListener("keyup", e => {
     keys[e.key] = false;
-
-    // Release attack
-    if ((e.key === "f") && player.attackCharging) {
-        player.attackCharging = false;
-        player.attackTimer = player.attackDuration;
-        player.attackCooldown = 20; // short cooldown
-        // scale knockback with charge
-        player.attackKnockback = 5 + 5 * Math.min(player.attackChargeTime / player.maxChargeTime, 1);
-        player.attackHitObjects.clear(); // reset for this swing
-    }
 });
 
 
@@ -9627,7 +9655,7 @@ function updateTables() {
         }
         // Hurt player
         if (isColliding(flipHit, player)) {
-          loseLife();
+          damagePlayer("Table Flip");
         }
         // Knock boxes
         for (const b of boxes) {
@@ -9710,7 +9738,7 @@ function updateTables() {
           }
           // Slam hurts player too if they're under it
           if (Math.hypot(player.x+player.width/2 - cx, player.y+player.height/2 - cy) < slamR * 0.6) {
-            loseLife();
+            damagePlayer("Table Slam");
           }
           // Screen shake
           if (settings.screenShake && !settings.reducedMotion) {
@@ -9809,7 +9837,7 @@ if (t.onGround) {
         player.x += t.dx;
       } else {
         // Walked into the legs — FLIP the table and hurt player
-        loseLife();
+        damagePlayer("Table Legs");
         triggerTableFlip(t, player.dx * 0.5);
       }
     }
@@ -10042,7 +10070,7 @@ function updateChairs() {
       player.x += c.dx; // carry player along
     } else {
       // Leg zone — ouch
-      loseLife();
+      damagePlayer("Chair");
     }
   }
 }
@@ -10066,15 +10094,54 @@ function drawChairs() {
   }
 }
 
+// LOCAL player input snapshot — in multiplayer, remote players get this
+// filled from the network instead of from keys[]
+function getLocalInput() {
+  return {
+    left:   !!(keys["arrowleft"] || keys["a"]),
+    right:  !!(keys["arrowright"] || keys["d"]),
+    down:   !!(keys["arrowdown"] || keys["s"]),
+    jump:   !!(keys["arrowup"] || keys["w"] || keys[" "]),
+    dash:   !!(keys["Shift"]),
+    attack: !!(keys["f"]),
+  };
+}
+
+// The active input for the local player — swap this out for network input later
+let localInput = {};
+let prevInput  = {};
 // --- UPDATE PLAYER ---
 function updatePlayer() {
   if (gameOver || levelUpPending) return;
   if (playerInVehicle) return;
 
-  if (player.attackTimer > 0) {
+  prevInput  = { ...localInput };
+localInput = getLocalInput();
+
+// Attack pressed this frame (keyboard/gamepad edge)
+if (localInput.attack && !prevInput.attack) {
+  if (player.attackTimer <= 0 && player.attackCooldown <= 0 && !player.attackCharging) {
+    player.attackCharging = true;
+    player.attackChargeTime = 0;
+  }
+}
+// Attack released this frame (keyboard/gamepad edge)
+if (!localInput.attack && prevInput.attack) {
+  if (player.attackCharging) {
+    player.attackCharging = false;
+    player.attackTimer = player.attackDuration;
+    player.attackCooldown = 20;
+    player.attackKnockback = 5 + 5 * Math.min(player.attackChargeTime / player.maxChargeTime, 1);
+    player.attackHitObjects.clear();
+  }
+}
+
+if (player.attackTimer > 0) {
     player.attackTimer--;
   }
   
+  if (player.iframes > 0) player.iframes--;
+
   // Decrease cooldown
   if (player.attackCooldown > 0) {
     player.attackCooldown--;
@@ -10090,21 +10157,19 @@ let friction = onIce ? 0.99 : 0.0;
 const moveSpeed = player.speed * player.slowMultiplier;
 
 // input
-if (keys["ArrowLeft"] || keys["a"]) {
+if (localInput.left) {
   player.dx -= accel;
   player.facing = -1;
 }
-if (keys["ArrowRight"] || keys["d"]) {
+if (localInput.right) {
   player.dx += accel;
   player.facing = 1;
 }
 
 // friction when no input
 if (
-  !keys["ArrowLeft"] &&
-  !keys["a"] &&
-  !keys["ArrowRight"] &&
-  !keys["d"]
+  !localInput.left &&
+  !localInput.right
 ) {
   player.dx *= friction;
 }
@@ -10117,24 +10182,26 @@ if (!player.dashActive) {
   );
 }
 
-
+if (localInput.dash) {
+  tryDash();
+}
   // Jumping
-if ((keys["ArrowUp"] || keys["w"] || keys[" "]) && (player.onGround || player.isOnLadder)) {
+if ((localInput.jump) && (player.onGround || player.isOnLadder)) {
   player.dy = -player.jumpPower;
   player.onGround = false;
   player._jumpHeld = true;
-} else if ((keys["ArrowUp"] || keys["w"] || keys[" "]) && player.onWall) {
+} else if ((localInput.jump) && player.onWall) {
   player.dy = -player.wallJumpPower;
   player.wallJumpBoost = 60 * -player.wallDir;
   player.onWall = false;
   player._jumpHeld = true;
-} else if ((keys["ArrowUp"] || keys["w"] || keys[" "]) && !player._jumpHeld &&
+} else if ((localInput.jump) && !player._jumpHeld &&
            !player.onGround && !player.onWall && playerUpgrades.extraJumpsLeft > 0) {
   // Double / extra jump
   player.dy = -player.jumpPower * 0.9;
   playerUpgrades.extraJumpsLeft--;
   player._jumpHeld = true;
-} else if (!(keys["ArrowUp"] || keys["w"] || keys[" "])) {
+} else if (!(localInput.jump)) {
   player._jumpHeld = false;
 }
 
@@ -10224,7 +10291,7 @@ if (player.attackCooldown > 0) player.attackCooldown--;
   
   // --- Lose life if player falls off-screen ---
   if (player.y > world.height + 200) { // extra margin below screen
-    loseLife();
+    damagePlayer("Off-Screen (how?)");
   }
 }
 
