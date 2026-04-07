@@ -111,6 +111,24 @@ playerNameInput.addEventListener("input", function() {
   }
 });
 
+// ── SECRET MULTIPLAYER UNLOCK ──
+let _mpSequence = "";
+const _MP_CODE = "wolfmp"; // change this to whatever you want
+
+document.addEventListener("keydown", e => {
+  // Only active on the main menu
+  if (!document.getElementById("menu").classList.contains("hidden")) {
+    _mpSequence += e.key.toLowerCase();
+    if (_mpSequence.length > _MP_CODE.length) {
+      _mpSequence = _mpSequence.slice(-_MP_CODE.length);
+    }
+    if (_mpSequence === _MP_CODE) {
+      _mpSequence = "";
+      openMultiplayer();
+    }
+  }
+});
+
 // Prevent game keys firing while typing name
 playerNameInput.addEventListener("keydown", e => e.stopPropagation());
 
@@ -119,7 +137,7 @@ const Network = {
   socket: null,
   connected: false,
   remotePlayers: new Map(),
-  serverUrl: "wss://your-app.railway.app", // ← update this once deployed
+  serverUrl: "wss://youtube-game-production.up.railway.app/", // ← update this once deployed
 
   connect(onOpen) {
     this.socket = new WebSocket(this.serverUrl);
