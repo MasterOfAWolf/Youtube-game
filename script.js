@@ -137,7 +137,8 @@ const Network = {
   socket: null,
   connected: false,
   remotePlayers: new Map(),
-  serverUrl: "wss://youtube-game-production.up.railway.app/", // ← update this once deployed
+  serverUrl: "ws://localhost:8080", //Use this for local testing
+  //serverUrl: "wss://youtube-game-production.up.railway.app/", // Use this to connect to the server
 
   connect(onOpen) {
     this.socket = new WebSocket(this.serverUrl);
@@ -7966,6 +7967,7 @@ function applyPlayerSnapshot(target, snapshot) {
   target.dashActive = snapshot.dashActive;
   target.onGround   = snapshot.onGround;
   target.hasPotato  = snapshot.hasPotato;
+  target.name       = snapshot.name;
 }
 
 function resetGameState() {
@@ -11126,14 +11128,14 @@ function updateOrbiters() {
   const baseAngle = playerUpgrades.orbiters[0].angle;
 
   const allEnemies = [
-    ...snails.map(e => ({ e, list: G.snails, key: 'snail' })),
-    ...SuperSnails.map(e => ({ e, list: G.SuperSnails, key: 'superSnail' })),
-    ...yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
-    ...snowmen.map(e => ({ e, list: G.snowmen, key: 'snowman' })),
-    ...turrets.map(e => ({ e, list: G.turrets, key: 'turret' })),
-    ...chairs.map(e => ({ e, list: G.chairs, key: 'chair' })),
-    ...tables.map(e => ({ e, list: G.tables, key: 'table' })),
-    ...bats.map(e => ({ e, list: G.bats, key: 'bat' })),
+    ...G.snails.map(e => ({ e, list: G.snails, key: 'snail' })),
+    ...G.SuperSnails.map(e => ({ e, list: G.SuperSnails, key: 'superSnail' })),
+    ...G.yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
+    ...G.snowmen.map(e => ({ e, list: G.snowmen, key: 'snowman' })),
+    ...G.turrets.map(e => ({ e, list: G.turrets, key: 'turret' })),
+    ...G.chairs.map(e => ({ e, list: G.chairs, key: 'chair' })),
+    ...G.tables.map(e => ({ e, list: G.tables, key: 'table' })),
+    ...G.bats.map(e => ({ e, list: G.bats, key: 'bat' })),
   ];
 
   for (let i = 0; i < count; i++) {
@@ -11948,6 +11950,68 @@ function drawCommandHUD() {
   ctx.restore();
 }
 
+function drawRemotePlayer(p) {
+  if (!p || p.x === undefined) return;
+
+  ctx.save();
+
+  // Dash trail
+  if (p.dashActive) {
+    ctx.globalAlpha = 0.3;
+    if (p.facing === -1) {
+      ctx.translate(p.x + 32, p.y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(playerImg, 8, 0, 32, 32);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    } else {
+      ctx.drawImage(playerImg, p.x - 8, p.y, 32, 32);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Player sprite (flipped if facing left)
+  if (p.facing === -1) {
+    ctx.translate(p.x + 32, p.y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(playerImg, 0, 0, 32, 32);
+  } else {
+    ctx.drawImage(playerImg, p.x, p.y, 32, 32);
+  }
+
+  ctx.restore();
+
+  // Name tag above head
+  const name = p.name || "Player";
+  ctx.save();
+  ctx.font = "bold 10px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+
+  // Background pill
+  const nameW = ctx.measureText(name).width + 10;
+  const nameX = p.x + 16 - nameW / 2;
+  const nameY = p.y - 6;
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.beginPath();
+  ctx.roundRect(nameX, nameY - 13, nameW, 14, 4);
+  ctx.fill();
+
+  // Name text
+  ctx.fillStyle = "#f0d060";
+  ctx.fillText(name, p.x + 16, p.y - 6);
+
+  // Lives dots
+  const lives = p.lives ?? 0;
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc(p.x + 8 + i * 9, p.y - 20, 3, 0, Math.PI * 2);
+    ctx.fillStyle = i < lives ? "#ff4455" : "#333";
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 //Draw Everything
 function draw() {
   const hudFontSize = settings.largeHUD ? 22 : 16;
@@ -12109,6 +12173,11 @@ if (player.facing === -1) {
 }
 ctx.restore();
   
+// Draw remote players
+for (const [id, p] of Network.remotePlayers) {
+  drawRemotePlayer(p);
+}
+
   // --- POTATO FLOATING MESSAGE ---
 if (potatoMessageTimer > 0) {
   ctx.fillStyle = "#ffd966";
