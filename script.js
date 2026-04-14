@@ -28,14 +28,15 @@ const cannonImg = new Image();
 cannonImg.src = "Assets/Sprites/potatocannon.png";
 
 // --- PLAYER ANIMATION FRAMES ---
-const playerWalkFrames = [];
-const PLAYER_WALK_FRAME_COUNT = 6; // adjust to however many frames you have
+const playerWalkSheet = new Image();
+playerWalkSheet.src = "Assets/Sprites/MACHO.png"; // your sheet
 
-for (let i = 0; i < PLAYER_WALK_FRAME_COUNT; i++) {
-  const img = new Image();
-  img.src = `Assets/Sprites/Player_walk_${i}.png`;
-  playerWalkFrames.push(img);
-}
+const WALK_FRAME_WIDTH  = 70;
+const WALK_FRAME_HEIGHT = 90;
+const WALK_FRAME_COUNT  = 8;
+const PLAYER_SPRITE_H  = 64;
+const PLAYER_SPRITE_W  = Math.round(PLAYER_SPRITE_H * (WALK_FRAME_WIDTH / WALK_FRAME_HEIGHT)); // ~50
+const PLAYER_SPRITE_OX = Math.round((PLAYER_SPRITE_W - 32) / 2); // horizontal overflow offset (~9px)
 
 const playerIdleImg = new Image();
 playerIdleImg.src = "Assets/Sprites/Player_idle.png"; // or keep using Player.png
@@ -6601,7 +6602,7 @@ const player = {
   dx: 0,
   dy: 0,
   width: 32,
-  height: 32,
+  height: 64,
   speed: 3,
   jumpPower: 11,
   wallJumpPower: 11,
@@ -10225,6 +10226,36 @@ function createChair(x, y) {
   };
 }
 
+// --- DRAW PLAYER ---
+function drawPlayer() {
+  let srcX = 0, srcY = 0, srcW, srcH, sheet;
+
+  if (player.animState === "walk") {
+    sheet = playerWalkSheet;
+    srcX  = player.walkFrame * WALK_FRAME_WIDTH;
+    srcW  = WALK_FRAME_WIDTH;
+    srcH  = WALK_FRAME_HEIGHT;
+  } else {
+    sheet = playerWalkSheet;
+    srcW  = WALK_FRAME_WIDTH;
+    srcH  = WALK_FRAME_HEIGHT;
+  }
+
+  // Sprite is wider than hitbox — offset left so it's centered on the hitbox
+  const drawX = player.x - PLAYER_SPRITE_OX;
+  const drawY = player.y + player.height - PLAYER_SPRITE_H; // pin feet to hitbox bottom
+
+  ctx.save();
+  if (player.facing === 1) {
+    ctx.translate(drawX + PLAYER_SPRITE_W, drawY);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 0, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
+  } else {
+    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
+  }
+  ctx.restore();
+};
+
 function updateChairs() {
   for (let c of G.chairs) {
 
@@ -10435,12 +10466,15 @@ function updatePlayerAnimation() {
   if (player.animState === "walk") {
     // Higher speed = faster animation. Base speed ~3, so normalize around that.
     const speedRatio   = Math.abs(player.dx) / player.speed;  // 0..1+
-    const frameDuration = Math.max(3, Math.round(8 / speedRatio)); // frames per anim frame
+    const frameDuration = Math.max(2, Math.round(6 / speedRatio)); // frames per anim frame
 
     player.walkTimer++;
     if (player.walkTimer >= frameDuration) {
       player.walkTimer = 0;
-      player.walkFrame = (player.walkFrame + 1) % playerWalkFrames.length;
+      player.walkFrame += 1;
+      if (player.walkFrame >= 8) {
+        player.walkFrame = 0;
+      }
     }
   } else {
     // Reset walk cycle when not walking so it starts fresh
@@ -12112,31 +12146,6 @@ function drawRemotePlayer(p) {
     ctx.globalAlpha = 1;
   }
 
-// --- DRAW PLAYER ---
-(function drawPlayer() {
-  // Pick the right frame/image for the current state
-  let frameToDraw;
-  if (player.animState === "walk") {
-    frameToDraw = playerWalkFrames[player.walkFrame];
-  } else if (player.animState === "jump" || player.animState === "fall") {
-    frameToDraw = playerJumpImg.complete ? playerJumpImg : playerIdleImg;
-  } else {
-    frameToDraw = playerIdleImg;
-  }
-  // Fall back to the old playerImg if new ones aren't loaded yet
-  if (!frameToDraw || !frameToDraw.complete) frameToDraw = PlayerIdleImg;
-
-  ctx.save();
-  if (player.facing === -1) {
-    ctx.translate(player.x + player.width, player.y);
-    ctx.scale(-1, 1);
-    ctx.drawImage(frameToDraw, 0, 0, player.width, player.height);
-  } else {
-    ctx.drawImage(frameToDraw, player.x, player.y, player.width, player.height);
-  }
-  ctx.restore();
-})();
-
   // Name tag above head
   const name = p.name || "Player";
   ctx.save();
@@ -12320,7 +12329,7 @@ drawWolf();
   drawSnowballs();
 
 
-  ctx.save();
+/*  ctx.save();
 if (player.facing === -1) {
   ctx.translate(player.x + player.width, player.y);
   ctx.scale(-1, 1);
@@ -12328,8 +12337,8 @@ if (player.facing === -1) {
 } else {
   ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
 }
-ctx.restore();
-  
+ctx.restore();*/
+  drawPlayer();
 // Draw remote players
 for (const [id, p] of Network.remotePlayers) {
   drawRemotePlayer(p);
