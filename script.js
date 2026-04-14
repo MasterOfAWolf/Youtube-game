@@ -1880,7 +1880,6 @@ function updateGamepad() {
   keys["r"] = true;
   gp._menuBackHeld = true;
 }
-  // Sword — X button (index 2)
   // Attack (X button = index 2) — keep your existing charge logic, just also set the flag
   const swordHeld = gp.buttons[2]?.pressed;
   localInput._gpAttack = swordHeld;
@@ -10658,7 +10657,7 @@ if (player.attackCooldown > 0) player.attackCooldown--;
   if (player.dashCooldown > 0) player.dashCooldown--;
 
   // Reset ground/wall flags
-  player.onGround = false;
+  //player.onGround = false;
   player.onWall = false;
 
   // ── X pass ──
