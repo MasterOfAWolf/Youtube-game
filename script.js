@@ -10238,6 +10238,7 @@ function drawPlayer() {
   } else {
     sheet = playerWalkSheet;
     srcW  = WALK_FRAME_WIDTH;
+    srcX  = player.walkFrame * WALK_FRAME_WIDTH;
     srcH  = WALK_FRAME_HEIGHT;
   }
 
@@ -10463,8 +10464,8 @@ function updatePlayerAnimation() {
   }
 
   // Advance walk frame — speed scales the animation rate
-  if (player.animState === "walk") {
-    // Higher speed = faster animation. Base speed ~3, so normalize around that.
+  if (player.animState === "walk"|| player.animState === "fall"|| player.animState === "jump") {
+    // Higher speed = faster animation. Base speed ~2, so normalize around that.
     const speedRatio   = Math.abs(player.dx) / player.speed;  // 0..1+
     const frameDuration = Math.max(2, Math.round(6 / speedRatio)); // frames per anim frame
 
@@ -10478,7 +10479,7 @@ function updatePlayerAnimation() {
     }
   } else {
     // Reset walk cycle when not walking so it starts fresh
-    player.walkFrame = 0;
+    player.walkFrame = 5;
     player.walkTimer = 0;
   }
 }
