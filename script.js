@@ -1862,25 +1862,18 @@ function updateGamepad() {
   const STICK_DEAD = settings.joystickDeadzone; // deadzone
 
   // Left stick / D-pad — movement
+  // Left stick / D-pad
   const axisX = gp.axes[0];
-  localInput.left = axisX < -STICK_DEAD || gp.buttons[14]?.pressed; // left
-  localInput.right = axisX >  STICK_DEAD || gp.buttons[15]?.pressed; // right
-
+  localInput._gpLeft  = axisX < -STICK_DEAD || gp.buttons[14]?.pressed;
+  localInput._gpRight = axisX >  STICK_DEAD || gp.buttons[15]?.pressed;
+  
   const axisY = gp.axes[1];
-  localInput.down = axisY > STICK_DEAD || gp.buttons[13]?.pressed; // down
+  localInput._gpDown  = axisY > STICK_DEAD || gp.buttons[13]?.pressed;
   
-  /* Jump — A button (index 0)
-  keys["w"] = gp.buttons[0]?.pressed;
-  
-  // Dash — Right bumper (index 5) or Left bumper (index 4)
-  if (gp.buttons[5]?.pressed || gp.buttons[4]?.pressed) {
-    tryDash();
-  }*/
-
-  const jumpBtn  = settings.swapJumpDash ? 5 : 0;
-const dashBtn  = settings.swapJumpDash ? 0 : 5;
-localInput.jump = gp.buttons[jumpBtn]?.pressed;
-localInput.dash = gp.buttons[dashBtn]?.pressed;
+  const jumpBtn = settings.swapJumpDash ? 5 : 0;
+  const dashBtn = settings.swapJumpDash ? 0 : 5;
+  localInput._gpJump = gp.buttons[jumpBtn]?.pressed;
+  localInput._gpDash = gp.buttons[dashBtn]?.pressed;
 
   
   if (gameOver && gp.buttons[1]?.pressed && !gp._menuBackHeld) {
@@ -1888,7 +1881,9 @@ localInput.dash = gp.buttons[dashBtn]?.pressed;
   gp._menuBackHeld = true;
 }
   // Sword — X button (index 2)
+  // Attack (X button = index 2) — keep your existing charge logic, just also set the flag
   const swordHeld = gp.buttons[2]?.pressed;
+  localInput._gpAttack = swordHeld;
   if (swordHeld && !player.attackCharging && player.attackTimer <= 0 && player.attackCooldown <= 0) {
     player.attackCharging = true;
     player.attackChargeTime = 0;
@@ -10450,12 +10445,12 @@ function drawChairs() {
 // filled from the network instead of from keys[]
 function getLocalInput() {
   return {
-    left:   !!(keys["arrowleft"] || keys["a"]),
-    right:  !!(keys["arrowright"] || keys["d"]),
-    down:   !!(keys["arrowdown"] || keys["s"]),
-    jump:   !!(keys["arrowup"] || keys["w"] || keys[" "]),
-    dash:   !!(keys["Shift"]),
-    attack: !!(keys["f"]),
+    left:   !!(keys["arrowleft"] || keys["a"] || localInput._gpLeft),
+    right:  !!(keys["arrowright"] || keys["d"] || localInput._gpRight),
+    down:   !!(keys["arrowdown"] || keys["s"] || localInput._gpDown),
+    jump:   !!(keys["arrowup"] || keys["w"] || keys[" "] || localInput._gpJump),
+    dash:   !!(keys["Shift"] || localInput._gpDash),
+    attack: !!(keys["f"] || localInput._gpAttack),
   };
 }
 
