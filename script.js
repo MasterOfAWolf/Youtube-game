@@ -46,9 +46,6 @@ playerJumpImg.src = "Assets/Sprites/Player_jump.png"; // optional, for later
 const playerImg = new Image();
 playerImg.src = "Assets/Sprites/Player.png";
 
-const controlImg = new Image();
-controlImg.src = "Assets/UI/xboxcontrols.png";
-
 const snailFrames = [];
 
 const snail1 = new Image();
