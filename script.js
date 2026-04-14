@@ -27,6 +27,22 @@ snailImg.src = "Assets/Sprites/snail-pixilart.png";
 const cannonImg = new Image();
 cannonImg.src = "Assets/Sprites/potatocannon.png";
 
+// --- PLAYER ANIMATION FRAMES ---
+const playerWalkFrames = [];
+const PLAYER_WALK_FRAME_COUNT = 6; // adjust to however many frames you have
+
+for (let i = 0; i < PLAYER_WALK_FRAME_COUNT; i++) {
+  const img = new Image();
+  img.src = `Assets/Sprites/Player_walk_${i}.png`;
+  playerWalkFrames.push(img);
+}
+
+const playerIdleImg = new Image();
+playerIdleImg.src = "Assets/Sprites/Player_idle.png"; // or keep using Player.png
+
+const playerJumpImg = new Image();
+playerJumpImg.src = "Assets/Sprites/Player_jump.png"; // optional, for later
+
 const playerImg = new Image();
 playerImg.src = "Assets/Sprites/Player.png";
 
@@ -137,6 +153,7 @@ const Network = {
   socket: null,
   connected: false,
   remotePlayers: new Map(),
+  isHost: false,
   serverUrl: "ws://localhost:8080", //Use this for local testing
   //serverUrl: "wss://youtube-game-production.up.railway.app/", // Use this to connect to the server
 
@@ -173,38 +190,51 @@ const Network = {
 
   handleMessage(msg) {
     switch (msg.type) {
-
+  
       case "created":
-      case "joined":
+        Network.isHost = true;
         document.getElementById("lobbyRoomCode").textContent = msg.code;
         document.getElementById("lobbyRoom").classList.remove("hidden");
-        document.getElementById("lobbyStatus").textContent =
-          msg.type === "created" ? "Share this code with friends!" : "Connected!";
+        document.getElementById("lobbyStatus").textContent = "Share this code with friends!";
+        document.getElementById("lobbyStartBtn").classList.remove("hidden");
         lobbySetPlayerList(msg.players);
-        if (msg.type === "created") {
-          document.getElementById("lobbyStartBtn").classList.remove("hidden");
+        break;
+  
+      case "joined":
+        Network.isHost = false;
+        document.getElementById("lobbyRoomCode").textContent = msg.code;
+        document.getElementById("lobbyRoom").classList.remove("hidden");
+        document.getElementById("lobbyStatus").textContent = "Connected!";
+        lobbySetPlayerList(msg.players);
+        break;
+  
+      case "gameState":
+        if (!Network.isHost) {
+          applyEnemySnapshot(msg.snap);
         }
         break;
-
+  
       case "playerJoined":
+        // Don't touch isHost here — this fires on everyone when someone joins
         chatLog("🎮 " + msg.name + " joined", "#80ff80");
         lobbySetPlayerList(msg.players);
         break;
-
+  
       case "playerLeft":
         chatLog("👋 " + msg.name + " left", "#aaaaaa");
         this.remotePlayers.delete(msg.id);
         break;
-
+  
       case "playerList":
         lobbySetPlayerList(msg.players);
         break;
-
+  
       case "youAreHost":
+        Network.isHost = true;
         document.getElementById("lobbyStartBtn").classList.remove("hidden");
         document.getElementById("lobbyStatus").textContent = "You are now the host.";
         break;
-
+  
       case "playerUpdate":
         if (msg.id !== localPlayerId) {
           if (!this.remotePlayers.has(msg.id)) {
@@ -213,16 +243,16 @@ const Network = {
           applyPlayerSnapshot(this.remotePlayers.get(msg.id), msg.snapshot);
         }
         break;
-
+  
       case "gameStarted":
         hideAllMenus();
         startWaveModeLevel(msg.level || 1);
         break;
-
+  
       case "chat":
         chatLog("[" + msg.name + "] " + msg.text, "#c8c0e8");
         break;
-
+  
       case "error":
         document.getElementById("lobbyStatus").textContent = msg.message;
         break;
@@ -236,7 +266,17 @@ const Network = {
       id: localPlayerId,
       snapshot: getPlayerSnapshot()
     });
+    if (this.isHost) {
+    this._enemyTick = (this._enemyTick || 0) + 1;
+    if (this._enemyTick >= 3) {
+      this._enemyTick = 0;
+      this.send({
+        type: "gameState",
+        snap: getEnemySnapshot(),
+      });
+    }
   }
+},
 };
 
 function lobbySetPlayerList(players) {
@@ -258,6 +298,7 @@ function openMultiplayer() {
 function lobbyCreateRoom() {
   Network.connect(() => {
     Network.send({ type: "create", id: localPlayerId, name: localPlayerName });
+    Network.isHost = true;
   });
 }
 
@@ -326,7 +367,7 @@ fireballs:   [],
 snowballs:   [],
 icicles:     [],
 explosions:  [],
-waveSystem: {
+wavesystem: {
   enabled: false,
   currentWave: 0,
   enemiesRemaining: 0,
@@ -833,9 +874,9 @@ function initDebugTests() {
       status: TEST_STATUS.PENDING,
       timer: 0,
       _prevXP: 0,
-      setup() { this._prevXP = xp; waveSystem.enabled = true; grantXP(10); },
+      setup() { this._prevXP = xp; G.wavesystem.enabled = true; grantXP(10); },
       check() { return xp > this._prevXP; },
-      cleanup() { waveSystem.enabled = false; }
+      cleanup() { G.wavesystem.enabled = false; }
     },
     {
       id: "enemy_killed_counts",
@@ -844,13 +885,13 @@ function initDebugTests() {
       timer: 0,
       _prevKills: 0,
       setup() {
-        waveSystem.enabled = true;
-        waveSystem.totalEnemiesKilled = 0;
-        this._prevKills = waveSystem.totalEnemiesKilled;
+        G.wavesystem.enabled = true;
+        G.wavesystem.totalEnemiesKilled = 0;
+        this._prevKills = G.wavesystem.totalEnemiesKilled;
         onEnemyKilled('snail');
       },
-      check() { return waveSystem.totalEnemiesKilled > this._prevKills; },
-      cleanup() { waveSystem.enabled = false; }
+      check() { return G.wavesystem.totalEnemiesKilled > this._prevKills; },
+      cleanup() { G.wavesystem.enabled = false; }
     },
     {
       id: "level_up_triggers",
@@ -1076,11 +1117,11 @@ function startBuildTest() {
   partInventory.spike  = 10;
 
 
-  waveSystem.enabled = true;
-  waveSystem.currentMapWaves = waveConfigurations.level1;
-  waveSystem.currentWave = 0;
-  waveSystem.waveActive = false;
-  waveSystem.waveTimer = 900; // 15 second build window
+  G.wavesystem.enabled = true;
+  G.wavesystem.currentMapWaves = waveConfigurations.level1;
+  G.wavesystem.currentWave = 0;
+  G.wavesystem.waveActive = false;
+  G.wavesystem.waveTimer = 900; // 15 second build window
 
   // Drop straight into build mode
   openBuildMode();
@@ -1506,7 +1547,7 @@ canvas.addEventListener("touchstart", (e) => {
     if (mx >= skipBtnX && mx <= skipBtnX + skipBtnW &&
         my >= skipBtnY && my <= skipBtnY + 50) {
       closeBuildMode();
-      waveSystem.waveTimer = 180;
+      G.wavesystem.waveTimer = 180;
       return;
     }
 
@@ -1623,7 +1664,7 @@ canvas.addEventListener("mousedown", (e) => {
     if (mx >= skipBtnX && mx <= skipBtnX + skipBtnW &&
       my >= skipBtnY && my <= skipBtnY + 50) {
       closeBuildMode();
-      waveSystem.waveTimer = 180 // Give 3 seconds after closing build mode to breath
+      G.wavesystem.waveTimer = 180 // Give 3 seconds after closing build mode to breath
       return;
     }
 
@@ -4361,7 +4402,7 @@ const ENEMY_COLORS = {
 };
 
 function drawOffScreenIndicators() {
-  if (!waveSystem.enabled || !waveSystem.waveActive) return;
+  if (!G.wavesystem.enabled || !G.wavesystem.waveActive) return;
   if (!settings.offScreenIndicators) return;
   ctx.save();
   
@@ -4730,7 +4771,7 @@ function drawBuildMode() {
   }
 
 // Timer and instructions
-const secondsLeft = Math.ceil(waveSystem.waveTimer / 60);
+const secondsLeft = Math.ceil (G.wavesystem.waveTimer / 60);
 ctx.fillStyle = secondsLeft < 5 ? "#f44" : "#ffd54f";
 ctx.font = "bold 13px monospace";
 ctx.textAlign = "center";
@@ -6154,10 +6195,10 @@ function damageCheeseCheck(hitBox, dmg, kb) {
 // Try to spawn a cheese this wave tick
 // Call this from updateWaveSystem
 function trySpawnCheese() {
-  if (!waveSystem.enabled || !waveSystem.waveActive) return;
+  if (!G.wavesystem.enabled || !G.wavesystem.waveActive) return;
 
   // Base chance 0.0001% per frame, scales with wave number
-  const wave = waveSystem.currentWave;
+  const wave = G.wavesystem.currentWave;
   const chance = 0.000001 + wave * 0.0000015; // caps around 1.8% at wave 10
 
   if (Math.random() > chance) return;
@@ -6591,6 +6632,10 @@ player.attackDuration = 20;      // frames the swing lasts
 player.attackKnockback = 2;      // scales with charge
 player.attackHitObjects = new Set(); // track hits per swing
 
+// --- PLAYER ANIM STATE ---
+player.walkFrame    = 0;
+player.walkTimer    = 0;
+player.animState    = "idle"; // "idle" | "walk" | "jump" | "fall" | "attack" | "dash"
 // --- DASH ---
 player.dashSpeed = 14;
 player.dashDuration = 0;       // frames remaining in dash
@@ -7365,17 +7410,17 @@ function randomBetween(min, max) {
 // Initialize wave mode for a level
 function startWaveMode(levelNumber) {
   cheeses = [];
-  waveSystem.enabled = true;
-  waveSystem.currentWave = 0;
-  waveSystem.enemiesRemaining = 0;
-  waveSystem.waveActive = false;
-  waveSystem.waveTimer = 180; // 3 second delay before first wave
-  waveSystem.totalEnemiesKilled = 0;
-  waveSystem.spawnQueue = [];
+  G.wavesystem.enabled = true;
+  G.wavesystem.currentWave = 0;
+  G.wavesystem.enemiesRemaining = 0;
+  G.wavesystem.waveActive = false;
+  G.wavesystem.waveTimer = 180; // 3 second delay before first wave
+  G.wavesystem.totalEnemiesKilled = 0;
+  G.wavesystem.spawnQueue = [];
   
   // Load wave config for this level
   const levelKey = `level${levelNumber}`;
-  waveSystem.currentMapWaves = waveConfigurations[levelKey] || waveConfigurations.level1;
+  G.wavesystem.currentMapWaves = waveConfigurations[levelKey] || waveConfigurations.level1;
   
   // Clear existing enemies
   G.snails = [];
@@ -7392,20 +7437,20 @@ function startWaveMode(levelNumber) {
 
 // Start the next wave
 function startNextWave() {
-  if (!waveSystem.currentMapWaves) {
+  if (!G.wavesystem.currentMapWaves) {
     potatoMessage = "🌊 no wave config for this map";
     potatoMessageTimer = 120;
     buildMode = false;
     return;
   }
-  waveSystem.currentWave++;
-  waveSystem.waveActive = true;
-  waveSystem.waveTimer = 0;
+  G.wavesystem.currentWave++;
+  G.wavesystem.waveActive = true;
+  G.wavesystem.waveTimer = 0;
 
   playerUpgrades.swordVampUsed = false;
   // Get wave config
-  let waveIndex = Math.min(waveSystem.currentWave - 1, waveSystem.currentMapWaves.length - 1);
-  let waveConfig = waveSystem.currentMapWaves[waveIndex];
+  let waveIndex = Math.min (G.wavesystem.currentWave - 1, G.wavesystem.currentMapWaves.length - 1);
+  let waveConfig = G.wavesystem.currentMapWaves[waveIndex];
   
   // If this is a random wave, generate it
   if (waveConfig.random) {
@@ -7417,12 +7462,12 @@ function startNextWave() {
   if (waveConfig.message) {
     potatoMessage = waveConfig.message;
   } else {
-    potatoMessage = `🌊 Wave ${waveSystem.currentWave}`;
+    potatoMessage = `🌊 Wave ${G.wavesystem.currentWave}`;
   }
   potatoMessageTimer = 120;
   
   // Build spawn queue
-  waveSystem.spawnQueue = [];
+  G.wavesystem.spawnQueue = [];
   let delayCounter = 0;
   
   for (let enemyDef of waveConfig.enemies) {
@@ -7436,7 +7481,7 @@ function startNextWave() {
     
     // Add to spawn queue
     for (let i = 0; i < count; i++) {
-      waveSystem.spawnQueue.push({
+      G.wavesystem.spawnQueue.push({
         type: enemyDef.type,
         hp: enemyDef.hp,
         delay: delayCounter
@@ -7446,11 +7491,11 @@ function startNextWave() {
   }
   
   // Shuffle spawn queue for variety
-  waveSystem.spawnQueue.sort(() => Math.random() - 0.5);
+  G.wavesystem.spawnQueue.sort(() => Math.random() - 0.5);
   
-  waveSystem.enemiesRemaining = waveSystem.spawnQueue.length;
-  waveSystem.spawnTimer = 0;
-  const boxCount = 2 + Math.floor(waveSystem.currentWave * 0.5);
+  G.wavesystem.enemiesRemaining = G.wavesystem.spawnQueue.length;
+  G.wavesystem.spawnTimer = 0;
+  const boxCount = 2 + Math.floor (G.wavesystem.currentWave * 0.5);
   for (let i = 0; i < boxCount; i++) {
     const pos = getSpawnPosition('snail'); // reuse spawn zones
     boxes.push(createBox(
@@ -7654,26 +7699,26 @@ function createSpawnEffect(x, y) {
 // Update wave system
 function updateWaveSystem() {
   if (tutorialActive) return;
-  if (!waveSystem.enabled) return;
+  if (!G.wavesystem.enabled) return;
   
   trySpawnCheese();
 
   // Process spawn queue
-  if (waveSystem.spawnQueue.length > 0) {
-    waveSystem.spawnTimer++;
+  if  (G.wavesystem.spawnQueue.length > 0) {
+    G.wavesystem.spawnTimer++;
     
-    for (let i = waveSystem.spawnQueue.length - 1; i >= 0; i--) {
-      let spawn = waveSystem.spawnQueue[i];
+    for (let i = G.wavesystem.spawnQueue.length - 1; i >= 0; i--) {
+      let spawn = G.wavesystem.spawnQueue[i];
       
-      if (waveSystem.spawnTimer >= spawn.delay) {
+      if  (G.wavesystem.spawnTimer >= spawn.delay) {
         spawnEnemy(spawn.type, spawn.hp);
-        waveSystem.spawnQueue.splice(i, 1);
+        G.wavesystem.spawnQueue.splice(i, 1);
       }
     }
   }
   
   // Check if wave is complete
-  if (waveSystem.waveActive && waveSystem.spawnQueue.length === 0) {
+  if  (G.wavesystem.waveActive && G.wavesystem.spawnQueue.length === 0) {
     let aliveCount = 0;
     
     aliveCount += G.snails.filter(s => s.hp > 0).length;
@@ -7684,21 +7729,21 @@ function updateWaveSystem() {
     aliveCount += G.bats.filter(b => b.hp > 0).length;
     aliveCount += G.tables.filter(t => t.hp > 0).length;
     if (aliveCount === 0) {
-      waveSystem.waveActive = false;
-      waveSystem.waveTimer = waveSystem.timeBetweenWaves;
+      G.wavesystem.waveActive = false;
+      G.wavesystem.waveTimer = G.wavesystem.timeBetweenWaves;
       
       giveWaveReward();
       openBuildMode();
-      potatoMessage = `✅ Wave ${waveSystem.currentWave} Complete!`;
+      potatoMessage = `✅ Wave ${G.wavesystem.currentWave} Complete!`;
       potatoMessageTimer = 180;
     }
   }
   
   // Start next wave after delay
-  if (!waveSystem.waveActive && waveSystem.waveTimer > 0) {
-    waveSystem.waveTimer--;
+  if (!G.wavesystem.waveActive && G.wavesystem.waveTimer > 0) {
+    G.wavesystem.waveTimer--;
     
-    if (waveSystem.waveTimer === 0) {
+    if  (G.wavesystem.waveTimer === 0) {
       closeBuildMode();
       startNextWave();
     }
@@ -7712,7 +7757,7 @@ function giveWaveReward() {
     potatoHUDLine = "❤️ Life restored!";
   }
   
-  if (waveSystem.currentWave % 3 === 0) {
+  if  (G.wavesystem.currentWave % 3 === 0) {
     player.jumpPower *= 1.03;
     player.speed *= 1.03;
     potatoHUDLine = "⚡ Power increased!";
@@ -7722,8 +7767,8 @@ function giveWaveReward() {
 
 // Track enemy death
 function onEnemyKilled(enemyType) {
-  if (!waveSystem.enabled) return;
-  waveSystem.totalEnemiesKilled++;
+  if (!G.wavesystem.enabled) return;
+  G.wavesystem.totalEnemiesKilled++;
   const gained = XP_TABLE[enemyType] ?? 10;
   grantXP(gained);
   // Small chance to drop a part
@@ -7812,16 +7857,16 @@ function chooseLevelUpCard(index) {
 }
 // Draw wave UI
 function drawWaveUI() {
-  if (!waveSystem.enabled || gameOver) return;
+  if (!G.wavesystem.enabled || gameOver) return;
   
   ctx.save();
   
   ctx.fillStyle = "#fff";
   ctx.font = "bold 24px Arial";
   ctx.textAlign = "right";
-  ctx.fillText(`Wave ${waveSystem.currentWave}`, canvas.width - 20, 30);
+  ctx.fillText(`Wave ${G.wavesystem.currentWave}`, canvas.width - 20, 30);
   
-  if (waveSystem.waveActive) {
+  if  (G.wavesystem.waveActive) {
     let aliveCount = 0;
     aliveCount += G.snails.filter(s => s.hp > 0).length;
     aliveCount += G.SuperSnails.filter(s => s.hp > 0).length;
@@ -7835,8 +7880,8 @@ function drawWaveUI() {
     ctx.fillText(`Enemies: ${aliveCount}`, canvas.width - 20, 55);
   }
   
-  if (!waveSystem.waveActive && waveSystem.waveTimer > 0) {
-    let seconds = Math.ceil(waveSystem.waveTimer / 60);
+  if (!G.wavesystem.waveActive && G.wavesystem.waveTimer > 0) {
+    let seconds = Math.ceil (G.wavesystem.waveTimer / 60);
     ctx.font = "20px Arial";
     ctx.fillStyle = "#ffcc00";
     ctx.fillText(`Next wave: ${seconds}s`, canvas.width - 20, 55);
@@ -7844,7 +7889,7 @@ function drawWaveUI() {
   
   ctx.font = "16px Arial";
   ctx.fillStyle = "#aaa";
-  ctx.fillText(`Kills: ${waveSystem.totalEnemiesKilled}`, canvas.width - 20, 80);
+  ctx.fillText(`Kills: ${G.wavesystem.totalEnemiesKilled}`, canvas.width - 20, 80);
   
   ctx.textAlign = "left";
   ctx.restore();
@@ -7926,6 +7971,71 @@ function collidesWithWall(x, y, w, h) {
   }
   return false;
 }
+
+function getEnemySnapshot() {
+  function minEnemy(e) {
+    return {
+      x: Math.round(e.x), y: Math.round(e.y),
+      dx: e.dx, dy: e.dy,
+      hp: e.hp, maxHp: e.maxHp,
+      dir: e.dir ?? e.facing ?? 1,
+      alive: e.alive ?? true,
+      hitFlash: e.hitFlash ?? 0,
+      frame: e.frame ?? 0,
+    };
+  }
+  return {
+    snails:      G.snails.map(minEnemy),
+    SuperSnails: G.SuperSnails.map(minEnemy),
+    bats:        G.bats.map(minEnemy),
+    yetis:       G.yetis.map(minEnemy),
+    snowmen:     G.snowmen.map(minEnemy),
+    turrets:     G.turrets.map(minEnemy),
+    chairs:      G.chairs.map(minEnemy),
+    tables:      G.tables.map(minEnemy),
+    boxes: boxes.map(b => ({
+      x: Math.round(b.x), y: Math.round(b.y),
+      dx: b.dx, dy: b.dy,
+      hp: b.hp, maxHp: b.maxHp,
+      type: b.type,
+      broken: b.broken ?? false,
+    })),
+    wave: {
+      currentWave:    G.wavesystem.currentWave,
+      waveActive:     G.wavesystem.waveActive,
+      waveTimer:      G.wavesystem.waveTimer,
+      enabled:        G.wavesystem.enabled,
+    }
+  };
+}
+
+function applyEnemySnapshot(snap) {
+  if (!snap) return;
+  function applyList(target, source) {
+    // Resize target array to match
+    target.length = source.length;
+    for (let i = 0; i < source.length; i++) {
+      if (!target[i]) target[i] = {};
+      Object.assign(target[i], source[i]);
+    }
+  }
+  applyList(G.snails,      snap.snails);
+  applyList(G.SuperSnails, snap.SuperSnails);
+  applyList(G.bats,        snap.bats);
+  applyList(G.yetis,       snap.yetis);
+  applyList(G.snowmen,     snap.snowmen);
+  applyList(G.turrets,     snap.turrets);
+  applyList(G.chairs,      snap.chairs);
+  applyList(G.tables,      snap.tables);
+  applyList(boxes, snap.boxes);
+  if (snap.wave) {
+    G.wavesystem.currentWave = snap.wave.currentWave;
+    G.wavesystem.waveActive  = snap.wave.waveActive;
+    G.wavesystem.waveTimer   = snap.wave.waveTimer;
+    G.wavesystem.enabled     = snap.wave.enabled;
+  }
+}
+
 
 // Serialize local player state — call this to get what to broadcast over the network
 function getPlayerSnapshot() {
@@ -10302,6 +10412,46 @@ function getLocalInput() {
 let localInput = {};
 let prevInput  = {};
 // --- UPDATE PLAYER ---
+
+function updatePlayerAnimation() {
+  const isMoving   = Math.abs(player.dx) > 0.5;
+  const isOnGround = player.onGround;
+  const isDashing  = player.dashActive;
+  const isAttacking = player.attackTimer > 0;
+
+  // Determine state
+  if (isDashing) {
+    player.animState = "dash";
+  } else if (isAttacking) {
+    player.animState = "attack";
+  } else if (!isOnGround && player.dy < 0) {
+    player.animState = "jump";
+  } else if (!isOnGround && player.dy > 0) {
+    player.animState = "fall";
+  } else if (isMoving) {
+    player.animState = "walk";
+  } else {
+    player.animState = "idle";
+  }
+
+  // Advance walk frame — speed scales the animation rate
+  if (player.animState === "walk") {
+    // Higher speed = faster animation. Base speed ~3, so normalize around that.
+    const speedRatio   = Math.abs(player.dx) / player.speed;  // 0..1+
+    const frameDuration = Math.max(3, Math.round(8 / speedRatio)); // frames per anim frame
+
+    player.walkTimer++;
+    if (player.walkTimer >= frameDuration) {
+      player.walkTimer = 0;
+      player.walkFrame = (player.walkFrame + 1) % playerWalkFrames.length;
+    }
+  } else {
+    // Reset walk cycle when not walking so it starts fresh
+    player.walkFrame = 0;
+    player.walkTimer = 0;
+  }
+}
+
 function updatePlayer() {
   if (gameOver || levelUpPending) return;
   if (playerInVehicle) return;
@@ -10831,20 +10981,16 @@ ownedUpgradeIds.clear();
   G.explosions = [];
   cannonCooldown = 0;
   syncJoystickVisibility();
-  waveSystem = {
-  enabled: false,
-  currentWave: 0,
-  enemiesRemaining: 0,
-  waveActive: false,
-  timeBetweenWaves: 180 * 5,
-  waveTimer: 0,
-  totalEnemiesKilled: 0,
-  spawnQueue: [],
-  spawnTimer: 0,
-  
-  // Current map's wave configuration
-  currentMapWaves: null
-};
+  G.wavesystem.enabled = false;
+G.wavesystem.currentWave = 0;
+G.wavesystem.enemiesRemaining = 0;
+G.wavesystem.waveActive = false;
+G.wavesystem.timeBetweenWaves = 180 * 5;
+G.wavesystem.waveTimer = 0;
+G.wavesystem.totalEnemiesKilled = 0;
+G.wavesystem.spawnQueue = [];
+G.wavesystem.spawnTimer = 0;
+G.wavesystem.currentMapWaves = null;
 }
 
 function updateWolf() {
@@ -11969,16 +12115,30 @@ function drawRemotePlayer(p) {
     ctx.globalAlpha = 1;
   }
 
-  // Player sprite (flipped if facing left)
-  if (p.facing === -1) {
-    ctx.translate(p.x + 32, p.y);
-    ctx.scale(-1, 1);
-    ctx.drawImage(playerImg, 0, 0, 32, 32);
+// --- DRAW PLAYER ---
+(function drawPlayer() {
+  // Pick the right frame/image for the current state
+  let frameToDraw;
+  if (player.animState === "walk") {
+    frameToDraw = playerWalkFrames[player.walkFrame];
+  } else if (player.animState === "jump" || player.animState === "fall") {
+    frameToDraw = playerJumpImg.complete ? playerJumpImg : playerIdleImg;
   } else {
-    ctx.drawImage(playerImg, p.x, p.y, 32, 32);
+    frameToDraw = playerIdleImg;
   }
+  // Fall back to the old playerImg if new ones aren't loaded yet
+  if (!frameToDraw || !frameToDraw.complete) frameToDraw = PlayerIdleImg;
 
+  ctx.save();
+  if (player.facing === -1) {
+    ctx.translate(player.x + player.width, player.y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(frameToDraw, 0, 0, player.width, player.height);
+  } else {
+    ctx.drawImage(frameToDraw, player.x, player.y, player.width, player.height);
+  }
   ctx.restore();
+})();
 
   // Name tag above head
   const name = p.name || "Player";
@@ -12421,8 +12581,8 @@ if (player.dashCooldown > 0) {
 
   drawCannonCrosshair();
 
-  if (waveSystem.enabled) drawXPBar();
-  if (waveSystem.enabled || levelUpPending) drawLevelUpScreen();
+  if  (G.wavesystem.enabled) drawXPBar();
+  if  (G.wavesystem.enabled || levelUpPending) drawLevelUpScreen();
   
   if (devMapView) {
   drawDevRulers(devScale);
@@ -12477,65 +12637,72 @@ function gameLoop(currentTime) {
     const excess = deltaTime % FRAME_DURATION;
     lastFrameTime = currentTime - excess;
     
-  if (!gamePaused) {
-    Network.tick();
-    updateGamepad();
-    updateWaveSystem();
-    updateEnemyHitFlashes();
-    applySnowmanSlow();
-    if (!buildMode) {
-    updatePlayer();
-    updatePlayerSwordAttack();
-    updateBats();
-    updateCannonAim();
-    updateCannonProjectiles();
-    updateExplosions();
-    updatePlacedStructures();
-    syncJoystickVisibility();
-    //updateBoxes();
-    updateSpecialBoxes();
-    updateWallSliding();
-    applyAirFloat();
-    applyBoxFriction();
-    updateMovingPlatforms();
-    updateSeesaws();
-    updateSnowmen();
-    updateLadders();
-    updateWolf();
-    updateSpikes();
-    updateIcicles();
-    updateTurrets();
-    updateFireballs();
-    updateYetis();
-    updateSnowballs();
-    checkPotatoPickup();
-    potatoChaos();
-    updateOvens(player);
-    updateSnails();
-    updateChairs();
-    if (debugTestMode) runDebugTests();
-    updateCheeses();
-    updateTables();
-    updateVehicles();
-   checkEnemyVehicleDamage();
-    checkVehicleEntry();
-    updateSuperSnails();
-    if (tutorialActive) updateTutorial();
-    updateOrbiters();
-    updateHomingShot();
-    updateDashDamage();
-    }
-    updateLights();
-    spawnSnow();
-    updateCamera();
-    updateSnow();
-    updateDroppedParts();
-  }
-  drawIcicles();
-  drawOven();
-    draw();
-    // In gameLoop, outside the if (!gamePaused) block:
+    if (!gamePaused) {
+      Network.tick();
+      updateGamepad();
+    
+      const isSim = !Network.connected || Network.isHost;
+    
+      if (isSim) {
+        updateWaveSystem();
+        updateEnemyHitFlashes();
+        applySnowmanSlow();
+      }
+    
+      if (!buildMode) {
+        if (isSim) {
+          updateBats();
+          updateSnowmen();
+          updateTurrets();
+          updateFireballs();
+          updateYetis();
+          updateSnowballs();
+          updateSnails();
+          updateChairs();
+          updateTables();
+          updateSuperSnails();
+          updateIcicles();
+        }
+        updatePlayer();
+        updatePlayerSwordAttack();
+        updateCannonAim();
+        updateCannonProjectiles();
+        updateExplosions();
+        updatePlacedStructures();
+        syncJoystickVisibility();
+        updateSpecialBoxes();
+        updateWallSliding();
+        applyAirFloat();
+        applyBoxFriction();
+        updatePlayerAnimation(); // add this line before the draw calls
+        updateMovingPlatforms();
+        updateSeesaws();
+        updateLadders();
+        updateWolf();
+        updateSpikes();
+        checkPotatoPickup();
+        potatoChaos();
+        updateOvens(player);
+        if (isSim) updateCheeses();
+        updateVehicles();
+        checkEnemyVehicleDamage();
+        checkVehicleEntry();
+        if (tutorialActive) updateTutorial();
+        updateOrbiters();
+        updateHomingShot();
+        updateDashDamage();
+        if (debugTestMode) runDebugTests();
+      }
+      updateLights();
+      spawnSnow();
+      updateCamera();
+      updateSnow();
+      updateDroppedParts();
+    }    // In gameLoop, outside the if (!gamePaused) block:
 if (levelUpInputDelay > 0) levelUpInputDelay--;
+drawIcicles();
+drawOven();
+draw();
   }
   if (buildMode) updateBuildMode();
   requestAnimationFrame(gameLoop);
