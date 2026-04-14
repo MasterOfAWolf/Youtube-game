@@ -6637,7 +6637,7 @@ player.attackHitObjects = new Set(); // track hits per swing
 // --- PLAYER ANIM STATE ---
 player.walkFrame    = 0;
 player.walkTimer    = 0;
-player.animState    = "idle"; // "idle" | "walk" | "jump" | "fall" | "attack" | "dash"
+player.animState    = "idle"; // "idle" | "walk" | "jump" | "fall" | "attack" | "dash" | "crouch"
 // --- DASH ---
 player.dashSpeed = 14;
 player.dashDuration = 0;       // frames remaining in dash
@@ -10234,20 +10234,15 @@ function createChair(x, y) {
 function drawPlayer() {
   let srcX = 0, srcY = 0, srcW, srcH, sheet;
 
-  if (player.animState === "walk") {
+  if (player.animState === "walk"|| player.animState === "crouch") {
     sheet = playerWalkSheet;
     srcX  = player.walkFrame * WALK_FRAME_WIDTH;
     srcW  = WALK_FRAME_WIDTH;
-    srcH  = WALK_FRAME_HEIGHT;
-  } else if (player.animState === "crouch") {
-    sheet = playerWalkSheet;
-    srcW  = WALK_FRAME_WIDTH;
-    srcX  = player.walkFrame * WALK_FRAME_WIDTH;
     srcH  = WALK_FRAME_HEIGHT;
   } else {
     sheet = playerWalkSheet;
-    srcW  = WALK_FRAME_WIDTH;
     srcX  = player.walkFrame * WALK_FRAME_WIDTH;
+    srcW  = WALK_FRAME_WIDTH;
     srcH  = WALK_FRAME_HEIGHT;
   }
 
@@ -10260,17 +10255,17 @@ function drawPlayer() {
     ctx.translate(drawX + PLAYER_SPRITE_W, drawY);
     ctx.scale(-1, 1);
     if (player.animState === "crouch") {
-    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 0 + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
+    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 3 + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
     }
     else {
-    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 0, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
+    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 3, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
   }
 } else {
   if (player.animState === "crouch") {
-    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
+    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY + 3 + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
     }
     else {
-    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
+    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY + 3, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
   }
 }
   ctx.restore();
@@ -10466,14 +10461,11 @@ function updatePlayerAnimation() {
   const isOnGround = player.onGround;
   const isDashing  = player.dashActive;
   const isAttacking = player.attackTimer > 0;
-
-  // Crouch animation has priority when on ground
-  if (player.crouching && player.onGround) {
-    player.animState = "crouch";
-  } else {
-
   // Determine state
-  if (isDashing) {
+  // Crouch animation has priority when on ground
+  if (player.crouching) {
+    player.animState = "crouch";
+  } else if (isDashing) {
     player.animState = "dash";
   } else if (isAttacking) {
     player.animState = "attack";
@@ -10503,7 +10495,7 @@ function updatePlayerAnimation() {
     }
   }
   }
-}
+
 
 function updatePlayer() {
   if (gameOver || levelUpPending) return;
@@ -10531,7 +10523,7 @@ if (!localInput.attack && prevInput.attack) {
 }
 
 // Crouch handling: hold Down while on ground to crouch
-if (localInput.down && player.onGround && !player.dashActive && !player.attackCharging) {
+if (localInput.down && player.onGround) {
   if (!player.crouching) {
     player.crouching = true;
     player._standHeight = player.height;
