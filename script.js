@@ -1637,9 +1637,11 @@ canvas.addEventListener("mousemove", (e) => {
   const totalW = levelUpCards.length * cardW + (levelUpCards.length - 1) * gap;
   const startX = (canvas.width - totalW) / 2;
   const cardY = (canvas.height - cardH) / 2 - 10;
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
+const rect   = canvas.getBoundingClientRect();
+const scaleX = canvas.width  / rect.width;
+const scaleY = canvas.height / rect.height;
+const mx = (e.clientX - rect.left) * scaleX;
+const my = (e.clientY - rect.top)  * scaleY;
   for (let i = 0; i < levelUpCards.length; i++) {
     const cx = startX + i * (cardW + gap);
     if (mx >= cx && mx <= cx + cardW && my >= cardY && my <= cardY + cardH) {
@@ -1651,9 +1653,11 @@ canvas.addEventListener("mousemove", (e) => {
 
 canvas.addEventListener("mousedown", (e) => {
   if (buildMode) {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+const rect   = canvas.getBoundingClientRect();
+const scaleX = canvas.width  / rect.width;
+const scaleY = canvas.height / rect.height;
+const mx = (e.clientX - rect.left) * scaleX;
+const my = (e.clientY - rect.top)  * scaleY;
 
     // ✅ Skip button — check FIRST since it overlaps the HUD y-range
     const skipBtnW = 140;
@@ -1697,9 +1701,11 @@ canvas.addEventListener("mousedown", (e) => {
   const totalW = levelUpCards.length * cardW + (levelUpCards.length - 1) * gap;
   const startX = (canvas.width - totalW) / 2;
   const cardY = (canvas.height - cardH) / 2 - 10;
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
+const rect   = canvas.getBoundingClientRect();
+const scaleX = canvas.width  / rect.width;
+const scaleY = canvas.height / rect.height;
+const mx = (e.clientX - rect.left) * scaleX;
+const my = (e.clientY - rect.top)  * scaleY;
 
   for (let i = 0; i < levelUpCards.length; i++) {
     const cx = startX + i * (cardW + gap);
@@ -1716,9 +1722,11 @@ if (debugTestMode) {
   const panelX  = canvas.width - panelW - 8;
   const panelH  = debugTests.length * 18 + 50;
   const resetBtnY = 8 + panelH - 22;
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
+const rect   = canvas.getBoundingClientRect();
+const scaleX = canvas.width  / rect.width;
+const scaleY = canvas.height / rect.height;
+const mx = (e.clientX - rect.left) * scaleX;
+const my = (e.clientY - rect.top)  * scaleY;
   if (mx >= panelX + 8 && mx <= panelX + 88 &&
       my >= resetBtnY  && my <= resetBtnY + 16) {
     initDebugTests();
@@ -9466,17 +9474,17 @@ function drawPotato() {
 // INPUT
 
 canvas.addEventListener("mousemove", (e) => {
-  const rect = canvas.getBoundingClientRect();
+  const rect   = canvas.getBoundingClientRect();
+  const scaleX = canvas.width  / rect.width;   // accounts for CSS scaling
+  const scaleY = canvas.height / rect.height;
 
-  mouse.x = e.clientX - rect.left;
-  mouse.y = e.clientY - rect.top;
+  mouse.x = (e.clientX - rect.left) * scaleX;
+  mouse.y = (e.clientY - rect.top)  * scaleY;
 
   if (devMapView) {
-    // dev mode: scaled full map
     mouse.worldX = Math.floor(mouse.x / devScale);
     mouse.worldY = Math.floor(mouse.y / devScale);
   } else {
-    // normal camera-follow mode
     mouse.worldX = Math.floor(mouse.x + camera.x);
     mouse.worldY = Math.floor(mouse.y + camera.y);
   }
