@@ -6611,6 +6611,10 @@ const player = {
   wallDir: 0,
   wallJumpBoost: 0,
   prevOnGround: false,
+  // Crouch
+  crouching: false,
+  crouchHeight: 40,
+  slowMultiplier: 1,
   
   attacking: false,
   attackDuration: 10, // frames
@@ -10235,6 +10239,11 @@ function drawPlayer() {
     srcX  = player.walkFrame * WALK_FRAME_WIDTH;
     srcW  = WALK_FRAME_WIDTH;
     srcH  = WALK_FRAME_HEIGHT;
+  } else if (player.animState === "crouch") {
+    sheet = playerWalkSheet;
+    srcW  = WALK_FRAME_WIDTH;
+    srcX  = player.walkFrame * WALK_FRAME_WIDTH;
+    srcH  = WALK_FRAME_HEIGHT;
   } else {
     sheet = playerWalkSheet;
     srcW  = WALK_FRAME_WIDTH;
@@ -10250,10 +10259,20 @@ function drawPlayer() {
   if (player.facing === 1) {
     ctx.translate(drawX + PLAYER_SPRITE_W, drawY);
     ctx.scale(-1, 1);
+    if (player.animState === "crouch") {
+    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 0 + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
+    }
+    else {
     ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 0, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
-  } else {
+  }
+} else {
+  if (player.animState === "crouch") {
+    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
+    }
+    else {
     ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
   }
+}
   ctx.restore();
 };
 
@@ -10448,6 +10467,11 @@ function updatePlayerAnimation() {
   const isDashing  = player.dashActive;
   const isAttacking = player.attackTimer > 0;
 
+  // Crouch animation has priority when on ground
+  if (player.crouching && player.onGround) {
+    player.animState = "crouch";
+  } else {
+
   // Determine state
   if (isDashing) {
     player.animState = "dash";
@@ -10464,7 +10488,7 @@ function updatePlayerAnimation() {
   }
 
   // Advance walk frame — speed scales the animation rate
-  if (player.animState === "walk"|| player.animState === "fall"|| player.animState === "jump") {
+  if (player.animState === "walk"|| player.animState === "crouch"|| player.animState === "fall"|| player.animState === "jump") {
     // Higher speed = faster animation. Base speed ~2, so normalize around that.
     const speedRatio   = Math.abs(player.dx) / player.speed;  // 0..1+
     const frameDuration = Math.max(2, Math.round(6 / speedRatio)); // frames per anim frame
@@ -10477,10 +10501,7 @@ function updatePlayerAnimation() {
         player.walkFrame = 0;
       }
     }
-  } else {
-    // Reset walk cycle when not walking so it starts fresh
-    player.walkFrame = 5;
-    player.walkTimer = 0;
+  }
   }
 }
 
@@ -10506,6 +10527,37 @@ if (!localInput.attack && prevInput.attack) {
     player.attackCooldown = 20;
     player.attackKnockback = 5 + 5 * Math.min(player.attackChargeTime / player.maxChargeTime, 1);
     player.attackHitObjects.clear();
+  }
+}
+
+// Crouch handling: hold Down while on ground to crouch
+if (localInput.down && player.onGround && !player.dashActive && !player.attackCharging) {
+  if (!player.crouching) {
+    player.crouching = true;
+    player._standHeight = player.height;
+    player.height = player.crouchHeight;
+    // keep feet in same position
+    player.y += (player._standHeight - player.height);
+  }
+  // slow movement while crouched
+  player.slowMultiplier = Math.min(player.slowMultiplier || 1, 0.5);
+} else if (!localInput.down && player.crouching) {
+  // try to stand up: ensure no ceiling collision
+  const desiredHeight = player._standHeight || 64;
+  const newY = player.y - (desiredHeight - player.height);
+  const testRect = { x: player.x, y: newY, width: player.width, height: desiredHeight };
+  let blocked = false;
+  for (const w of walls) {
+    if (rectsOverlap(testRect, w)) { blocked = true; break; }
+  }
+  if (!blocked) {
+    player.crouching = false;
+    player.y = newY;
+    player.height = desiredHeight;
+    delete player._standHeight;
+  } else {
+    // remain crouched
+    player.slowMultiplier = Math.min(player.slowMultiplier || 1, 0.5);
   }
 }
 
