@@ -11,6 +11,415 @@ const FRAME_DURATION = 1000 / TARGET_FPS; // ~16.67ms per frame
 let lastFrameTime = 0;
 let deltaTime = 0;
 
+// --- Intro / load screen + hold-to-skip logic ---
+const _INTRO_HOLD_KEYS = new Set(["Space", "Enter", "ShiftLeft", "ShiftRight"]);
+const INTRO_HOLD_MS = 600; // hold duration to skip
+let _introActive = true;
+let _introHoldStart = 0;
+let _introHoldRAF = null;
+let _introAutoTimeout = null;
+let _creditsTimer = null;
+let _creditsIndex = 0;
+
+const introEl = document.getElementById("intro-screen");
+const introFill = introEl ? introEl.querySelector('.intro-progress-fill') : null;
+const menuEl = document.getElementById("menu");
+const creditsEl = introEl ? introEl.querySelector('.intro-credits') : null;
+const laughEl = introEl ? introEl.querySelector('.intro-laugh') : null;
+
+function updateIntroFill(frac) {
+  if (!introFill) return;
+  introFill.style.width = (Math.max(0, Math.min(1, frac)) * 100) + '%';
+}
+
+function finishIntro() {
+  if (!_introActive) return;
+  _introActive = false;
+  updateIntroFill(1);
+  if (introEl) {
+    introEl.classList.add('fadeout');
+    setTimeout(() => introEl.classList.add('hidden'), 420);
+  }
+  if (menuEl) menuEl.classList.remove('hidden');
+  if (_introHoldRAF) { cancelAnimationFrame(_introHoldRAF); _introHoldRAF = null; }
+  if (_introAutoTimeout) { clearTimeout(_introAutoTimeout); _introAutoTimeout = null; }
+  stopCredits();
+}
+
+function introHoldLoop(ts) {
+  if (!_introHoldStart) {
+    _introHoldStart = ts;
+  }
+  const elapsed = ts - _introHoldStart;
+  updateIntroFill(elapsed / INTRO_HOLD_MS);
+  if (elapsed >= INTRO_HOLD_MS) {
+    finishIntro();
+    return;
+  }
+  _introHoldRAF = requestAnimationFrame(introHoldLoop);
+}
+
+function startIntroHold() {
+  if (!_introActive) return;
+  if (_introHoldRAF) return; // already running
+  _introHoldStart = 0;
+  _introHoldRAF = requestAnimationFrame(introHoldLoop);
+}
+
+function cancelIntroHold() {
+  if (_introHoldRAF) cancelAnimationFrame(_introHoldRAF);
+  _introHoldRAF = null;
+  _introHoldStart = 0;
+  updateIntroFill(0);
+}
+
+// Show intro on first load: hide menu until intro finishes
+if (menuEl) menuEl.classList.add('hidden');
+
+document.addEventListener('keydown', (e) => {
+  if (!_introActive) return;
+  // Use e.code for consistent key detection
+  if (_INTRO_HOLD_KEYS.has(e.code)) {
+    e.preventDefault();
+    e.stopPropagation();
+    startIntroHold();
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  if (!_introActive) return;
+  if (_INTRO_HOLD_KEYS.has(e.code)) {
+    e.preventDefault();
+    e.stopPropagation();
+    cancelIntroHold();
+  }
+});
+
+// Pointer / touch hold support on the intro overlay
+if (introEl) {
+  introEl.addEventListener('pointerdown', (ev) => {
+    if (!_introActive) return;
+    ev.preventDefault();
+    startIntroHold();
+  });
+  introEl.addEventListener('pointerup', (ev) => {
+    if (!_introActive) return;
+    ev.preventDefault();
+    cancelIntroHold();
+  });
+  introEl.addEventListener('pointercancel', () => { cancelIntroHold(); });
+}
+
+// Ensure touch / click hold also works reliably (prevent legacy touch scroll)
+if (introEl) {
+  introEl.addEventListener('touchstart', (ev) => { ev.preventDefault(); startIntroHold(); }, {passive:false});
+  introEl.addEventListener('touchend', (ev) => { ev.preventDefault(); cancelIntroHold(); }, {passive:false});
+}
+
+// If user leaves the page or pointer is lost, cancel hold
+window.addEventListener('blur', cancelIntroHold);
+document.addEventListener('visibilitychange', () => { if (document.hidden) cancelIntroHold(); });
+
+// Auto-finish intro after short load-time so users don't get stuck
+_introAutoTimeout = setTimeout(() => { finishIntro(); }, Math.random() * 7500);
+
+// clicking/tapping the intro will also finish it quickly
+if (introEl) {
+  introEl.addEventListener('click', () => finishIntro());
+}
+
+// --- credits sequence ---
+const _CREDITS = [
+  {text: 'MasterOfAWolf', cls: 'credit-big'},
+  {text: 'The Potato Thanks You', cls: ''},
+  {text: 'Special Thanks — The Community', cls: 'credit-small'},
+];
+
+function showCredit(index) {
+  if (!creditsEl) return;
+  // Clear existing lines
+  creditsEl.innerHTML = '';
+  const info = _CREDITS[index];
+  const el = document.createElement('div');
+  el.className = 'credit-line ' + (info.cls || '');
+  el.textContent = info.text;
+  creditsEl.appendChild(el);
+  // force reveal
+  requestAnimationFrame(() => el.classList.add('visible'));
+  // the rotating joke loop runs independently of credits (handled elsewhere)
+}
+
+// --- rotating jokes loop (longer display, immediate next) ---
+const _JOKES = [
+  "That took longer than my last haircut.",
+  "Powered by coffee and questionable code.",
+  "Credits? More like ‘who stole my snacks'.",
+  "If you see bugs, they're features in beta.",
+  "Made with too much caffeine and not enough sleep.",
+
+  "Loading... please pretend this is intentional.",
+  "Optimizing… (we are not optimizing).",
+  "Reticulating splines… whatever that means.",
+  "Loading faster than my motivation on Mondays.",
+  "This would be quicker if I knew what I was doing.",
+  
+  "Compiling confidence… failed successfully.",
+  "Spawning world… hope it works this time.",
+  "If this crashes, it’s your fault now.",
+  "99% loaded… just kidding.",
+  "Almost there… probably.",
+  
+  "Fixing bugs by staring at them intensely.",
+  "Loading assets… and emotional baggage.",
+  "This is definitely not stalling for time.",
+  "Generating fun… please wait.",
+  "If you're reading this, it's already too late.",
+  
+  "Debugging… step one: panic.",
+  "Loading… powered by pure hope.",
+  "One eternity later...",
+  "Trust the process. There is no process.",
+  "Running on vibes and stack overflow.",
+  
+  "Calibrating wolves… 🐺",
+  "Adding legs… again.",
+  "Rolling cube not included.",
+  "Vote system loading… democracy takes time.",
+  "Multiplayer? Don’t ask.",
+  
+  "Loading… do not blink.",
+  "We tested this. Once.",
+  "This seemed like a good idea at 2 AM.",
+  "Please wait while we question our life choices.",
+  "Everything is under control. Probably."
+];
+
+let _jokeLoopTimeout = null;
+const JOKE_DISPLAY_MS = 2200; // how long each joke stays visible
+const JOKE_GAP_MS = 60; // short gap while we swap text
+
+function startJokeLoop() {
+  if (!laughEl) return;
+  stopJokeLoop();
+  function cycle() {
+    if (!laughEl) return;
+    laughEl.textContent = _JOKES[Math.floor(Math.random() * _JOKES.length)];
+    // show
+    requestAnimationFrame(() => laughEl.classList.add('visible'));
+    // hide after display time, then immediately start next
+    _jokeLoopTimeout = setTimeout(() => {
+      if (laughEl) laughEl.classList.remove('visible');
+      _jokeLoopTimeout = setTimeout(cycle, JOKE_GAP_MS);
+    }, JOKE_DISPLAY_MS);
+  }
+  cycle();
+}
+
+function stopJokeLoop() {
+  if (_jokeLoopTimeout) { clearTimeout(_jokeLoopTimeout); _jokeLoopTimeout = null; }
+  if (laughEl) { laughEl.classList.remove('visible'); }
+}
+
+function startCredits() {
+  if (!creditsEl) return;
+  _creditsIndex = 0;
+  showCredit(_creditsIndex);
+  _creditsTimer = setInterval(() => {
+    _creditsIndex++;
+    if (_creditsIndex >= _CREDITS.length) {
+      clearInterval(_creditsTimer);
+      _creditsTimer = null;
+      return;
+    }
+    showCredit(_creditsIndex);
+  }, 1500);
+}
+
+function stopCredits() {
+  if (_creditsTimer) { clearInterval(_creditsTimer); _creditsTimer = null; }
+}
+
+// kick off credits when script loads
+if (_introActive) startCredits();
+// Start sprite animations in the intro for a more cinematic feel
+function startIntroSprites() {
+  const p = document.getElementById('intro-player');
+  const s = document.getElementById('intro-snail');
+  if (p) {
+    // small delay to sync with credits — animate into center/visible state
+    setTimeout(() => { p.classList.add('animate'); }, 400);
+  }
+  if (s) {
+    setTimeout(() => { s.classList.add('animate'); }, 700);
+  }
+}
+
+// Kick sprite animation when intro starts
+if (_introActive) startIntroSprites();
+if (_introActive) startJokeLoop();
+
+// ------------------ Intro particle system (canvas) ------------------
+let _introCanvas = null;
+let _introCtx = null;
+let _introParticles = [];
+let _introParticleRAF = null;
+// intro sprite animation state
+let _introLastTS = 0;
+let _introSnailFrame = 0;
+let _introSnailTimer = 0;
+const _introSnailInterval = 180; // ms per frame
+let _introPlayerScale = 2.0;
+let _introSnailScale = 2.2;
+
+function createIntroCanvas() {
+  if (!introEl) return;
+  if (_introCanvas) return;
+  const c = document.createElement('canvas');
+  c.id = 'intro-canvas';
+  c.style.width = '100%';
+  c.style.height = '100%';
+  // append just inside the intro so it sits above background but under UI
+  introEl.insertBefore(c, introEl.querySelector('.intro-content'));
+  _introCanvas = c;
+  _introCtx = c.getContext('2d');
+  resizeIntroCanvas();
+  window.addEventListener('resize', resizeIntroCanvas);
+}
+
+function resizeIntroCanvas() {
+  if (!_introCanvas) return;
+  const rect = introEl.getBoundingClientRect();
+  _introCanvas.width = Math.max(1, Math.floor(rect.width * devicePixelRatio));
+  _introCanvas.height = Math.max(1, Math.floor(rect.height * devicePixelRatio));
+  _introCanvas.style.width = rect.width + 'px';
+  _introCanvas.style.height = rect.height + 'px';
+  if (_introCtx) _introCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+}
+
+function spawnIntroParticle() {
+  if (!_introCanvas) return;
+  const w = _introCanvas.width / devicePixelRatio;
+  const h = _introCanvas.height / devicePixelRatio;
+  const x = Math.random() * (w * 0.6) + w * 0.2;
+  const y = Math.random() * (h * 0.35) + h * 0.1;
+  const vx = (Math.random() - 0.5) * 0.25;
+  const vy = (Math.random() * 0.2 + 0.1);
+  const life = Math.random() * 1800 + 900;
+  const size = Math.random() * 3 + 2;
+  const colors = ['#ffd86b', '#ff9a6b', '#9be3d8', '#8fc5ff'];
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  _introParticles.push({ x, y, vx, vy, life, maxLife: life, size, color, alpha: 1 });
+}
+
+function introParticleTick(ts) {
+  if (!_introCtx) return;
+  // delta time
+  const dt = _introLastTS ? (ts - _introLastTS) : 16;
+  _introLastTS = ts;
+  _introCtx.clearRect(0, 0, _introCanvas.width, _introCanvas.height);
+  for (let i = _introParticles.length - 1; i >= 0; i--) {
+    const p = _introParticles[i];
+    p.x += p.vx * (dt / 16);
+    p.y += p.vy * (dt / 16);
+    p.life -= dt;
+    p.alpha = Math.max(0, p.life / p.maxLife);
+    // glow
+    _introCtx.beginPath();
+    _introCtx.fillStyle = p.color;
+    _introCtx.globalAlpha = 0.08 * p.alpha;
+    _introCtx.arc(p.x, p.y, p.size * 3.5, 0, Math.PI * 2);
+    _introCtx.fill();
+    _introCtx.beginPath();
+    _introCtx.globalAlpha = 0.9 * p.alpha;
+    _introCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    _introCtx.fill();
+    _introCtx.globalAlpha = 1;
+    if (p.life <= 0 || p.y > _introCanvas.height / devicePixelRatio + 30) {
+      _introParticles.splice(i, 1);
+    }
+  }
+  // occasionally spawn
+  if (Math.random() < 0.18) spawnIntroParticle();
+
+  // draw cinematic sprites (player left, snail right)
+  try {
+    const w = _introCanvas.width / devicePixelRatio;
+    const h = _introCanvas.height / devicePixelRatio;
+
+    // snail animation frame update
+    _introSnailTimer += dt;
+    if (_introSnailTimer >= _introSnailInterval) {
+      _introSnailTimer = 0;
+      _introSnailFrame = (_introSnailFrame + 1) % (snailFrames.length || 1);
+    }
+
+    // draw player
+    if (playerImg && playerImg.complete && playerImg.naturalWidth) {
+      const img = playerImg;
+      const scale = _introPlayerScale;
+      const sw = img.naturalWidth;
+      const sh = img.naturalHeight;
+      const dw = sw * scale;
+      const dh = sh * scale;
+      const px = Math.round(w * 0.28 - dw / 2);
+      const py = Math.round(h * 0.56 - dh / 2);
+      _introCtx.globalAlpha = 0.95;
+      _introCtx.drawImage(img, px, py, dw, dh);
+      _introCtx.globalAlpha = 1;
+    }
+
+    // draw snail (animated frames if available)
+    let snailFrameImg = snailFrames && snailFrames.length ? snailFrames[_introSnailFrame % snailFrames.length] : snailImg;
+    if (snailFrameImg && snailFrameImg.complete && snailFrameImg.naturalWidth) {
+      const img = snailFrameImg;
+      const scale = _introSnailScale;
+      const sw = img.naturalWidth;
+      const sh = img.naturalHeight;
+      const dw = sw * scale;
+      const dh = sh * scale;
+      const sx = Math.round(w * 0.72 - dw / 2);
+      const sy = Math.round(h * 0.60 - dh / 2);
+      _introCtx.globalAlpha = 0.95;
+      _introCtx.drawImage(img, sx, sy, dw, dh);
+      _introCtx.globalAlpha = 1;
+    }
+  } catch (e) {}
+
+  _introParticleRAF = requestAnimationFrame(introParticleTick);
+}
+
+function startIntroParticles() {
+  if (_introParticleRAF) return;
+  createIntroCanvas();
+  _introParticles.length = 0;
+  // seed a few
+  for (let i = 0; i < 8; i++) spawnIntroParticle();
+  _introParticleRAF = requestAnimationFrame(introParticleTick);
+}
+
+function stopIntroParticles() {
+  if (_introParticleRAF) { cancelAnimationFrame(_introParticleRAF); _introParticleRAF = null; }
+  _introParticles.length = 0;
+  if (_introCanvas) {
+    try { _introCanvas.remove(); } catch (e) {}
+    _introCanvas = null; _introCtx = null;
+  }
+  window.removeEventListener('resize', resizeIntroCanvas);
+}
+
+// Hook particles into intro lifecycle
+if (_introActive) startIntroParticles();
+
+// Ensure finishIntro stops particle loop
+const _origFinishIntro = finishIntro;
+finishIntro = function() {
+  stopIntroParticles();
+  stopCredits();
+  stopJokeLoop();
+  _origFinishIntro();
+};
+
+
 const tableFrames = [];
 for (let i = 0; i < 4; i++) {
   const img = new Image();
@@ -2798,11 +3207,13 @@ if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
   }
   
   if (playerUpgrades.cannonBounceEnabled && !p.bounced) {
-    // figure out which axis we hit by checking each direction separately
-    const hitH = collidesWithWall(p.x + p.vx - p.size, p.y - p.size, p.size * 2, p.size * 2);
-    const hitV = collidesWithWall(p.x - p.size, p.y + p.vy - p.size, p.size * 2, p.size * 2);
+    // Use the previous position to separate horizontal and vertical collisions.
+    const prevX = p.x - p.vx;
+    const prevY = p.y - p.vy;
+    const hitH = collidesWithWall(prevX + p.vx - p.size, prevY - p.size, p.size * 2, p.size * 2);
+    const hitV = collidesWithWall(prevX - p.size, prevY + p.vy - p.size, p.size * 2, p.size * 2);
     if (hitV) p.vy *= -1;
-    if (hitH) p.vx *= 1;
+    if (hitH) p.vx *= -1;
     if (p.explosive) createExplosion(p.x, p.y);
     p.bounced = true;
   } else {
@@ -3259,6 +3670,27 @@ function getGroundSurface(entity) {
     }
   }
   return null;
+}
+
+
+// Ensure an enemy stays within reasonable world bounds. If outside, teleport
+// them to a random X inside the map and a semi-random Y, and zero their
+// vertical velocity to avoid tunneling.
+function ensureEntityInBounds(e) {
+  const MARGIN = 200;
+  if (e.x < -MARGIN || e.x > MAP_WIDTH + MARGIN || e.y < -MARGIN || e.y > MAP_HEIGHT + MARGIN) {
+    // Random X well inside the map
+    e.x = 100 + Math.random() * Math.max(0, MAP_WIDTH - 200);
+    // Semi-random Y: prefer upper half to avoid immediate ground clipping
+    e.y = 100 + Math.random() * Math.max(0, MAP_HEIGHT - 300);
+    // Zero vertical velocity to avoid tunneling through floors
+    if (typeof e.dy !== 'undefined') e.dy = 0;
+    if (typeof e.vy !== 'undefined') e.vy = 0;
+    // clear knockback so they don't immediately fly out again
+    if (typeof e.knockbackTimer !== 'undefined') e.knockbackTimer = 0;
+    if (typeof e.knockbackDx !== 'undefined') e.knockbackDx = 0;
+    if (typeof e.knockbackDy !== 'undefined') e.knockbackDy = 0;
+  }
 }
 
 
@@ -5619,6 +6051,7 @@ if (
     // Vertical collision → same as working vertical logic
     if (player.y + player.height - overlapY <= box.y) {
       // Player is above box → stand on it
+      player.dashUsedInAir = false;
       player.y = box.y - player.height;
       player.dy = 0;
       player.onGround = true;
@@ -6221,6 +6654,7 @@ function updateBats() {
       onEnemyKilled('bat');
       continue;
     }
+    ensureEntityInBounds(bat);
     
     // Knockback
     if (bat.knockbackTimer > 0) {
@@ -6648,6 +7082,13 @@ player.dashCooldown = 0;
 player.dashMaxCooldown = 50;   // ~0.8s at 60fps
 player.dashUsedInAir = false;  // one air dash per jump
 player.dashActive = false;
+// --- ROLL (ground-only dash alternative)
+player.rollSpeed = 10;
+player.rollDuration = 0;
+player.rollMaxDuration = 30; // frames
+player.rollCooldown = 0;
+player.rollMaxCooldown = 40;
+player.rollActive = false;
 
 function addEnemyHealth() {
   // G.snails get 1-2 HP
@@ -6895,6 +7336,7 @@ const playerUpgrades = {
   swordVampEnabled: false,  // ← new
   cannonBounceEnabled: false, // ← new
   cannonRapidEnabled: false,  // ← new
+  rollEnabled: false,         // ground roll upgrade
 };
 
 // Level-up UI state
@@ -7083,6 +7525,13 @@ const UPGRADE_POOL = [
     icon: "⚡",
     apply() { playerUpgrades.dashDamageEnabled = true; }
   },
+    {
+      id: "roll",
+      name: "Ground Roll",
+      desc: "Perform a low, fast roll along the ground to evade and move quickly.",
+      icon: "🛞",
+      apply() { playerUpgrades.rollEnabled = true; }
+    },
   {
     id: "maxSpeed",
     name: "Turbo",
@@ -7820,7 +8269,7 @@ function triggerLevelUp() {
 const oneShot = new Set([
   "homing", "dashDamage", "extraJump", "potato", "orbiter", "orbiter2", "orbiter3",
   "dashInvul", "swordVamp", "homingExplosive", "wolf", "wolfElite", "wolfRevive",
-  "cannonRapid", "cannonBounce", "orbiterFast"
+  "cannonRapid", "cannonBounce", "orbiterFast", "roll"
 ]);
 
 const available = UPGRADE_POOL.filter(u => {
@@ -8055,12 +8504,14 @@ function getPlayerSnapshot() {
     attacking:  player.attacking,
     charging:   player.attackCharging,
     dashActive: player.dashActive,
+    rollActive: player.rollActive,
     onGround:   player.onGround,
     hasPotato:  hasPotato,
     upgrades: {
       wolf:               !!playerUpgrades.wolf,
       homingEnabled:      playerUpgrades.homingEnabled,
       dashDamageEnabled:  playerUpgrades.dashDamageEnabled,
+      rollEnabled:        playerUpgrades.rollEnabled,
       extraJumpsMax:      playerUpgrades.extraJumpsMax,
       cannonRapidEnabled: playerUpgrades.cannonRapidEnabled,
       cannonBounceEnabled:playerUpgrades.cannonBounceEnabled,
@@ -8079,6 +8530,7 @@ function applyPlayerSnapshot(target, snapshot) {
   target.attacking  = snapshot.attacking;
   target.charging   = snapshot.charging;
   target.dashActive = snapshot.dashActive;
+  target.rollActive = snapshot.rollActive || false;
   target.onGround   = snapshot.onGround;
   target.hasPotato  = snapshot.hasPotato;
   target.name       = snapshot.name;
@@ -8103,6 +8555,13 @@ player.dashSpeed = 14;
 player.dashMaxDuration = 12;
 player.attackDuration = 20;
 player.attackKnockback = 2;
+  // reset roll state
+  player.rollSpeed = 10;
+  player.rollDuration = 0;
+  player.rollMaxDuration = 30;
+  player.rollCooldown = 0;
+  player.rollMaxCooldown = 40;
+  player.rollActive = false;
   
   // Reset lives & flags
   playerLives = maxLives;
@@ -8367,6 +8826,7 @@ function updateFireballs() {
 
 function updateYetis() {
   for (let y of G.yetis) {
+    ensureEntityInBounds(y);
     if (!y.alive) continue;
 
     const dx = player.x - y.x;
@@ -8434,7 +8894,8 @@ function updateSnowballs() {
 }
 
 function updateTurrets() {
-    for (let turret of G.turrets) {
+  for (let turret of G.turrets) {
+    ensureEntityInBounds(turret);
         if (turret.cooldown > 0) {
             turret.cooldown--;
             continue;
@@ -8540,6 +9001,7 @@ function updateIcicles() {
 // === SMART SNAIL MODULE (Enhanced AI) ===
 function updateSnails() {
   for (let s of G.snails) {
+    ensureEntityInBounds(s);
     
     if (s.knockbackTimer > 0) {
   s.x += s.knockbackDx;
@@ -8726,6 +9188,7 @@ const SUPER_JUMP_COOLDOWN_MAX = 180; // ~3 sec at 60fps
 
 function updateSuperSnails() {
   for (let s of G.SuperSnails) {
+    ensureEntityInBounds(s);
 
     if (s.prevMode    === undefined) s.prevMode    = s.mode;
     if (s.lastWallSide === undefined) s.lastWallSide = null;
@@ -8918,7 +9381,7 @@ function drawSuperSnails() {
 // === LADDER MODULE (V2 — fixed ground & speed) ===
 
 function updateLadders() {
-  const climbSpeed = 2.5// slower climb rate
+  const climbSpeed = 12.5// slower climb rate
   let onLadder = false;
 
   for (let ladder of ladders) {
@@ -9690,6 +10153,7 @@ function bakePotato(oven) {
 
 function updateSnowmen() {
   for (let s of G.snowmen) {
+    ensureEntityInBounds(s);
     const dx = player.x - s.x;
     const dist = Math.abs(dx);
 
@@ -9822,6 +10286,19 @@ if (!hasPotato) {
 }
 
 function tryDash() {
+  // If the roll upgrade is unlocked and we're on the ground, perform a ground roll
+  if (playerUpgrades.rollEnabled && player.onGround) {
+    if (!settings.infiniteDash) {
+      if (player.rollCooldown > 0) return;
+    }
+    player.rollActive = true;
+    player.rollDuration = player.rollMaxDuration;
+    player.rollCooldown = player.rollMaxCooldown;
+    player.dy = 0;
+    player.dx = player.facing * player.rollSpeed;
+    return;
+  }
+
   if (!settings.infiniteDash) {
     if (player.dashCooldown > 0) return;
     if (!player.onGround && player.dashUsedInAir) return;
@@ -9891,6 +10368,7 @@ function triggerTableFlip(t, launchDx) {
 
 function updateTables() {
   for (let t of G.tables) {
+    ensureEntityInBounds(t);
     if (t.hitFlash  > 0) t.hitFlash--;
     if (t.flipDamageCooldown > 0) t.flipDamageCooldown--;
 
@@ -10234,47 +10712,53 @@ function createChair(x, y) {
 
 // --- DRAW PLAYER ---
 function drawPlayer() {
-  let srcX = 0, srcY = 0, srcW, srcH, sheet;
-
-  if (player.animState === "walk"|| player.animState === "crouch") {
-    sheet = playerWalkSheet;
-    srcX  = player.walkFrame * WALK_FRAME_WIDTH;
-    srcW  = WALK_FRAME_WIDTH;
-    srcH  = WALK_FRAME_HEIGHT;
-  } else {
-    sheet = playerWalkSheet;
-    srcX  = player.walkFrame * WALK_FRAME_WIDTH;
-    srcW  = WALK_FRAME_WIDTH;
-    srcH  = WALK_FRAME_HEIGHT;
-  }
+  let srcX = player.walkFrame * WALK_FRAME_WIDTH;
+  let srcY = 0;
+  let srcW = WALK_FRAME_WIDTH;
+  let srcH = WALK_FRAME_HEIGHT;
+  const sheet = playerWalkSheet;
 
   // Sprite is wider than hitbox — offset left so it's centered on the hitbox
   const drawX = player.x - PLAYER_SPRITE_OX;
   const drawY = player.y + player.height - PLAYER_SPRITE_H; // pin feet to hitbox bottom
+
+  // If rolling, draw a single rotated full-size sprite centered on the top-half instead
+  if (player.animState === "roll") {
+    const ovCx = drawX + PLAYER_SPRITE_W / 2;
+    const ovCy = drawY + PLAYER_SPRITE_H * 0.75; // top-half center (on floor)
+
+    ctx.save();
+    ctx.translate(ovCx, ovCy);
+    ctx.rotate(player._rollSpin || 0);
+    if (player.facing === 1) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, -PLAYER_SPRITE_W / 2, -PLAYER_SPRITE_H / 2, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
+    ctx.restore();
+    return; // skip normal drawing
+  }
 
   ctx.save();
   if (player.facing === 1) {
     ctx.translate(drawX + PLAYER_SPRITE_W, drawY);
     ctx.scale(-1, 1);
     if (player.animState === "crouch") {
-    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 3 + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
+      ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 3 + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
+    } else {
+      ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 3, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
     }
-    else {
-    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, 0, 3, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
-  }
-} else {
-  if (player.animState === "crouch") {
-    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY + 3 + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
+  } else {
+    if (player.animState === "crouch") {
+      ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY + 3 + (PLAYER_SPRITE_H - 40), PLAYER_SPRITE_W, 40);
+    } else {
+      ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY + 3, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
     }
-    else {
-    ctx.drawImage(sheet, srcX, srcY, srcW, srcH, drawX, drawY + 3, PLAYER_SPRITE_W, PLAYER_SPRITE_H);
   }
-}
   ctx.restore();
 };
 
 function updateChairs() {
   for (let c of G.chairs) {
+    ensureEntityInBounds(c);
 
     if (c.hitFlash > 0) c.hitFlash--;
 
@@ -10462,11 +10946,14 @@ function updatePlayerAnimation() {
   const isMoving   = Math.abs(player.dx) > 0.5;
   const isOnGround = player.onGround;
   const isDashing  = player.dashActive;
+  const isRolling  = player.rollActive;
   const isAttacking = player.attackTimer > 0;
   // Determine state
   // Crouch animation has priority when on ground
   if (player.crouching) {
     player.animState = "crouch";
+  } else if (isRolling) {
+    player.animState = "roll";
   } else if (isDashing) {
     player.animState = "dash";
   } else if (isAttacking) {
@@ -10505,6 +10992,21 @@ function updatePlayer() {
 
   prevInput  = { ...localInput };
 localInput = getLocalInput();
+
+  // Ladder presence detection: treat the player as on a ladder before physics.
+  let isOnLadder = false;
+  for (let ladder of ladders) {
+    if (
+      player.x + player.width > ladder.x &&
+      player.x < ladder.x + ladder.width &&
+      player.y + player.height > ladder.y &&
+      player.y < ladder.y + ladder.height
+    ) {
+      isOnLadder = true;
+      break;
+    }
+  }
+  player.isOnLadder = isOnLadder;
 
 // Attack pressed this frame (keyboard/gamepad edge)
 if (localInput.attack && !prevInput.attack) {
@@ -10605,7 +11107,7 @@ if (localInput.dash) {
   tryDash();
 }
   // Jumping
-if ((localInput.jump) && (player.onGround || player.isOnLadder)) {
+if ((localInput.jump) && player.onGround) {
   player.dy = -player.jumpPower;
   player.onGround = false;
   player._jumpHeld = true;
@@ -10634,8 +11136,21 @@ if (player.attackCharging) {
 // Decrease cooldown
 if (player.attackCooldown > 0) player.attackCooldown--;
 
-  // Gravity
-  player.dy += gravity;
+  // Ladder physics: stick to ladder while climbing and avoid horizontal drift.
+  if (player.isOnLadder) {
+    player.onGround = false;
+    player.onWall = false;
+    player.wallSliding = false;
+    player.dy = 0;
+    if (!localInput.left && !localInput.right) {
+      player.dx = 0;
+    } else {
+      player.dx *= 1;
+    }
+  } else {
+    // Gravity
+    player.dy += gravity;
+  }
 
   // Wall jump horizontal boost
   if (player.wallJumpBoost !== 0) {
@@ -10655,9 +11170,51 @@ if (player.attackCooldown > 0) player.attackCooldown--;
     if (player.dashDuration === 0) player.dashActive = false;
   }
   if (player.dashCooldown > 0) player.dashCooldown--;
+  // Roll override (ground-only rapid movement)
+  if (player.rollDuration > 0) {
+    player.dx = player.facing * player.rollSpeed;
+    // keep player grounded while rolling
+    if (player.onGround) player.dy = 0;
+    player.rollDuration--;
+    if (player.rollDuration === 0) player.rollActive = false;
+  }
+  if (player.rollCooldown > 0) player.rollCooldown--;
+
+  // --- Handle shrinking hitbox when roll starts / restore when ends ---
+  if (player.rollActive && !player._rollSaved) {
+    // save original
+    player._rollSaved = true;
+    player._origWidth = player.width;
+    player._origHeight = player.height;
+    player._origY = player.y;
+    // shrink to 32x32 and keep feet in place
+    const newH = 32;
+    const newW = 32;
+    player.height = newH;
+    player.width = newW;
+    player.y = player._origY + (player._origHeight - newH);
+  }
+
+  if (!player.rollActive && player._rollSaved) {
+    // restore
+    player.width = player._origWidth || player.width;
+    player.height = player._origHeight || player.height;
+    player.y = player._origY || player.y;
+    delete player._origWidth; delete player._origHeight; delete player._origY;
+    player._rollSaved = false;
+  }
+
+  // roll spin timer for visual
+  if (player.rollActive) {
+    // spin faster and in facing direction
+    const spinSpeed = 0.5; // radians per frame base
+    player._rollSpin = (player._rollSpin || 0) + spinSpeed * (player.facing || 1);
+  } else {
+    player._rollSpin = 0;
+  }
 
   // Reset ground/wall flags
-  //player.onGround = false;
+  player.onGround = false;
   player.onWall = false;
 
   // ── X pass ──
@@ -10720,22 +11277,16 @@ function drawPlayerSword() {
   
   const t = 1 - player.attackTimer / player.attackDuration;
   
-  // Use player.facing to determine sword arc direction
-  let angle;
-  
-  if (player.facing === 1) {
-    // Right-facing: sweep from left (-π) to right (0)
-    angle = -Math.PI + t * Math.PI;
-  } else {
-    // Left-facing: sweep from right (0) to left (-π)
-    angle = -t * Math.PI;
-  }
+  const swingSpan = Math.PI * 1.25; // wider than 180°
+  const baseAngle = -Math.PI / 2; // centered at the top
+  const startAngle = baseAngle - swingSpan / 2;
+  const angle = startAngle + t * swingSpan;
   
   const pivotX = player.x + player.width / 2;
   const pivotY = player.y + player.height / 2;
   const radius = 60 * (playerUpgrades.swordRangeMulti || 1);
   
-  const tipX = pivotX + Math.cos(angle) * radius * player.facing;
+  const tipX = pivotX + Math.cos(angle) * radius;
   const tipY = pivotY + Math.sin(angle) * radius;
   
   // Dynamic thickness
@@ -10760,13 +11311,9 @@ function drawPlayerSword() {
   for (let i = 0; i < trailAngles.length; i++) {
     let trailAngle;
     
-    if (player.facing === 1) {
-      trailAngle = angle - trailAngles[i];
-    } else {
-      trailAngle = angle + trailAngles[i];
-    }
+    trailAngle = angle + trailAngles[i];
     
-    const trailX = pivotX + Math.cos(trailAngle) * radius * player.facing;
+    const trailX = pivotX + Math.cos(trailAngle) * radius;
     const trailY = pivotY + Math.sin(trailAngle) * radius;
     
     const alpha = 0.35 - i * 0.1;
@@ -10785,25 +11332,23 @@ function updatePlayerSwordAttack() {
   
   const t = 1 - player.attackTimer / player.attackDuration;
   
-  let angle;
-  if (player.facing === 1) {
-    angle = -Math.PI + t * Math.PI;
-  } else {
-    angle = -t * Math.PI;
-  }
+  const swingSpan = Math.PI * 1.25; // wider than 180°
+  const baseAngle = -Math.PI / 2; // centered at the top
+  const startAngle = baseAngle - swingSpan / 2;
+  const angle = startAngle + t * swingSpan;
   
   const pivotX = player.x + player.width / 2;
   const pivotY = player.y + player.height / 2;
   const radius = 60 * (playerUpgrades.swordRangeMulti || 1);
   
-  const tipX = pivotX + Math.cos(angle) * radius * player.facing;
+  const tipX = pivotX + Math.cos(angle) * radius;
   const tipY = pivotY + Math.sin(angle) * radius;
   
   const attackBox = {
-    x: tipX - 40,
-    y: tipY - 10,
-    width: 70,
-    height: 20
+    x: tipX - 50,
+    y: tipY - 15,
+    width: 100,
+    height: 30
   };
   
   // Hit G.snails
@@ -11015,6 +11560,7 @@ function resetWorld() {
   G.bats = [];
   hasPotato = false;
   G.yetis =[];
+  swordRangeMulti = 1
   G.snowmen =[];
 
   vehicles = [];
@@ -11465,7 +12011,8 @@ function updateHomingShot() {
 }
 
 function updateDashDamage() {
-  if (!playerUpgrades.dashDamageEnabled || !player.dashActive) return;
+  // Allow dash-damage to also apply during the ground roll so both upgrades can coexist
+  if (!playerUpgrades.dashDamageEnabled || !(player.dashActive || player.rollActive)) return;
 
   const hitBox = { x: player.x, y: player.y, width: player.width, height: player.height };
   const hitSet = playerUpgrades.dashHitEnemies;
@@ -12033,7 +12580,7 @@ chatLog("  /reset /clear /tp /wave /echo", "#a0d0ff");
     run() {
       if (!gameRunning) { chatLog("Start a level first.", "#ff8888"); return; }
       let count = 0;
-      const lists = [snails, G.SuperSnails, G.bats, G.yetis, G.snowmen, G.turrets, G.chairs, G.tables];
+      const lists = [G.snails, G.SuperSnails, G.bats, G.yetis, G.snowmen, G.turrets, G.chairs, G.tables];
       for (const list of lists) { count += list.length; list.length = 0; }
       chatLog("💀 Killed " + count + " enemies", "#ff8888");
     }

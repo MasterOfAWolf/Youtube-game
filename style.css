@@ -6,7 +6,13 @@ body {
 canvas {
   display: block;
   margin: 0 auto;
-  background: #587399;
+  background: transparent;
+}
+
+/* Ensure the main game canvas stays beneath the intro overlay */
+#game {
+  position: relative;
+  z-index: 0;
 }
 .hidden {
   display: none;
@@ -279,6 +285,170 @@ body {
   transform-origin: top left;
   transform: scale(1);
 }
+
+/* Intro / Load screen */
+#intro-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Use percent-encoded space to avoid loader issues */
+  background-image: url('Assets/Tiles/Cobblestone%20BG.png'), url('Assets/Tiles/Cobblestone BG.png');
+  background-repeat: repeat !important;
+  background-size: 256px 256px !important; /* control tile density */
+  background-position: center center !important;
+  background-color: #070609 !important; /* fallback tint */
+  color: #fff;
+  z-index: 99999 !important;
+}
+
+/* dark tint above the background image for dungeon mood */
+#intro-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(6,6,8,0.6), rgba(12,10,20,0.7));
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 1;
+}
+
+#intro-screen .intro-content {
+  text-align: center;
+  max-width: 520px;
+  padding: 28px 36px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.4);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  position: relative;
+  overflow: hidden;
+}
+
+#intro-screen h1 {
+  margin: 0 0 8px 0;
+  font-size: 36px;
+  letter-spacing: 1px;
+}
+
+.intro-progress {
+  width: 100%;
+  height: 10px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 8px;
+  margin: 14px 0 8px 0;
+  overflow: hidden;
+}
+
+.intro-progress-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #ffd64d, #ff6b6b);
+  transition: width 0.1s linear;
+}
+
+.intro-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  opacity: 0.9;
+  color: #e7e7e7;
+}
+
+/* Cinematic credits + laugh */
+.intro-credits {
+  margin-bottom: 10px;
+}
+.credit-line {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 400ms ease, transform 400ms ease;
+  font-size: 18px;
+  color: #ffd86b;
+}
+.credit-big { font-size: 30px; font-weight:700; color:#fff; }
+.credit-small { font-size: 14px; color:#f0e0b8; }
+.credit-line.visible { opacity: 1; transform: translateY(0); }
+
+.intro-laugh {
+  font-size: 20px;
+  color: #ffde59;
+  margin-bottom: 8px;
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+.intro-laugh.visible { opacity: 1; transform: translateY(0) scale(1); }
+
+/* Small cinematic fade out when hiding */
+#intro-screen.fadeout { animation: introFadeOut 420ms forwards; }
+@keyframes introFadeOut { to { opacity: 0; visibility: hidden; } }
+
+/* Keep existing hidden utility working for the intro */
+.hidden { display: none; }
+
+/* Intro sprites */
+/* full-screen background sprites */
+.intro-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.intro-bg img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(1.2);
+  width: auto;
+  height: 120%;
+  object-fit: cover;
+  opacity: 0.14;
+  filter: saturate(1.05) contrast(0.98) blur(0.6px);
+  transition: transform 900ms cubic-bezier(.22,.9,.32,1), opacity 800ms ease;
+}
+.intro-bg img.player {
+  transform: translate(-45%, -50%) scale(1.6);
+  opacity: 0.18;
+}
+.intro-bg img.snail {
+  transform: translate(45%, -48%) scale(1.35);
+  opacity: 0.16;
+}
+.intro-bg img.animate { transform: translate(-50%, -50%) scale(1.05); opacity: 0.34; filter: none; }
+@keyframes intro-bob-player { 0% { transform: translateY(0); } 50% { transform: translateY(-8px); } 100% { transform: translateY(0); } }
+@keyframes intro-bob-snail { 0% { transform: translateY(0); } 50% { transform: translateY(-4px); } 100% { transform: translateY(0); } }
+
+/* subtle animated light beams for dungeon vibe */
+.intro-content::before {
+  content: '';
+  position: absolute;
+  inset: -20% -10% -20% -10%;
+  background: linear-gradient(120deg, rgba(255,200,80,0.02), rgba(255,120,80,0.02));
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  opacity: 0.9;
+  transform: translateY(-6%);
+  animation: intro-light-pulse 3200ms ease-in-out infinite;
+}
+@keyframes intro-light-pulse {
+  0% { filter: hue-rotate(0deg) saturate(0.9); opacity: 0.85; }
+  50% { filter: hue-rotate(8deg) saturate(1.2); opacity: 1; }
+  100% { filter: hue-rotate(0deg) saturate(0.9); opacity: 0.85; }
+}
+
+/* Canvas for particle effects (behind UI but above background) */
+#intro-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Ensure the content sits above canvas */
+.intro-content { z-index: 3; }
 
 /* Pixel-art mode */
 .pixelated canvas {
