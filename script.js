@@ -419,6 +419,354 @@ finishIntro = function() {
   _origFinishIntro();
 };
 
+// ============================================================
+//  ATMOSPHERIC PARTICLE SYSTEM - DUNGEON AMBIANCE
+// ============================================================
+
+const atmosphericParticles = {
+  dustMotes: [],
+  embers: [],
+  fireflies: [],
+  debris: [],
+  fogLayers: []
+};
+
+const ATMOSPHERIC_TARGETS = {
+  dustMotes: 80,
+  fireflies: 15,
+  debris: 30,
+  fogLayers: 3
+};
+
+// Particle class for dust motes floating in light rays
+class DustMote {
+  constructor() {
+    this.x = Math.random() * MAP_WIDTH;
+    this.y = Math.random() * MAP_HEIGHT;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.2;
+    this.size = Math.random() * 1.5 + 0.5;
+    this.opacity = Math.random() * 0.4 + 0.1;
+    this.wobble = Math.random() * Math.PI * 2;
+    this.wobbleSpeed = Math.random() * 0.02 + 0.01;
+  }
+
+  update() {
+    this.wobble += this.wobbleSpeed;
+    this.x += this.vx + Math.sin(this.wobble) * 0.2;
+    this.y += this.vy + Math.cos(this.wobble * 0.7) * 0.15;
+    
+    // Wrap around world boundaries
+    if (this.x < 0) this.x = MAP_WIDTH;
+    if (this.x > MAP_WIDTH) this.x = 0;
+    if (this.y < 0) this.y = MAP_HEIGHT;
+    if (this.y > MAP_HEIGHT) this.y = 0;
+  }
+
+  draw(ctx) {
+    ctx.fillStyle = `rgba(200, 180, 150, ${this.opacity})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Ember particles - floating upward with glow
+class Ember {
+  constructor(x, y) {
+    this.x = x || Math.random() * MAP_WIDTH;
+    this.y = y || MAP_HEIGHT;
+    this.vx = (Math.random() - 0.5) * 0.5;
+    this.vy = -(Math.random() * 1.5 + 0.5);
+    this.size = Math.random() * 2 + 1;
+    this.life = Math.random() * 120 + 60;
+    this.maxLife = this.life;
+    this.brightness = Math.random() * 0.5 + 0.5;
+    this.flicker = Math.random() * Math.PI * 2;
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy -= 0.02; // gentle upward acceleration
+    this.vx *= 0.99;
+    this.life--;
+    this.flicker += 0.1;
+  }
+
+  draw(ctx) {
+    const alpha = (this.life / this.maxLife) * this.brightness;
+    const flicker = Math.sin(this.flicker) * 0.3 + 0.7;
+    
+    // Outer glow
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = `rgba(255, 120, 50, ${alpha * 0.6})`;
+    ctx.fillStyle = `rgba(255, 140, 60, ${alpha * flicker})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Bright center
+    ctx.fillStyle = `rgba(255, 220, 150, ${alpha * flicker})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.shadowBlur = 0;
+  }
+}
+
+// Firefly particles - floating with soft pulsing glow
+class Firefly {
+  constructor() {
+    this.x = Math.random() * MAP_WIDTH;
+    this.y = Math.random() * MAP_HEIGHT;
+    this.vx = (Math.random() - 0.5) * 0.4;
+    this.vy = (Math.random() - 0.5) * 0.4;
+    this.size = Math.random() * 1.5 + 1;
+    this.pulsePhase = Math.random() * Math.PI * 2;
+    this.pulseSpeed = Math.random() * 0.03 + 0.02;
+    const warmOrange = [255, 165, 90];
+    const currentPalette = Math.random() > 0.7 ? [100, 255, 150] : [150, 255, 200];
+    const blend = Math.random(); // 0 = warm orange, 1 = current palette
+
+    this.color = [
+      Math.round(warmOrange[0] + (currentPalette[0] - warmOrange[0]) * blend),
+      Math.round(warmOrange[1] + (currentPalette[1] - warmOrange[1]) * blend),
+      Math.round(warmOrange[2] + (currentPalette[2] - warmOrange[2]) * blend)
+    ];
+
+    // Very rare color variant.
+    if (Math.random() < 0.025) {
+      this.color = [255, 120, 205];
+    }
+    this.changeDirection = Math.random() * 120 + 60;
+    this.timer = 0;
+  }
+
+  update() {
+    this.timer++;
+    
+    // Change direction periodically
+    if (this.timer > this.changeDirection) {
+      this.vx = (Math.random() - 0.5) * 0.6;
+      this.vy = (Math.random() - 0.5) * 0.6;
+      this.changeDirection = Math.random() * 120 + 60;
+      this.timer = 0;
+    }
+    
+    this.x += this.vx;
+    this.y += this.vy;
+    this.pulsePhase += this.pulseSpeed;
+    
+    // Wrap around
+    if (this.x < 0) this.x = MAP_WIDTH;
+    if (this.x > MAP_WIDTH) this.x = 0;
+    if (this.y < 0) this.y = MAP_HEIGHT;
+    if (this.y > MAP_HEIGHT) this.y = 0;
+  }
+
+  draw(ctx) {
+    const pulse = Math.sin(this.pulsePhase) * 0.5 + 0.5;
+    const alpha = pulse * 0.7 + 0.3;
+    
+    ctx.shadowBlur = 15 * pulse;
+    ctx.shadowColor = `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, 0.8)`;
+    ctx.fillStyle = `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * (0.7 + pulse * 0.3), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+}
+
+// Floating debris - small rocks, dust clouds
+class Debris {
+  constructor() {
+    this.x = Math.random() * MAP_WIDTH;
+    this.y = Math.random() * MAP_HEIGHT;
+    this.vx = (Math.random() - 0.5) * 0.2;
+    this.vy = (Math.random() - 0.5) * 0.15;
+    this.width = Math.random() * 3 + 2;
+    this.height = Math.random() * 3 + 2;
+    this.rotation = Math.random() * Math.PI * 2;
+    this.rotationSpeed = (Math.random() - 0.5) * 0.02;
+    this.opacity = Math.random() * 0.2 + 0.05;
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.rotation += this.rotationSpeed;
+    
+    if (this.x < 0) this.x = MAP_WIDTH;
+    if (this.x > MAP_WIDTH) this.x = 0;
+    if (this.y < 0) this.y = MAP_HEIGHT;
+    if (this.y > MAP_HEIGHT) this.y = 0;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+    ctx.fillStyle = `rgba(80, 70, 60, ${this.opacity})`;
+    ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+    ctx.restore();
+  }
+}
+
+// Fog layer for depth
+class FogLayer {
+  constructor(depth) {
+    this.depth = depth; // 0-1, where 0 is foreground
+    this.x = 0;
+    this.y = 0;
+    this.speed = depth * 0.3;
+    this.opacity = (1 - depth) * 0.05;
+    this.scale = 1 + depth * 0.5;
+  }
+
+  update() {
+    this.x += this.speed * 0.2;
+    if (this.x > MAP_WIDTH) this.x = 0;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.globalAlpha = this.opacity;
+    
+    // Draw repeating fog pattern
+    for (let x = -MAP_WIDTH; x < MAP_WIDTH * 2; x += MAP_WIDTH) {
+      const gradient = ctx.createRadialGradient(
+        x + this.x + MAP_WIDTH / 2, 
+        MAP_HEIGHT / 2,
+        0,
+        x + this.x + MAP_WIDTH / 2,
+        MAP_HEIGHT / 2,
+        MAP_WIDTH
+      );
+      
+      gradient.addColorStop(0, 'rgba(40, 35, 50, 0.3)');
+      gradient.addColorStop(0.5, 'rgba(30, 25, 40, 0.1)');
+      gradient.addColorStop(1, 'rgba(20, 15, 30, 0)');
+      
+      ctx.fillStyle = gradient;
+      ctx.fillRect(x + this.x, 0, MAP_WIDTH, MAP_HEIGHT);
+    }
+    
+    ctx.restore();
+  }
+}
+
+// Initialize atmospheric particles
+function initAtmosphericParticles() {
+  if (!settings.particles) return;
+
+  // Reset pools so restarts don't stack duplicate particles.
+  atmosphericParticles.dustMotes.length = 0;
+  atmosphericParticles.embers.length = 0;
+  atmosphericParticles.fireflies.length = 0;
+  atmosphericParticles.debris.length = 0;
+  atmosphericParticles.fogLayers.length = 0;
+  
+  // Dust motes - lots of them for atmosphere
+  for (let i = 0; i < ATMOSPHERIC_TARGETS.dustMotes; i++) {
+    atmosphericParticles.dustMotes.push(new DustMote());
+  }
+  
+  // Fireflies - fewer, more special
+  for (let i = 0; i < ATMOSPHERIC_TARGETS.fireflies; i++) {
+    atmosphericParticles.fireflies.push(new Firefly());
+  }
+  
+  // Floating debris
+  for (let i = 0; i < ATMOSPHERIC_TARGETS.debris; i++) {
+    atmosphericParticles.debris.push(new Debris());
+  }
+  
+  // Fog layers for depth
+  for (let i = 0; i < ATMOSPHERIC_TARGETS.fogLayers; i++) {
+    atmosphericParticles.fogLayers.push(new FogLayer(i / 3));
+  }
+}
+
+// Update atmospheric particles
+function updateAtmosphericParticles() {
+  if (!settings.particles) return;
+
+  // Keep ambient particles alive even if settings were toggled during gameplay.
+  if (atmosphericParticles.dustMotes.length < ATMOSPHERIC_TARGETS.dustMotes && Math.random() < 0.35) {
+    atmosphericParticles.dustMotes.push(new DustMote());
+  }
+  if (atmosphericParticles.fireflies.length < ATMOSPHERIC_TARGETS.fireflies && Math.random() < 0.2) {
+    atmosphericParticles.fireflies.push(new Firefly());
+  }
+  if (atmosphericParticles.debris.length < ATMOSPHERIC_TARGETS.debris && Math.random() < 0.2) {
+    atmosphericParticles.debris.push(new Debris());
+  }
+  while (atmosphericParticles.fogLayers.length < ATMOSPHERIC_TARGETS.fogLayers) {
+    atmosphericParticles.fogLayers.push(new FogLayer(atmosphericParticles.fogLayers.length / 3));
+  }
+  
+  atmosphericParticles.dustMotes.forEach(p => p.update());
+  atmosphericParticles.fireflies.forEach(p => p.update());
+  atmosphericParticles.debris.forEach(p => p.update());
+  atmosphericParticles.fogLayers.forEach(p => p.update());
+  
+  // Update embers
+  for (let i = atmosphericParticles.embers.length - 1; i >= 0; i--) {
+    atmosphericParticles.embers[i].update();
+    if (atmosphericParticles.embers[i].life <= 0) {
+      atmosphericParticles.embers.splice(i, 1);
+    }
+  }
+  
+  // Spawn new embers near light sources (attach torch effects to lights)
+  if (settings.particles && typeof lights !== 'undefined' && lights.length) {
+    for (let i = 0; i < lights.length; i++) {
+      const L = lights[i];
+      if (!L) continue;
+
+      // only emit if light has meaningful intensity
+      if ((L.intensity || 0) < 0.08) continue;
+
+      // small probability scaled by intensity and spawnRate
+      const spawnChance = (L.particleSpawnRate || 0.02) * (L.intensity || 1);
+      if (Math.random() < spawnChance && atmosphericParticles.embers.length < 120) {
+        // spawn point jitter within a fraction of the light radius
+        const jitter = Math.max(8, L.radius * 0.18);
+        const ex = L.x + (Math.random() - 0.5) * jitter;
+        const ey = L.y + (Math.random() - 0.8) * jitter; // bias upward a bit
+
+        const e = new Ember(ex, ey);
+        // make embers rise more from stronger lights
+        e.vx += (Math.random() - 0.5) * 0.6;
+        e.vy -= Math.random() * 0.6 * (L.intensity || 1);
+        atmosphericParticles.embers.push(e);
+      }
+    }
+  }
+}
+
+// Draw atmospheric particles (call this in your draw function)
+function drawAtmosphericParticles() {
+  if (!settings.particles) return;
+  
+  // Draw fog layers first (background)
+  atmosphericParticles.fogLayers.forEach(p => p.draw(ctx));
+  
+  // Draw debris
+  atmosphericParticles.debris.forEach(p => p.draw(ctx));
+  
+  // Draw dust motes
+  atmosphericParticles.dustMotes.forEach(p => p.draw(ctx));
+  
+  // Draw embers
+  atmosphericParticles.embers.forEach(p => p.draw(ctx));
+  
+  // Draw fireflies (foreground)
+  atmosphericParticles.fireflies.forEach(p => p.draw(ctx));
+}
 
 const tableFrames = [];
 for (let i = 0; i < 4; i++) {
@@ -450,8 +798,8 @@ const PLAYER_SPRITE_OX = Math.round((PLAYER_SPRITE_W - 32) / 2); // horizontal o
 const playerIdleImg = new Image();
 playerIdleImg.src = "Assets/Sprites/Player_idle.png"; // or keep using Player.png
 
-const playerJumpImg = new Image();
-playerJumpImg.src = "Assets/Sprites/Player_jump.png"; // optional, for later
+/*const playerJumpImg = new Image();
+playerJumpImg.src = "Assets/Sprites/Player_jump.png"; // optional, for later*/
 
 const playerImg = new Image();
 playerImg.src = "Assets/Sprites/Player.png";
@@ -554,6 +902,312 @@ document.addEventListener("keydown", e => {
 
 // Prevent game keys firing while typing name
 playerNameInput.addEventListener("keydown", e => e.stopPropagation());
+
+// --- INVENTORY / SHOP UI ---
+function createInventoryUI() {
+  if (inventoryUI) return;
+  inventoryUI = document.createElement('div');
+  inventoryUI.id = 'inventory-ui';
+  inventoryUI.className = 'hidden inventory-overlay';
+
+  const inner = document.createElement('div');
+  inner.className = 'inventory-inner';
+
+  const header = document.createElement('div');
+  header.className = 'inventory-header';
+  header.innerHTML = '<h2>Inventory</h2><div class="gold">Gold: <span id="invGold">' + playerInventory.gold + '</span></div>';
+  inner.appendChild(header);
+
+  const grid = document.createElement('div');
+  grid.className = 'inventory-grid';
+  grid.id = 'invGrid';
+  inner.appendChild(grid);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => toggleInventory());
+  inner.appendChild(closeBtn);
+
+  inventoryUI.appendChild(inner);
+  document.body.appendChild(inventoryUI);
+  renderInventory();
+}
+
+function createShopUI() {
+  if (shopUI) return;
+  shopUI = document.createElement('div');
+  shopUI.id = 'shop-ui';
+  shopUI.className = 'hidden inventory-overlay';
+
+  const inner = document.createElement('div');
+  inner.className = 'inventory-inner shop-inner';
+
+  const header = document.createElement('div');
+  header.className = 'inventory-header';
+  header.innerHTML = '<h2>Shop</h2><div class="gold">Gold: <span id="shopGold">' + playerInventory.gold + '</span></div>';
+  inner.appendChild(header);
+
+  const tip = document.createElement('p');
+  tip.className = 'shop-tip';
+  tip.textContent = 'Buy here. Use bought items from inventory with I.';
+  inner.appendChild(tip);
+
+  const shopList = document.createElement('div');
+  shopList.className = 'shop-list';
+  shopList.id = 'shopList';
+  inner.appendChild(shopList);
+
+  const actions = document.createElement('div');
+  actions.className = 'shop-actions';
+
+  const startWaveBtn = document.createElement('button');
+  startWaveBtn.className = 'shop-start-wave-btn';
+  startWaveBtn.textContent = 'Start Next Wave';
+  startWaveBtn.addEventListener('click', () => {
+    startNextWaveFromIntermission();
+  });
+  actions.appendChild(startWaveBtn);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Close';
+  closeBtn.addEventListener('click', () => closeShopUI());
+  actions.appendChild(closeBtn);
+
+  inner.appendChild(actions);
+  shopUI.appendChild(inner);
+  document.body.appendChild(shopUI);
+  renderShop();
+}
+
+function toggleInventory() {
+  createInventoryUI();
+  inventoryOpen = !inventoryOpen;
+  inventoryUI.classList.toggle('hidden', !inventoryOpen);
+  if (inventoryOpen) renderInventory();
+}
+
+function openInventory() { if (!inventoryOpen) toggleInventory(); }
+function closeInventory() { if (inventoryOpen) toggleInventory(); }
+
+function openShopUI() {
+  createShopUI();
+  shopOpen = true;
+  shopUI.classList.remove('hidden');
+  renderShop();
+}
+
+function closeShopUI() {
+  if (!shopUI) return;
+  shopOpen = false;
+  shopUI.classList.add('hidden');
+}
+
+function renderInventory() {
+  if (!inventoryUI) return;
+  document.getElementById('invGold').textContent = playerInventory.gold;
+  const grid = document.getElementById('invGrid');
+  grid.innerHTML = '';
+  for (let i = 0; i < INVENTORY_SIZE; i++) {
+    const slot = document.createElement('div');
+    const it = playerInventory.items[i];
+    if (it) {
+      slot.className = 'inv-slot';
+      const label = document.createElement('span');
+      label.className = 'inv-slot-label';
+      label.textContent = it.label + (it.qty > 1 ? ' x' + it.qty : '');
+      const useBtn = document.createElement('button');
+      useBtn.className = 'inv-use-btn';
+      useBtn.textContent = 'Use';
+      useBtn.addEventListener('click', () => useInventoryItem(i));
+      slot.appendChild(label);
+      slot.appendChild(useBtn);
+    } else {
+      slot.className = 'inv-slot empty';
+      slot.textContent = '';
+    }
+    grid.appendChild(slot);
+  }
+}
+
+function renderShop() {
+  if (!shopUI) return;
+  const shopGold = document.getElementById('shopGold');
+  if (shopGold) shopGold.textContent = playerInventory.gold;
+  const shopList = document.getElementById('shopList');
+  shopList.innerHTML = '';
+  for (const it of SHOP_ITEMS) {
+    const row = document.createElement('div');
+    row.className = 'shop-row';
+    row.innerHTML = `<span class="shop-item">${it.label}</span><span class="shop-price">💰${it.price}</span>`;
+    const b = document.createElement('button'); b.textContent = 'Buy';
+    b.disabled = playerInventory.gold < it.price;
+    b.addEventListener('click', () => buyFromShop(it.id));
+    row.appendChild(b);
+    shopList.appendChild(row);
+  }
+}
+
+function useInventoryItem(slotIndex) {
+  const slot = playerInventory.items[slotIndex];
+  if (!slot) return;
+
+  let consumed = false;
+
+  switch (slot.id) {
+    case 'health_potion': {
+      if (playerLives >= maxLives) {
+        potatoMessage = 'You already have full lives';
+        potatoMessageTimer = 90;
+        return;
+      }
+      playerLives = Math.min(maxLives, playerLives + 1);
+      consumed = true;
+      potatoMessage = 'Health restored +1';
+      potatoMessageTimer = 90;
+      break;
+    }
+    case 'jump_boots': {
+      player.jumpPower = Math.min(18, player.jumpPower + 1);
+      player.wallJumpPower = Math.min(18, player.wallJumpPower + 1);
+      consumed = true;
+      potatoMessage = 'Jump power increased';
+      potatoMessageTimer = 90;
+      break;
+    }
+    case 'speed_chili': {
+      player.speed = Math.min(8, Number((player.speed + 0.25).toFixed(2)));
+      consumed = true;
+      potatoMessage = 'Movement speed increased';
+      potatoMessageTimer = 90;
+      break;
+    }
+    default:
+      potatoMessage = 'This item is not usable yet';
+      potatoMessageTimer = 90;
+      return;
+  }
+
+  if (!consumed) return;
+  slot.qty -= 1;
+  if (slot.qty <= 0) {
+    playerInventory.items[slotIndex] = null;
+  }
+  renderInventory();
+  renderShop();
+}
+
+function buyFromShop(id) {
+  const it = SHOP_ITEMS.find(x => x.id === id);
+  if (!it) return;
+  if (playerInventory.gold < it.price) { 
+    potatoMessage = "Not enough gold"; 
+    potatoMessageTimer = 90; 
+    return; 
+  }
+  
+  let stacked = false;
+  for (let i = 0; i < playerInventory.items.length; i++) {
+    const slot = playerInventory.items[i];
+    if (slot && slot.id === id) { 
+      slot.qty++; 
+      stacked = true; 
+      break; 
+    }
+  }
+  
+  if (!stacked) {
+    if (playerInventory.items.length < INVENTORY_SIZE) {
+      playerInventory.items.push({ id: it.id, label: it.label, qty: 1 });
+    } else {
+      potatoMessage = "Inventory full!";
+      potatoMessageTimer = 90;
+      return;
+    }
+  }
+  
+  playerInventory.gold -= it.price;
+  potatoMessage = `Bought ${it.label}`;
+  potatoMessageTimer = 90;
+  renderInventory();
+  renderShop();
+}
+
+function startNextWaveFromIntermission() {
+  if (!G.wavesystem.enabled || G.wavesystem.waveActive || buildMode) {
+    return false;
+  }
+
+  closeBuildMode();
+  closeShopUI();
+  G.shopkeepers.length = 0;
+  G.wavesystem.waveTimer = 0;
+  startNextWave();
+  return true;
+}
+
+function finishBuildModeForShopping() {
+  if (!G.wavesystem.enabled || G.wavesystem.waveActive || !buildMode) {
+    return false;
+  }
+
+  closeBuildMode();
+
+  const shouldOpenShopWindow = G.wavesystem.currentWave >= nextShopWindowWave;
+  if (shouldOpenShopWindow) {
+    maybeSpawnShopkeeperOnWaveComplete();
+    G.wavesystem.waveTimer = POST_BUILD_SHOP_FRAMES;
+    potatoMessage = `Build complete. ${POST_BUILD_SHOP_SECONDS}s to shop — press N for 3s countdown`;
+    potatoMessageTimer = 180;
+    showSpawnHUD(`Shop time: ${POST_BUILD_SHOP_SECONDS}s — press N to skip to 3s`, 220);
+  } else {
+    G.wavesystem.waveTimer = 180;
+    potatoMessage = `Build complete. Next shop in ${Math.max(1, nextShopWindowWave - G.wavesystem.currentWave)} wave(s).`;
+    potatoMessageTimer = 140;
+  }
+
+  return true;
+}
+
+function skipIntermissionToThreeSeconds() {
+  if (!G.wavesystem.enabled || G.wavesystem.waveActive || buildMode) {
+    return false;
+  }
+  if (G.wavesystem.waveTimer <= INTERMISSION_SKIP_TO_FRAMES) {
+    return false;
+  }
+
+  G.wavesystem.waveTimer = INTERMISSION_SKIP_TO_FRAMES;
+  closeShopUI();
+  potatoMessage = 'Skipping to 3 second countdown';
+  potatoMessageTimer = 90;
+  return true;
+}
+
+// Quick keybinding: I toggles inventory
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'i' || e.key === 'I') {
+    e.preventDefault(); 
+    toggleInventory();
+  }
+  if (e.key === 'e' || e.key === 'E') {
+    e.preventDefault();
+    if (!inventoryOpen && !shopOpen) {
+      const interacted = tryInteractWithShop();
+      if (!interacted) {
+        const nearestDist = getNearestShopkeeperDistance();
+        if (nearestDist > 0 && nearestDist < 200) {
+          potatoMessage = "Move closer to the shopkeeper";
+          potatoMessageTimer = 60;
+        }
+      }
+    }
+  }
+  if (e.key === 'n' || e.key === 'N') {
+    if (skipIntermissionToThreeSeconds()) {
+      e.preventDefault();
+    }
+  }
+});
 
 // ── NETWORK ──
 const Network = {
@@ -791,6 +1445,9 @@ wavesystem: {
 }
 };
 
+// Shopkeepers pool
+G.shopkeepers = [];
+
 let wasOff = true; 
 let lightingEnabled = true;
 let lights = [];
@@ -820,6 +1477,16 @@ let initialTables = [];
 let seesaws = [];
 let potatoMessage = "";
 let potatoMessageTimer = 0;
+// Top-center HUD notification (for important spawns like shopkeeper)
+let spawnHUDText = "";
+let spawnHUDTimer = 0;
+let spawnHUDMax = 0;
+
+function showSpawnHUD(text, frames = 180) {
+  spawnHUDText = text || "";
+  spawnHUDTimer = Math.max(0, Math.floor(frames));
+  spawnHUDMax = spawnHUDTimer;
+}
 let potatoHUDLine = "";
 let ambientLight = .67;
 
@@ -838,6 +1505,36 @@ let partInventory = {
   bouncy: 0, spike: 0, wall: 0,
   body: 0, wheel: 0, engine: 0, seat: 0
 };
+
+// --- PLAYER INVENTORY & SHOP ---
+const INVENTORY_SIZE = 24; // slots
+const POST_BUILD_SHOP_SECONDS = 60;
+const POST_BUILD_SHOP_FRAMES = POST_BUILD_SHOP_SECONDS * 60;
+const INTERMISSION_SKIP_TO_FRAMES = 180; // 3 seconds at 60fps
+const SHOP_WAVE_GAP_MIN = 3;
+const SHOP_WAVE_GAP_MAX = 5;
+
+function randomShopGap() {
+  return SHOP_WAVE_GAP_MIN + Math.floor(Math.random() * (SHOP_WAVE_GAP_MAX - SHOP_WAVE_GAP_MIN + 1));
+}
+
+let nextShopWindowWave = randomShopGap();
+
+let playerInventory = {
+  gold: 50,
+  items: [] // { id, label, qty }
+};
+
+const SHOP_ITEMS = [
+  { id: 'health_potion', label: 'Health Potion', price: 25 },
+  { id: 'jump_boots',   label: 'Jump Boots',   price: 75 },
+  { id: 'speed_chili',   label: 'Speed Chili',  price: 60 }
+];
+
+let inventoryUI = null; // DOM node for inventory UI
+let shopUI = null; // DOM node for shop UI
+let inventoryOpen = false;
+let shopOpen = false;
 
 let buildMode = false;
 let buildSelectedPart = "bouncy";
@@ -1953,8 +2650,7 @@ canvas.addEventListener("touchstart", (e) => {
     const skipBtnY = canvas.height - 116;
     if (mx >= skipBtnX && mx <= skipBtnX + skipBtnW &&
         my >= skipBtnY && my <= skipBtnY + 50) {
-      closeBuildMode();
-      G.wavesystem.waveTimer = 180;
+      finishBuildModeForShopping();
       return;
     }
 
@@ -2074,8 +2770,7 @@ const my = (e.clientY - rect.top)  * scaleY;
     const skipBtnY = canvas.height - 116;
     if (mx >= skipBtnX && mx <= skipBtnX + skipBtnW &&
       my >= skipBtnY && my <= skipBtnY + 50) {
-      closeBuildMode();
-      G.wavesystem.waveTimer = 180 // Give 3 seconds after closing build mode to breath
+      finishBuildModeForShopping();
       return;
     }
 
@@ -2693,7 +3388,13 @@ function createLight(x, y, radius, color, intensity = 1.0) {
     intensity: intensity,
     flickerSpeed: 0,
     flickerAmount: 0,
-    baseRadius: radius
+    baseRadius: radius,
+    // particle emitter state for torch/ember effects
+    particleTimer: 0,
+    // per-update spawn chance multiplier (higher = more embers)
+    particleSpawnRate: 0.1,
+    // type of particles to emit (currently only 'ember' is used)
+    particleType: 'ember'
   };
 }
 
@@ -2831,6 +3532,242 @@ function drawBackground() {
     for (let x = 0; x < cols; x++) {
       ctx.drawImage(bgTile, x * tileW, y * tileH, tileW, tileH);
     }
+  }
+}
+
+const dungeonAesthetics = {
+  key: "",
+  floorDetails: [],
+  props: []
+};
+
+function createAestheticRng(seed) {
+  let s = (seed >>> 0) || 1;
+  return function rand() {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function hashAestheticKey(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function rectOverlapsRect(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+function overlapsSolidAt(x, y, w, h) {
+  for (let i = 0; i < walls.length; i++) {
+    const wall = walls[i];
+    if (rectOverlapsRect(x, y, w, h, wall.x, wall.y, wall.width, wall.height)) return true;
+  }
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i];
+    if (rectOverlapsRect(x, y, w, h, b.x, b.y, b.width, b.height)) return true;
+  }
+  return false;
+}
+
+function initDungeonAesthetics() {
+  const key = `${currentMap}|${currentLevel}|${MAP_WIDTH}|${MAP_HEIGHT}|${walls.length}|${boxes.length}`;
+  if (dungeonAesthetics.key === key) return;
+
+  dungeonAesthetics.key = key;
+  dungeonAesthetics.floorDetails.length = 0;
+  dungeonAesthetics.props.length = 0;
+
+  const rng = createAestheticRng(hashAestheticKey(key));
+
+  // Floor texture details: cracks, stains and worn tile seams.
+  for (let i = 0; i < 460; i++) {
+    const x = 30 + rng() * (MAP_WIDTH - 60);
+    const y = 30 + rng() * (MAP_HEIGHT - 60);
+    if (rng() < 0.58) {
+      dungeonAesthetics.floorDetails.push({
+        kind: "crack",
+        x,
+        y,
+        len: 16 + rng() * 34,
+        angle: rng() * Math.PI * 2,
+        alpha: 0.09 + rng() * 0.14
+      });
+    } else {
+      dungeonAesthetics.floorDetails.push({
+        kind: "stain",
+        x,
+        y,
+        rx: 8 + rng() * 18,
+        ry: 6 + rng() * 14,
+        alpha: 0.08 + rng() * 0.12
+      });
+    }
+  }
+
+  const propTypes = ["crate", "urn", "bones", "candle", "rubble"];
+  let attempts = 0;
+  while (dungeonAesthetics.props.length < 180 && attempts < 1400) {
+    attempts++;
+    const t = propTypes[(rng() * propTypes.length) | 0];
+    const scale = 1.15 + rng() * 1.1;
+    const w = (t === "crate" ? 26 : t === "urn" ? 20 : t === "rubble" ? 22 : 14) * scale;
+    const h = (t === "crate" ? 22 : t === "urn" ? 24 : t === "rubble" ? 14 : 12) * scale;
+    const x = 24 + rng() * (MAP_WIDTH - w - 48);
+    const y = 24 + rng() * (MAP_HEIGHT - h - 48);
+
+    if (overlapsSolidAt(x, y, w, h)) continue;
+
+    dungeonAesthetics.props.push({
+      type: t,
+      x,
+      y,
+      w,
+      h,
+      rotation: (rng() - 0.5) * 0.35,
+      alpha: 0.9 + rng() * 0.1
+    });
+  }
+
+  // Ensure some visible dressing near the level's starting area.
+  const anchorX = Math.max(80, Math.min(MAP_WIDTH - 80, (player.x || 120) + player.width / 2));
+  const anchorY = Math.max(80, Math.min(MAP_HEIGHT - 80, (player.y || 120) + player.height / 2));
+  for (let i = 0; i < 18; i++) {
+    const t = propTypes[(rng() * propTypes.length) | 0];
+    const scale = 1.2 + rng() * 0.8;
+    const w = (t === "crate" ? 26 : t === "urn" ? 20 : t === "rubble" ? 22 : 14) * scale;
+    const h = (t === "crate" ? 22 : t === "urn" ? 24 : t === "rubble" ? 14 : 12) * scale;
+    const radius = 120 + rng() * 230;
+    const a = rng() * Math.PI * 2;
+    const x = Math.max(24, Math.min(MAP_WIDTH - w - 24, anchorX + Math.cos(a) * radius));
+    const y = Math.max(24, Math.min(MAP_HEIGHT - h - 24, anchorY + Math.sin(a) * radius));
+    if (overlapsSolidAt(x, y, w, h)) continue;
+    dungeonAesthetics.props.push({
+      type: t,
+      x,
+      y,
+      w,
+      h,
+      rotation: (rng() - 0.5) * 0.25,
+      alpha: 0.92 + rng() * 0.08
+    });
+  }
+}
+
+function drawDungeonFloorTexture() {
+  if (!dungeonAesthetics.floorDetails.length) return;
+
+  ctx.save();
+
+  const tileStep = 80;
+  ctx.strokeStyle = "rgba(20, 18, 24, 0.17)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= MAP_WIDTH; x += tileStep) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, MAP_HEIGHT);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= MAP_HEIGHT; y += tileStep) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(MAP_WIDTH, y);
+    ctx.stroke();
+  }
+
+  for (let i = 0; i < dungeonAesthetics.floorDetails.length; i++) {
+    const d = dungeonAesthetics.floorDetails[i];
+    if (d.kind === "crack") {
+      ctx.strokeStyle = `rgba(10, 9, 14, ${d.alpha})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x + Math.cos(d.angle) * d.len, d.y + Math.sin(d.angle) * d.len);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = `rgba(16, 14, 20, ${d.alpha})`;
+      ctx.beginPath();
+      ctx.ellipse(d.x, d.y, d.rx, d.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawDungeonProps() {
+  if (!dungeonAesthetics.props.length) return;
+
+  for (let i = 0; i < dungeonAesthetics.props.length; i++) {
+    const p = dungeonAesthetics.props[i];
+    ctx.save();
+    ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
+    ctx.rotate(p.rotation);
+    ctx.globalAlpha = p.alpha;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2;
+
+    if (p.type === "crate") {
+      ctx.fillStyle = "#7a5330";
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.strokeStyle = "#3d2815";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.beginPath();
+      ctx.moveTo(-p.w / 2, -p.h / 2);
+      ctx.lineTo(p.w / 2, p.h / 2);
+      ctx.moveTo(p.w / 2, -p.h / 2);
+      ctx.lineTo(-p.w / 2, p.h / 2);
+      ctx.stroke();
+    } else if (p.type === "urn") {
+      ctx.fillStyle = "#8c7f70";
+      ctx.beginPath();
+      ctx.ellipse(0, 2, p.w * 0.45, p.h * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#b4a484";
+      ctx.fillRect(-p.w * 0.2, -p.h * 0.45, p.w * 0.4, p.h * 0.14);
+    } else if (p.type === "bones") {
+      ctx.strokeStyle = "#f3ecd4";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(-p.w * 0.45, -p.h * 0.35);
+      ctx.lineTo(p.w * 0.45, p.h * 0.35);
+      ctx.moveTo(-p.w * 0.45, p.h * 0.35);
+      ctx.lineTo(p.w * 0.45, -p.h * 0.35);
+      ctx.stroke();
+    } else if (p.type === "candle") {
+      ctx.fillStyle = "#d5c8a2";
+      ctx.fillRect(-p.w * 0.16, -p.h * 0.48, p.w * 0.32, p.h * 0.82);
+      ctx.fillStyle = "rgba(255, 164, 75, 0.9)";
+      ctx.beginPath();
+      ctx.ellipse(0, -p.h * 0.56, p.w * 0.13, p.h * 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = "rgba(255, 140, 70, 0.7)";
+      ctx.fillStyle = "rgba(255, 194, 120, 0.45)";
+      ctx.beginPath();
+      ctx.ellipse(0, -p.h * 0.54, p.w * 0.35, p.h * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = "#6a6158";
+      for (let n = 0; n < 4; n++) {
+        const rx = -p.w * 0.45 + (n * p.w) / 4;
+        const ry = (n % 2 === 0 ? -1 : 1) * p.h * 0.15;
+        ctx.fillRect(rx, ry, p.w * 0.28, p.h * 0.3);
+      }
+    }
+
+    // Slight outline pass to improve readability over cobblestone.
+    ctx.strokeStyle = "rgba(20, 16, 12, 0.45)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-p.w / 2, -p.h / 2, p.w, p.h);
+
+    ctx.restore();
   }
 }
 
@@ -2983,6 +3920,191 @@ function drawLevelUpScreen() {
   ctx.textAlign = "left";
 }
 
+// ============================================================
+//  ENHANCED DUNGEON LIGHTING SYSTEM
+// ============================================================
+
+const dungeonLighting = {
+  torches: [],
+  ambientPulse: 0,
+  flickerNoise: []
+};
+
+// Torch light source with flicker
+class TorchLight {
+  constructor(x, y, radius = 150) {
+    this.x = x;
+    this.y = y;
+    this.baseRadius = radius;
+    this.radius = radius;
+    this.flicker = Math.random() * Math.PI * 2;
+    this.flickerSpeed = Math.random() * 0.05 + 0.03;
+    this.color = { r: 255, g: 180, b: 80 };
+    this.intensity = 0.8;
+  }
+
+  update() {
+    this.flicker += this.flickerSpeed;
+    // Organic flicker pattern
+    const flicker1 = Math.sin(this.flicker) * 0.15;
+    const flicker2 = Math.sin(this.flicker * 2.3) * 0.08;
+    const flicker3 = Math.sin(this.flicker * 4.7) * 0.05;
+    this.radius = this.baseRadius * (1 + flicker1 + flicker2 + flicker3);
+    this.intensity = 0.7 + (flicker1 + flicker2) * 0.3;
+  }
+
+  draw(ctx) {
+    if (!settings.lighting) return;
+    
+    // Create radial gradient for torch glow
+    const gradient = ctx.createRadialGradient(
+      this.x, this.y, 0,
+      this.x, this.y, this.radius
+    );
+    
+    const alpha = this.intensity;
+    gradient.addColorStop(0, `rgba(${this.color.r}, ${this.color.g}, ${this.color.b}, ${alpha * 0.4})`);
+    gradient.addColorStop(0.3, `rgba(${this.color.r}, ${this.color.g}, ${this.color.b}, ${alpha * 0.2})`);
+    gradient.addColorStop(0.6, `rgba(${this.color.r * 0.8}, ${this.color.g * 0.7}, ${this.color.b * 0.5}, ${alpha * 0.1})`);
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = gradient;
+    ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+
+// Add some torches to your level (call this when loading a level)
+function initDungeonLighting() {
+  dungeonLighting.torches = [];
+  
+  // Example: Add torches at regular intervals along walls
+  // Adjust positions based on your level layout
+  for (let x = 200; x < MAP_WIDTH; x += 400) {
+    dungeonLighting.torches.push(new TorchLight(x, 150));
+    dungeonLighting.torches.push(new TorchLight(x, MAP_HEIGHT - 150));
+  }
+  
+  // Generate flicker noise for ambient lighting
+  dungeonLighting.flickerNoise = [];
+  for (let i = 0; i < 100; i++) {
+    dungeonLighting.flickerNoise.push(Math.random());
+  }
+}
+
+function updateDungeonLighting() {
+  dungeonLighting.ambientPulse += 0.01;
+  dungeonLighting.torches.forEach(torch => torch.update());
+}
+
+function drawDungeonLighting() {
+  if (!settings.lighting) return;
+  
+  // Draw darkness overlay first
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(15, 12, 20, 0.25)'; // Dark purple-ish dungeon darkness
+  ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+  
+  // Draw torch lights
+  dungeonLighting.torches.forEach(torch => torch.draw(ctx));
+  
+  ctx.restore();
+}
+
+// ============================================================
+//  SCREEN EFFECTS - VIGNETTE & ATMOSPHERIC OVERLAY
+// ============================================================
+
+function drawVignette() {
+  ctx.save();
+  // Reset transform to draw in screen space
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  
+  // Radial gradient from center to edges
+  const gradient = ctx.createRadialGradient(
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.2,
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.8
+  );
+  
+  gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+gradient.addColorStop(0.7, 'rgba(5, 5, 10, 0.05)');
+gradient.addColorStop(1, 'rgba(0, 0, 5, 0.15)');
+  
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  ctx.restore();
+}
+
+function drawAtmosphericOverlay() {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  
+  // Subtle noise/grain effect
+  if (Math.random() < 0.03) {
+    ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.02})`;
+    for (let i = 0; i < 5; i++) {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  
+  ctx.restore();
+}
+
+// ============================================================
+//  ENHANCED CAMERA WITH SMOOTH MOTION
+// ============================================================
+
+const enhancedCamera = {
+  targetX: 0,
+  targetY: 0,
+  actualX: 0,
+  actualY: 0,
+  smoothing: 0.08, // Higher = snappier, lower = smoother
+  shakeX: 0,
+  shakeY: 0,
+  shakeDecay: 0.9
+};
+
+function updateEnhancedCamera() {
+  // Set target to player position (or wherever you want camera focused)
+  enhancedCamera.targetX = player.x + player.width / 2 - canvas.width / 2;
+  enhancedCamera.targetY = player.y + player.height / 2 - canvas.height / 2;
+  
+  // Smooth interpolation
+  enhancedCamera.actualX += (enhancedCamera.targetX - enhancedCamera.actualX) * enhancedCamera.smoothing;
+  enhancedCamera.actualY += (enhancedCamera.targetY - enhancedCamera.actualY) * enhancedCamera.smoothing;
+  
+  // Apply shake if enabled
+  if (settings.screenShake) {
+    enhancedCamera.shakeX *= enhancedCamera.shakeDecay;
+    enhancedCamera.shakeY *= enhancedCamera.shakeDecay;
+    
+    // Kill tiny values
+    if (Math.abs(enhancedCamera.shakeX) < 0.1) enhancedCamera.shakeX = 0;
+    if (Math.abs(enhancedCamera.shakeY) < 0.1) enhancedCamera.shakeY = 0;
+  }
+  
+  // Update your existing camera object
+  camera.x = enhancedCamera.actualX + enhancedCamera.shakeX;
+  camera.y = enhancedCamera.actualY + enhancedCamera.shakeY;
+  
+  // Clamp to world boundaries
+  camera.x = Math.max(0, Math.min(camera.x, MAP_WIDTH - canvas.width));
+  camera.y = Math.max(0, Math.min(camera.y, MAP_HEIGHT - canvas.height));
+}
+
+// Call this to trigger screen shake
+function triggerScreenShake(intensity = 5) {
+  if (!settings.screenShake) return;
+  enhancedCamera.shakeX = (Math.random() - 0.5) * intensity * 2;
+  enhancedCamera.shakeY = (Math.random() - 0.5) * intensity * 2;
+}
+
 // Draw lighting layer
 function drawLighting() {
   if (!lightingEnabled && ambientLight < 0.75) return;
@@ -3000,19 +4122,43 @@ function drawLighting() {
   for (let light of lights) {
     ctx.save();
 
-  // Bulb body (circle)
-  ctx.fillStyle = '#A8B360';
+  // Torch head + flame (visual only; lighting math below stays unchanged)
+  const torchFlicker = Math.sin(performance.now() * 0.02 + light.x * 0.05) * 0.5 + 0.5;
+  const flameH = 10 + torchFlicker * 3;
+
+  // Wooden torch handle
+  ctx.fillStyle = '#5c3b1d';
+  ctx.fillRect(light.x - 1.5, light.y - 2, 3, 14);
+
+  // Metal collar near the flame
+  ctx.fillStyle = '#8a8f98';
+  ctx.fillRect(light.x - 4, light.y - 3, 8, 4);
+
+  // Outer flame
+  ctx.shadowBlur = 14;
+  ctx.shadowColor = 'rgba(255, 150, 60, 0.7)';
+  ctx.fillStyle = `rgba(255, 140, 40, ${0.72 + torchFlicker * 0.22})`;
   ctx.beginPath();
-  ctx.arc(light.x, light.y, 6, 0, Math.PI * 2);
+  ctx.moveTo(light.x, light.y - flameH - 1);
+  ctx.quadraticCurveTo(light.x + 6, light.y - 5, light.x, light.y + 1);
+  ctx.quadraticCurveTo(light.x - 6, light.y - 5, light.x, light.y - flameH - 1);
   ctx.fill();
 
-  // Bulb base (small rectangle)
-  ctx.fillStyle = 'silver';
-  ctx.fillRect(light.x - 3, light.y - 10, 6, 4);
+  // Inner hot core
+  ctx.shadowBlur = 8;
+  ctx.shadowColor = 'rgba(255, 230, 170, 0.8)';
+  ctx.fillStyle = `rgba(255, 235, 170, ${0.7 + torchFlicker * 0.25})`;
+  ctx.beginPath();
+  ctx.moveTo(light.x, light.y - flameH + 2);
+  ctx.quadraticCurveTo(light.x + 3, light.y - 6, light.x, light.y - 1);
+  ctx.quadraticCurveTo(light.x - 3, light.y - 6, light.x, light.y - flameH + 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
     
     let beamStopY = -2099;
     
-    for (let obj of walls) {
+    const beamOccluders = [...walls, ...boxes];
+    for (let obj of beamOccluders) {
       // Check if light is horizontally aligned with the object
       if (light.x >= obj.x && light.x <= obj.x + obj.width) {
         // Find the bottom edge of the object that is ABOVE the light
@@ -3022,11 +4168,6 @@ function drawLighting() {
         }
       }
     }
-
-    // 2. Draw the vertical beam (grey line)
-    ctx.fillStyle = 'grey';
-    const beamHeight = light.y - beamStopY;
-    ctx.fillRect(light.x, beamStopY, 1, beamHeight);
 
     // Create radial gradient for light
     const gradient = ctx.createRadialGradient(
@@ -3046,6 +4187,25 @@ function drawLighting() {
     
     ctx.restore();
   }
+
+  // Fireflies act as tiny, dim moving light sources.
+  if (settings.particles && atmosphericParticles.fireflies.length) {
+    for (let i = 0; i < atmosphericParticles.fireflies.length; i++) {
+      const f = atmosphericParticles.fireflies[i];
+      const c = f.color || [170, 255, 190];
+      const pulse = Math.sin(f.pulsePhase || 0) * 0.5 + 0.5;
+      const r = 18 + pulse * 14;
+      const a = 0.09 + pulse * 0.12;
+      const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+      g.addColorStop(0, `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`);
+      g.addColorStop(0.6, `rgba(${Math.round(c[0] * 0.75)}, ${Math.round(c[1] * 0.75)}, ${Math.round(c[2] * 0.75)}, ${a * 0.45})`);
+      g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   
   // Reset blend mode
   ctx.globalCompositeOperation = 'source-over';
@@ -3058,27 +4218,6 @@ function drawLighting() {
   ctx.restore();
 }
 
-
-// Player torch/flashlight (optional)
-let playerLight = null;
-
-/*function updatePlayerLight() {
-  if (!playerLight) {
-    playerLight = createLight(
-      player.x + player.width / 2,
-      player.y + player.height / 2,
-      200,
-      "#ffeeaa",
-      0.6
-    );
-    lights.push(playerLight);
-  } else {
-    // Follow player
-    playerLight.x = player.x + player.width / 2;
-    playerLight.y = player.y + player.height / 2;
-  }
-}
-*/
 // Toggle lighting (for testing)
 document.addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "l") {
@@ -4795,8 +5934,10 @@ function startLevel(level) {
 
   stopGameLoop();   // stop old loop
   resetGameState(); // reset player & flags
-
+  initAtmosphericParticles();
+  initDungeonLighting();
   loadLevel(level); // THIS is now the only loader
+  initDungeonAesthetics();
   if (level === 0) tutorialActive = true;
   startMusic();
   gameRunning = true;
@@ -5103,8 +6244,7 @@ function updateBuildMode() {
 
       // Y = skip wave
       if (gp.buttons[3]?.pressed && !gp._buildCloseHeld) {
-        closeBuildMode();
-        startNextWave();
+        finishBuildModeForShopping();
         gp._buildCloseHeld = true;
       }
       if (!gp.buttons[3]?.pressed) gp._buildCloseHeld = false;
@@ -5202,12 +6342,11 @@ function drawBuildMode() {
     ctx.textAlign = "left";
   }
 
-// Timer and instructions
-const secondsLeft = Math.ceil (G.wavesystem.waveTimer / 60);
-ctx.fillStyle = secondsLeft < 5 ? "#f44" : "#ffd54f";
+// Build mode instructions
+ctx.fillStyle = "#ffd54f";
 ctx.font = "bold 13px monospace";
 ctx.textAlign = "center";
-ctx.fillText(`⚠️ WAVE STARTS IN ${secondsLeft}s`, canvas.width / 2, canvas.height - 122);
+ctx.fillText("🧱 Build mode: finish build to start 60s shop time", canvas.width / 2, canvas.height - 122);
 
 // ✅ SKIP BUTTON
 const skipBtnW = 140;
@@ -5220,7 +6359,7 @@ ctx.fillRect(skipBtnX, skipBtnY, skipBtnW, 50);
 ctx.strokeRect(skipBtnX, skipBtnY, skipBtnW, 50);
 ctx.fillStyle = "#fff";
 ctx.font = "bold 12px monospace";
-ctx.fillText("▶ START WAVE", skipBtnX + skipBtnW / 2, skipBtnY + 30);
+ctx.fillText("✓ FINISH BUILD", skipBtnX + skipBtnW / 2, skipBtnY + 30);
 ctx.textAlign = "left";
 }
 
@@ -7350,11 +8489,23 @@ const XP_TABLE = {
   snail:      8,
   superSnail: 20,
   bat:        12,
-  yeti:       50,
-  snowman:    25,
+  yeti:       25,
+  snowman:    18,
   turret:     15,
   chair:      10,
   table:      18,
+};
+
+// Gold rewards per enemy type
+const GOLD_TABLE = {
+  snail:      2,
+  superSnail: 6,
+  bat:        3,
+  yeti:       10,
+  snowman:    5,
+  turret:     4,
+  chair:      2,
+  table:      5,
 };
 
 // Full upgrade pool — each entry is one possible card
@@ -7896,6 +9047,12 @@ function startNextWave() {
     buildMode = false;
     return;
   }
+
+  // Shopkeepers are intermission-only and should not persist into active waves.
+  G.shopkeepers.length = 0;
+  closeInventory();
+  closeShopUI();
+
   G.wavesystem.currentWave++;
   G.wavesystem.waveActive = true;
   G.wavesystem.waveTimer = 0;
@@ -8183,17 +9340,22 @@ function updateWaveSystem() {
     aliveCount += G.tables.filter(t => t.hp > 0).length;
     if (aliveCount === 0) {
       G.wavesystem.waveActive = false;
-      G.wavesystem.waveTimer = G.wavesystem.timeBetweenWaves;
+      G.wavesystem.waveTimer = 0;
       
       giveWaveReward();
       openBuildMode();
-      potatoMessage = `✅ Wave ${G.wavesystem.currentWave} Complete!`;
+      potatoMessage = `✅ Wave ${G.wavesystem.currentWave} Complete! Build, then finish build to shop.`;
       potatoMessageTimer = 180;
     }
   }
   
   // Start next wave after delay
   if (!G.wavesystem.waveActive && G.wavesystem.waveTimer > 0) {
+    // Build mode fully pauses intermission countdown.
+    if (buildMode) {
+      return;
+    }
+
     G.wavesystem.waveTimer--;
     
     if  (G.wavesystem.waveTimer === 0) {
@@ -8202,6 +9364,91 @@ function updateWaveSystem() {
     }
   }
 }
+
+// --- Shopkeeper logic ---
+function spawnShopkeeper(x, y) {
+  const sk = {
+    x: x, y: y,
+    width: 40, height: 64,
+    active: true,
+    interactRadius: 60,
+    id: 'shop_' + Math.random().toString(36).slice(2,6)
+  };
+  G.shopkeepers.push(sk);
+  return sk;
+}
+
+function updateShopkeepers() {
+  // remove inactive
+  for (let i = G.shopkeepers.length - 1; i >= 0; i--) {
+    const s = G.shopkeepers[i];
+    if (!s.active) G.shopkeepers.splice(i,1);
+  }
+
+  // Safety cleanup for edge-cases where a wave starts before cleanup runs.
+  if (G.wavesystem.waveActive && G.shopkeepers.length > 0) {
+    G.shopkeepers.length = 0;
+    closeInventory();
+    closeShopUI();
+  }
+}
+
+// spawn shopkeepers every few waves (host only / singleplayer)
+function maybeSpawnShopkeeperOnWaveComplete() {
+  if (G.wavesystem.waveActive) return;
+  if (G.shopkeepers.some(s => s.active)) return;
+
+  const w = G.wavesystem.currentWave;
+  if (w > 0 && w >= nextShopWindowWave) {
+    // pick a spawn position near center
+    const pos = { x: Math.min(Math.max(player.x + 300, 200), MAP_WIDTH-200), y: player.y };
+    spawnShopkeeper(pos.x, pos.y);
+    nextShopWindowWave = w + randomShopGap();
+    potatoMessage = 'A shopkeeper has appeared nearby!'; potatoMessageTimer = 240;
+    showSpawnHUD('Shopkeeper nearby — E: shop, N: skip to 3s', 260);
+  }
+}
+
+// Call this when wave completes
+const _origGiveWaveReward = giveWaveReward;
+giveWaveReward = function() {
+  _origGiveWaveReward();
+};
+function tryInteractWithShop() {
+  if (G.wavesystem.enabled && G.wavesystem.waveActive) return false;
+
+  for (const s of G.shopkeepers) {
+    if (!s.active) continue;
+    const dx = s.x - player.x;
+    const dy = s.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= s.interactRadius) {
+      openShopUI();
+      potatoMessage = "Welcome to the shop!";
+      potatoMessageTimer = 90;
+      return true;
+    }
+  }
+  return false;
+}
+
+function getNearestShopkeeperDistance() {
+  const activeShops = G.shopkeepers.filter(s => s.active);
+  if (activeShops.length === 0) return -1;
+  let minDist = Infinity;
+  for (const s of activeShops) {
+    const dx = s.x - player.x;
+    const dy = s.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < minDist) minDist = dist;
+  }
+  return minDist;
+}
+
+const _origDraw = draw;
+draw = function() {
+  _origDraw();
+};
 
 // Give player a reward
 function giveWaveReward() {
@@ -8223,7 +9470,13 @@ function onEnemyKilled(enemyType) {
   if (!G.wavesystem.enabled) return;
   G.wavesystem.totalEnemiesKilled++;
   const gained = XP_TABLE[enemyType] ?? 10;
+  const goldGained = GOLD_TABLE[enemyType] ?? 1;
   grantXP(gained);
+  playerInventory.gold += goldGained;
+
+  if (inventoryOpen) renderInventory();
+  if (shopOpen) renderShop();
+
   // Small chance to drop a part
   if (Math.random() < 0.12) {
     const pos = getSpawnPosition('snail');
@@ -8572,7 +9825,8 @@ player.attackKnockback = 2;
   playerUpgrades.wolf = null;
   playerUpgrades.wolfAutoRevive = false;
 tutorialActive = false;
-  
+playerUpgrades.rollEnabled = false;
+
  xp = 0;
 xpLevel = 1;
 xpToNext = 60;
@@ -8603,6 +9857,7 @@ debugTests = [];
   generatedTiles = [];
   enemies = [];
   G.fireballs = [];
+  G.shopkeepers = []
   timeElapsed = 0;
  hasPotato = false;
   potato.collected = true;
@@ -9670,125 +10925,6 @@ function applyBoxFriction() {
 // --- STACKABLE BOX MODULE ---
 const boxFriction = 0.9; // slows boxes when touching other boxes
 const wallFriction = 0.9; // slows boxes when on wall/ground
-
-/*function updateBoxes() {
-  for (let i = 0; i < boxes.length; i++) {
-    const box = boxes[i];
-
-    // Apply gravity
-    box.dy += gravity;
-
-    // Move box
-    box.x += box.dx;
-    box.y += box.dy;
-
-    // --- BOX COLLISIONS WITH WALLS ---
-    for (let wall of walls) {
-      if (isColliding(box, wall)) resolveBoxCollision(box, wall);
-    }
-
-    // --- BOX COLLISIONS WITH OTHER BOXES ---
-    for (let j = 0; j < boxes.length; j++) {
-      if (i === j) continue;
-      const other = boxes[j];
-      if (isColliding(box, other)) resolveBoxCollision(box, other);
-    }
-
-// --- BOX COLLISIONS WITH PLAYER ---
-if (
-  player.x + player.width > box.x &&
-  player.x < box.x + box.width &&
-  player.y + player.height > box.y &&
-  player.y < box.y + box.height
-) {
-  const overlapX = Math.min(
-    player.x + player.width - box.x,
-    box.x + box.width - player.x
-  );
-  const overlapY = Math.min(
-    player.y + player.height - box.y,
-    box.y + box.height - player.y
-  );
-
-  if (overlapX < overlapY) {
-    // Horizontal collision → stop player and box if blocked
-    if (player.x < box.x) {
-      // Player is left of box
-      const blocked = walls.some(w =>
-        box.x + overlapX > w.x &&
-        box.x + overlapX < w.x + w.width &&
-        box.y + box.height > w.y &&
-        box.y < w.y + w.height
-      );
-
-      if (!blocked) {
-        // Free to push
-        box.x += overlapX;
-        box.dx = player.dx;
-        player.x -= 0; // player already moving normally
-      } else {
-        // Blocked → stop
-        player.x -= overlapX;
-        player.dx = 0;
-        box.dx = 0;
-      }
-    } else {
-      // Player is right of box
-      const blocked = walls.some(w =>
-        box.x - overlapX < w.x + w.width &&
-        box.x - overlapX + box.width > w.x &&
-        box.y + box.height > w.y &&
-        box.y < w.y + w.height
-      );
-
-      if (!blocked) {
-        // Free to push
-        box.x -= overlapX;
-        box.dx = player.dx;
-        player.x += 0;
-      } else {
-        // Blocked → stop
-        player.x += overlapX;
-        player.dx = 0;
-        box.dx = 0;
-      }
-    }
-  } else {
-    // Vertical collision → same as working vertical logic
-    if (player.y + player.height - overlapY <= box.y) {
-      // Player is above box → stand on it
-      player.y = box.y - player.height;
-      player.dy = 0;
-      player.onGround = true;
-      player.x += box.dx * 0.8;
-    } else if (box.y + box.height - overlapY <= player.y) {
-      // Box is landing on player
-      box.y = player.y - box.height;
-      box.dy = 0;
-      box.x += player.dx * 0.7;
-    } else {
-      // Sideways overlap (player inside box) → push player out
-      if (player.y < box.y) player.y -= overlapY;
-      else player.y += overlapY;
-      player.dy = 0;
-    }
-  }
-}
-
-    // --- BOX COLLISIONS WITH G.snails ---
-    for (let s of [...G.snails, ...G.SuperSnails]) {
-      if (isColliding(box, s)) resolveBoxCollision(box, s);
-    }
-
-    // Apply wall/ground friction
-    const ground = getGroundSurface(box);
-if (ground && ground.ice) {
-  box.dx *= 0.99;
-} else {
-  box.dx *= 0.9;
-}
-  }
-}*/
 
 // --- Helper to resolve box vs solid collisions ---
 function resolveBoxCollision(box, solid) {
@@ -11549,6 +12685,7 @@ function resetWorld() {
   G.turrets = [];
   seesaws = [];
   boxes = [];
+  G.shopkeepers = []
   G.snails = [];
   cheeses = [];
   G.bats = [];
@@ -12087,6 +13224,7 @@ function updateSeesaws() {
       const offset = (player.x + player.width / 2) - center;
       s.angularVelocity += offset * 0.0005;
       player.x += s.angularVelocity * 6; // instability
+      player.dashUsedInAir = false;
     }
 
     // box influence
@@ -12534,6 +13672,23 @@ chatLog("  /reset /clear /tp /wave /echo", "#a0d0ff");
     }
   },
 
+  spawnshop: {
+    run(args) {
+      if (!gameRunning) { chatLog("Start a level first.", "#ff8888"); return; }
+      // spawn at a short offset from player so it's easy to find
+      const sx = Math.min(Math.max(player.x + 160, 200), MAP_WIDTH - 200);
+      const sy = player.y;
+      const sk = spawnShopkeeper(sx, sy);
+      if (sk) {
+        chatLog("Spawned shopkeeper at (" + Math.round(sx) + "," + Math.round(sy) + ")", "#80ff80");
+        potatoMessage = 'A shopkeeper has appeared nearby!'; potatoMessageTimer = 240;
+        showSpawnHUD('Shopkeeper spawned — press E to interact', 240);
+      } else {
+        chatLog('Failed to spawn shopkeeper.', '#ff8888');
+      }
+    }
+  },
+
   set: {
     run(args) {
       const key = args[0];
@@ -12603,10 +13758,13 @@ chatLog("  /reset /clear /tp /wave /echo", "#a0d0ff");
 
   wave: {
     run(args) {
-      if (typeof waveNumber === "undefined") { chatLog("Not in wave mode.", "#ff8888"); return; }
+      if (typeof G.wavesystem.currentWave === "undefined") { chatLog("Not in wave mode.", "#ff8888"); return; }
       const n = parseInt(args[0]);
-      if (!isNaN(n)) waveNumber = n - 1;
-      chatLog("⏭ Skipped to wave " + (waveNumber + 1), "#f0d060");
+      if (!isNaN(n)) G.wavesystem.currentWave = n;
+      let count = 0;
+      const lists = [G.snails, G.SuperSnails, G.bats, G.yetis, G.snowmen, G.turrets, G.chairs, G.tables];
+      for (const list of lists) { count += list.length; list.length = 0; }
+      chatLog("⏭ Skipped to wave " + (G.wavesystem.currentWave), "#f0d060");
     }
   },
 
@@ -12793,11 +13951,9 @@ drawMouseCoords();
 }
 
 drawBackground();
-  // --- DRAW DECOR ---
-/*for (let d of decor) {
-    ctx.fillStyle = d.color;
-    ctx.fillRect(d.x, d.y, d.width, d.height);
-}*/
+drawDungeonFloorTexture();
+
+atmosphericParticles.fogLayers.forEach(p => p.draw(ctx));
 
   for (let s of seesaws) {
   ctx.save();
@@ -12830,6 +13986,8 @@ ctx.fill();
   drawSnowmen();
    drawPotato();
   drawOven();
+  atmosphericParticles.debris.forEach(p => p.draw(ctx));
+  atmosphericParticles.dustMotes.forEach(p => p.draw(ctx));
   drawDroppedParts();
   // Draw walls
   for (let wall of walls) {
@@ -12877,6 +14035,7 @@ for (let i = 0; i < wall.width / 60; i++) {
 }
 
   //Draw Spikes
+drawDungeonProps();
 drawSpikes();
 
   //draw snow
@@ -12907,6 +14066,49 @@ function drawSnails() {
     }
 }
 
+function drawShopkeepers() {
+  for (const s of G.shopkeepers) {
+    if (!s.active) continue;
+    // interaction check (world-space)
+    const dx = (s.x + (s.width||32)/2) - (player.x + player.width/2);
+    const dy = (s.y + (s.height||64)/2) - (player.y + player.height/2);
+    const dist = Math.hypot(dx, dy);
+    const inRange = dist <= s.interactRadius;
+
+    // interaction arc (world coords)
+    if (inRange) {
+      ctx.strokeStyle = 'rgba(255, 215, 0, 0.28)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(s.x + (s.width||32)/2, s.y + (s.height||64)/2, s.interactRadius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // body (world coords)
+    ctx.fillStyle = '#8b5a2b';
+    ctx.fillRect(s.x, s.y, s.width || 32, s.height || 64);
+
+    // face
+    ctx.fillStyle = '#f5deb3';
+    ctx.fillRect(s.x + 4, s.y + 8, Math.min(24, (s.width || 32) - 8), 20);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(s.x + 8, s.y + 14, 4, 4);
+    ctx.fillRect(s.x + 16, s.y + 14, 4, 4);
+
+    // label
+    ctx.fillStyle = inRange ? '#ffd700' : '#000';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('SHOP', s.x + (s.width||32)/2, s.y - 6);
+
+    if (inRange) {
+      ctx.fillStyle = '#ffd700';
+      ctx.font = '10px sans-serif';
+      ctx.fillText('[E] Interact', s.x + (s.width||32)/2, s.y + (s.height||64) + 14);
+    }
+  }
+}
+
 
   // Draw boxes
   for (let b of boxes) {
@@ -12917,6 +14119,7 @@ drawWolf();
   drawChairs();
   drawTables();
   drawVehicles();
+  drawShopkeepers();
   drawSnails();
   drawSuperSnails();
   drawYetis();
@@ -12933,12 +14136,43 @@ if (player.facing === -1) {
 }
 ctx.restore();*/
   drawPlayer();
+
+  
 // Draw remote players
 for (const [id, p] of Network.remotePlayers) {
   drawRemotePlayer(p);
 }
 
+drawAtmosphericParticles()
+atmosphericParticles.embers.forEach(p => p.draw(ctx));
+atmosphericParticles.fireflies.forEach(p => p.draw(ctx));
+
   // --- POTATO FLOATING MESSAGE ---
+// Top-center spawn HUD (drawn in screen space)
+if (spawnHUDTimer > 0) {
+  const alpha = Math.max(0, Math.min(1, spawnHUDTimer / Math.max(1, spawnHUDMax)));
+  const pad = 12;
+  // Reset transform so we draw in screen coordinates (not world)
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 0.95 * alpha;
+  ctx.fillStyle = 'rgba(20,20,30,0.85)';
+  ctx.font = `bold ${Math.round(hudFontSize * 1.1)}px sans-serif`;
+  ctx.textAlign = 'center';
+  const txt = spawnHUDText || '';
+  const tw = ctx.measureText(txt).width;
+  const boxW = Math.max(160, tw + pad * 2);
+  const cx = canvas.width / 2;
+  const cy = 48;
+  // background
+  ctx.fillRect(cx - boxW/2, cy - 18, boxW, 36);
+  // text
+  ctx.fillStyle = '#ffd966';
+  ctx.fillText(txt, cx, cy + 4);
+  ctx.restore();
+  spawnHUDTimer--;
+}
+
 if (potatoMessageTimer > 0) {
   ctx.fillStyle = "#ffd966";
   ctx.font = `${hudFontSize}px monospace`;
@@ -13017,59 +14251,6 @@ for (let f of G.fireballs) {
     ctx.fill();
 }
 
-  
-  // Sword swing
-/*if (player.attackTimer > 0) {
-    const t = 1 - player.attackTimer / player.attackDuration;
-
-    // Your original swing angle (kept exactly)
-    const angle = -Math.PI + t * Math.PI;
-
-    const pivotX = player.x + player.width / 2;
-    const pivotY = player.y + player.height / 2;
-    const radius = 60;
-
-    const tipX = pivotX + Math.cos(angle) * radius;
-    const tipY = pivotY + Math.sin(angle) * radius;
-
-    // --- Dynamic thickness (3 → 10 → 3) ---
-    const dynamicWidth = 3 + Math.sin(t * Math.PI) * 7;
-
-    // --- Main sword gradient glow ---
-    const grad = ctx.createLinearGradient(pivotX, pivotY, tipX, tipY);
-    grad.addColorStop(0, "white");
-    grad.addColorStop(0.5, "cyan");
-    grad.addColorStop(1, "blue");
-
-    // Draw the glowing sword
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = dynamicWidth;
-    ctx.beginPath();
-    ctx.moveTo(pivotX, pivotY);
-    ctx.lineTo(tipX, tipY);
-    ctx.stroke();
-
-
-    // --- Arc Trail Afterimages ---
-    const trailAngles = [0.15, 0.30, 0.45];
-
-    for (let i = 0; i < trailAngles.length; i++) {
-        const a = angle - trailAngles[i];
-
-        const trailX = pivotX + Math.cos(a) * radius;
-        const trailY = pivotY + Math.sin(a) * radius;
-
-        const alpha = 0.35 - i * 0.1; // fade out
-
-        ctx.strokeStyle = `rgba(100,180,255,${alpha})`;
-        ctx.lineWidth = dynamicWidth - (i + 1); // thinner each level
-        ctx.beginPath();
-        ctx.moveTo(pivotX, pivotY);
-        ctx.lineTo(trailX, trailY);
-        ctx.stroke();
-    }
-}
-*/
 // Charge bar
 if (player.attackCharging) {
     ctx.fillStyle = "yellow";
@@ -13110,7 +14291,7 @@ if (settings.showHitboxes) {
   ctx.strokeStyle = "rgba(255,0,0,0.7)";
   ctx.lineWidth = 1;
   const allObjs = [...G.snails, ...G.SuperSnails, ...G.bats, ...G.turrets,
-                   ...G.snowmen, ...G.yetis, ...G.chairs, ...G.tables, ...G.boxes, ...G.spikes];
+                   ...G.snowmen, ...G.yetis, ...G.chairs, ...G.tables, ...boxes, ...spikes];
   for (const o of allObjs) ctx.strokeRect(o.x, o.y, o.width || 32, o.height || 32);
   // player
   ctx.strokeStyle = "rgba(0,255,0,0.9)";
@@ -13121,8 +14302,14 @@ if (settings.showHitboxes) {
   drawPotatoCannon();
   drawLighting();
   drawEnemyHealthBars();
-  ctx.restore(); // Restore camera transform for HUD
+  drawDungeonLighting();
+  
+// ADD: Screen effects (in screen space, after restore)
 
+  ctx.restore(); // Restore camera transform for HUD
+  drawVignette();
+  drawAtmosphericOverlay();
+  
   drawOffScreenIndicators();
   drawBuildMode();
   if (tutorialActive) drawTutorialWorld();
@@ -13245,6 +14432,7 @@ function gameLoop(currentTime) {
     
       if (isSim) {
         updateWaveSystem();
+        updateShopkeepers();
         updateEnemyHitFlashes();
         applySnowmanSlow();
       }
@@ -13295,7 +14483,9 @@ function gameLoop(currentTime) {
       }
       updateLights();
       spawnSnow();
-      updateCamera();
+      updateAtmosphericParticles();
+    updateDungeonLighting();
+    updateEnhancedCamera();
       updateSnow();
       updateDroppedParts();
     }    // In gameLoop, outside the if (!gamePaused) block:
