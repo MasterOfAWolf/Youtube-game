@@ -1,4 +1,3 @@
-// Simple Platformer V12
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const pixelToggle = document.getElementById("pixelToggle");
@@ -10,6 +9,16 @@ const TARGET_FPS = 60;
 const FRAME_DURATION = 1000 / TARGET_FPS; // ~16.67ms per frame
 let lastFrameTime = 0;
 let deltaTime = 0;
+
+function isEffectVisibleInWorld(x, y, width = 0, height = 0, padding = 96) {
+  if (typeof devMapView !== 'undefined' && devMapView) return true;
+  return (
+    x + width >= camera.x - padding &&
+    x <= camera.x + canvas.width + padding &&
+    y + height >= camera.y - padding &&
+    y <= camera.y + canvas.height + padding
+  );
+}
 
 // --- Intro / load screen + hold-to-skip logic ---
 const _INTRO_HOLD_KEYS = new Set(["Space", "Enter", "ShiftLeft", "ShiftRight"]);
@@ -497,10 +506,13 @@ class Ember {
   draw(ctx) {
     const alpha = (this.life / this.maxLife) * this.brightness;
     const flicker = Math.sin(this.flicker) * 0.3 + 0.7;
-    
-    // Outer glow
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = `rgba(255, 120, 50, ${alpha * 0.6})`;
+
+    // Cheap glow: use a larger translucent disc instead of canvas shadow blur.
+    ctx.fillStyle = `rgba(255, 120, 50, ${alpha * 0.18})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * 2.6, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.fillStyle = `rgba(255, 140, 60, ${alpha * flicker})`;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
@@ -511,8 +523,6 @@ class Ember {
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size * 0.5, 0, Math.PI * 2);
     ctx.fill();
-    
-    ctx.shadowBlur = 0;
   }
 }
 
@@ -569,14 +579,17 @@ class Firefly {
   draw(ctx) {
     const pulse = Math.sin(this.pulsePhase) * 0.5 + 0.5;
     const alpha = pulse * 0.7 + 0.3;
-    
-    ctx.shadowBlur = 15 * pulse;
-    ctx.shadowColor = `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, 0.8)`;
+
+    // Use a layered disc glow instead of per-particle shadow blur.
+    ctx.fillStyle = `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${alpha * 0.14})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * (2.8 + pulse), 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.fillStyle = `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${alpha})`;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size * (0.7 + pulse * 0.3), 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
   }
 }
 
@@ -708,10 +721,10 @@ function updateAtmosphericParticles() {
     atmosphericParticles.fogLayers.push(new FogLayer(atmosphericParticles.fogLayers.length / 3));
   }
   
-  atmosphericParticles.dustMotes.forEach(p => p.update());
-  atmosphericParticles.fireflies.forEach(p => p.update());
-  atmosphericParticles.debris.forEach(p => p.update());
-  atmosphericParticles.fogLayers.forEach(p => p.update());
+  for (let i = 0; i < atmosphericParticles.dustMotes.length; i++) atmosphericParticles.dustMotes[i].update();
+  for (let i = 0; i < atmosphericParticles.fireflies.length; i++) atmosphericParticles.fireflies[i].update();
+  for (let i = 0; i < atmosphericParticles.debris.length; i++) atmosphericParticles.debris[i].update();
+  for (let i = 0; i < atmosphericParticles.fogLayers.length; i++) atmosphericParticles.fogLayers[i].update();
   
   // Update embers
   for (let i = atmosphericParticles.embers.length - 1; i >= 0; i--) {
@@ -751,21 +764,20 @@ function updateAtmosphericParticles() {
 // Draw atmospheric particles (call this in your draw function)
 function drawAtmosphericParticles() {
   if (!settings.particles) return;
-  
-  // Draw fog layers first (background)
-  atmosphericParticles.fogLayers.forEach(p => p.draw(ctx));
-  
-  // Draw debris
-  atmosphericParticles.debris.forEach(p => p.draw(ctx));
-  
-  // Draw dust motes
-  atmosphericParticles.dustMotes.forEach(p => p.draw(ctx));
-  
-  // Draw embers
-  atmosphericParticles.embers.forEach(p => p.draw(ctx));
-  
-  // Draw fireflies (foreground)
-  atmosphericParticles.fireflies.forEach(p => p.draw(ctx));
+
+  // Background layers are drawn earlier in the frame; only render the
+  // foreground glow particles here so they don't get duplicated.
+  for (const ember of atmosphericParticles.embers) {
+    if (isEffectVisibleInWorld(ember.x, ember.y, ember.size * 4, ember.size * 4)) {
+      ember.draw(ctx);
+    }
+  }
+
+  for (const firefly of atmosphericParticles.fireflies) {
+    if (isEffectVisibleInWorld(firefly.x, firefly.y, firefly.size * 8, firefly.size * 8)) {
+      firefly.draw(ctx);
+    }
+  }
 }
 
 const tableFrames = [];
@@ -1075,9 +1087,35 @@ function useInventoryItem(slotIndex) {
       break;
     }
     case 'speed_chili': {
-      player.speed = Math.min(8, Number((player.speed + 0.25).toFixed(2)));
+      activateSpeedChili();
       consumed = true;
-      potatoMessage = 'Movement speed increased';
+      potatoMessage = 'Speed Chili: sprinting at max speed for 25 seconds';
+      potatoMessageTimer = 90;
+      break;
+    }
+    case 'mega_potion': {
+      if (playerLives >= maxLives) {
+        potatoMessage = 'You already have full lives';
+        potatoMessageTimer = 90;
+        return;
+      }
+      playerLives = Math.min(maxLives, playerLives + 2);
+      consumed = true;
+      potatoMessage = 'Health restored +2';
+      potatoMessageTimer = 90;
+      break;
+    }
+    case 'feather_boots': {
+      activateFeatherBoots();
+      consumed = true;
+      potatoMessage = 'Feather Boots: falling slower for 45 seconds';
+      potatoMessageTimer = 90;
+      break;
+    }
+    case 'dash_battery': {
+      activateDashBattery();
+      consumed = true;
+      potatoMessage = 'Dash Battery: quarter dash cooldown for 20 seconds';
       potatoMessageTimer = 90;
       break;
     }
@@ -1473,6 +1511,7 @@ let gameLoopId = null;
 let ovens = [];
 let potato = [];
 let snowParticles = [];
+let speedChiliTrailParticles = [];
 let initialTables = [];
 let seesaws = [];
 let potatoMessage = "";
@@ -1528,8 +1567,133 @@ let playerInventory = {
 const SHOP_ITEMS = [
   { id: 'health_potion', label: 'Health Potion', price: 25 },
   { id: 'jump_boots',   label: 'Jump Boots',   price: 75 },
-  { id: 'speed_chili',   label: 'Speed Chili',  price: 60 }
+  { id: 'speed_chili',   label: 'Speed Chili',  price: 60 },
+  { id: 'mega_potion',   label: 'Mega Potion',  price: 55 },
+  { id: 'feather_boots', label: 'Feather Boots', price: 90 },
+  { id: 'dash_battery',  label: 'Dash Battery', price: 70 }
 ];
+
+const SPEED_CHILI_DURATION_FRAMES = 25 * 60;
+const SPEED_CHILI_SPEED = 8;
+const FEATHER_BOOTS_DURATION_FRAMES = 45 * 60;
+const FEATHER_BOOTS_FALL_GRAVITY_MULTIPLIER = 0.45;
+const FEATHER_BOOTS_MAX_FALL_SPEED = 7;
+const DASH_BATTERY_DURATION_FRAMES = 20 * 60;
+const DASH_BATTERY_COOLDOWN_MULTIPLIER = 0.25;
+
+function activateSpeedChili() {
+  player.speedChiliTimer = SPEED_CHILI_DURATION_FRAMES;
+  player.speedChiliDirection = player.facing || 1;
+  player.speedChiliTrailCooldown = 0;
+}
+
+function activateFeatherBoots() {
+  player.featherBootsTimer = FEATHER_BOOTS_DURATION_FRAMES;
+}
+
+function activateDashBattery() {
+  player.dashBatteryTimer = DASH_BATTERY_DURATION_FRAMES;
+}
+
+function updateSpeedChiliState() {
+  if (player.speedChiliTimer <= 0) return;
+  player.speedChiliTimer--;
+  if (player.speedChiliTimer <= 0) {
+    player.speedChiliTimer = 0;
+    player.speedChiliDirection = 0;
+    player.speedChiliTrailCooldown = 0;
+  }
+}
+
+function updateFeatherBootsState() {
+  if (player.featherBootsTimer <= 0) return;
+  player.featherBootsTimer--;
+  if (player.featherBootsTimer <= 0) {
+    player.featherBootsTimer = 0;
+  }
+}
+
+function updateDashBatteryState() {
+  if (player.dashBatteryTimer > 0) {
+    player.dashCooldownMultiplier = DASH_BATTERY_COOLDOWN_MULTIPLIER;
+  } else {
+    player.dashCooldownMultiplier = 1;
+  }
+
+  if (player.dashBatteryTimer <= 0) return;
+  player.dashBatteryTimer--;
+  if (player.dashBatteryTimer <= 0) {
+    player.dashBatteryTimer = 0;
+    player.dashCooldownMultiplier = 1;
+  }
+}
+
+function updateSpeedChiliTrail() {
+  if (!settings.particles) {
+    speedChiliTrailParticles.length = 0;
+    return;
+  }
+
+  if (player.speedChiliTimer > 0 && !playerInVehicle && !gameOver && !levelUpPending && !buildMode) {
+    if (player.speedChiliTrailCooldown > 0) {
+      player.speedChiliTrailCooldown--;
+    }
+
+    if (player.speedChiliTrailCooldown <= 0) {
+      const facing = player.speedChiliDirection || player.facing || 1;
+      const trailX = facing === 1 ? player.x + 6 : player.x + player.width - 6;
+      const trailY = player.y + player.height - 12;
+
+      speedChiliTrailParticles.push({
+        x: trailX,
+        y: trailY + (Math.random() * 6 - 3),
+        vx: -facing * (0.25 + Math.random() * 0.25),
+        vy: -0.35 - Math.random() * 0.3,
+        life: 16,
+        maxLife: 16,
+        size: 4 + Math.random() * 3,
+        hue: 18 + Math.random() * 18
+      });
+
+      if (speedChiliTrailParticles.length > 48) {
+        speedChiliTrailParticles.shift();
+      }
+
+      player.speedChiliTrailCooldown = 2;
+    }
+  } else {
+    player.speedChiliTrailCooldown = 0;
+  }
+
+  for (let i = speedChiliTrailParticles.length - 1; i >= 0; i--) {
+    const p = speedChiliTrailParticles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.03;
+    p.life--;
+    if (p.life <= 0) {
+      speedChiliTrailParticles.splice(i, 1);
+    }
+  }
+}
+
+function drawSpeedChiliTrail() {
+  if (!settings.particles || speedChiliTrailParticles.length === 0) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  for (const p of speedChiliTrailParticles) {
+    const alpha = Math.max(0, p.life / p.maxLife);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = `hsl(${p.hue}, 100%, ${55 + alpha * 18}%)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (0.5 + alpha * 0.6), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
 
 let inventoryUI = null; // DOM node for inventory UI
 let shopUI = null; // DOM node for shop UI
@@ -3450,48 +3614,38 @@ function drawMinimap() {
 
 // Cast shadows from a light source
 function drawShadows(light) {
-  // Get all shadow casters (walls, boxes, large entities)
-  const casters = [
-    ...walls.map(w => ({ ...w, type: 'wall' })),
-    ...boxes.map(b => ({ x: b.x, y: b.y, width: b.width, height: b.height, type: 'box' })),
-    ...G.yetis.filter(y => y.alive).map(y => ({ x: y.x, y: y.y, width: y.width, height: y.height, type: 'yeti' }))
-  ];
+  // Iterate shadow casters without creating temporary objects
   
   ctx.fillStyle = `rgba(0, 0, 0, ${0.7 - ambientLight})`;
   
-  for (let caster of casters) {
-    // Skip if too far from light
-    const dx = caster.x + caster.width / 2 - light.x;
-    const dy = caster.y + caster.height / 2 - light.y;
+  // Shadow walls
+  for (let wall of walls) {
+    const dx = wall.x + wall.width / 2 - light.x;
+    const dy = wall.y + wall.height / 2 - light.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     
     if (dist > light.radius * 1.5) continue;
     
-    // Get corners of the caster
     const corners = [
-      { x: caster.x, y: caster.y },
-      { x: caster.x + caster.width, y: caster.y },
-      { x: caster.x + caster.width, y: caster.y + caster.height },
-      { x: caster.x, y: caster.y + caster.height }
+      { x: wall.x, y: wall.y },
+      { x: wall.x + wall.width, y: wall.y },
+      { x: wall.x + wall.width, y: wall.y + wall.height },
+      { x: wall.x, y: wall.y + wall.height }
     ];
     
-    // For each edge of the caster, project shadow
     for (let i = 0; i < corners.length; i++) {
       const corner1 = corners[i];
       const corner2 = corners[(i + 1) % corners.length];
       
-      // Check if this edge faces away from light
       const edgeDx = corner2.x - corner1.x;
       const edgeDy = corner2.y - corner1.y;
       const lightDx = light.x - corner1.x;
       const lightDy = light.y - corner1.y;
       
-      // Cross product to check if edge faces light
       const cross = edgeDx * lightDy - edgeDy * lightDx;
       
-      if (cross > 0) continue; // Edge faces light, no shadow
+      if (cross > 0) continue;
       
-      // Project shadow far away
       const projectionDist = 2770;
       
       const dir1x = corner1.x - light.x;
@@ -3508,13 +3662,64 @@ function drawShadows(light) {
       const proj2x = corner2.x + (dir2x / len2) * projectionDist;
       const proj2y = corner2.y + (dir2y / len2) * projectionDist;
       
-      // Draw shadow polygon
       ctx.beginPath();
       ctx.moveTo(corner1.x, corner1.y);
       ctx.lineTo(corner2.x, corner2.y);
       ctx.lineTo(proj2x, proj2y);
       ctx.lineTo(proj1x, proj1y);
-      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  
+  // Shadow boxes
+  for (let box of boxes) {
+    const dx = box.x + box.width / 2 - light.x;
+    const dy = box.y + box.height / 2 - light.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist > light.radius * 1.5) continue;
+    
+    const corners = [
+      { x: box.x, y: box.y },
+      { x: box.x + box.width, y: box.y },
+      { x: box.x + box.width, y: box.y + box.height },
+      { x: box.x, y: box.y + box.height }
+    ];
+    
+    for (let i = 0; i < corners.length; i++) {
+      const corner1 = corners[i];
+      const corner2 = corners[(i + 1) % corners.length];
+      
+      const edgeDx = corner2.x - corner1.x;
+      const edgeDy = corner2.y - corner1.y;
+      const lightDx = light.x - corner1.x;
+      const lightDy = light.y - corner1.y;
+      
+      const cross = edgeDx * lightDy - edgeDy * lightDx;
+      
+      if (cross > 0) continue;
+      
+      const projectionDist = 2770;
+      
+      const dir1x = corner1.x - light.x;
+      const dir1y = corner1.y - light.y;
+      const len1 = Math.sqrt(dir1x * dir1x + dir1y * dir1y) || 1;
+      
+      const dir2x = corner2.x - light.x;
+      const dir2y = corner2.y - light.y;
+      const len2 = Math.sqrt(dir2x * dir2x + dir2y * dir2y) || 1;
+      
+      const proj1x = corner1.x + (dir1x / len1) * projectionDist;
+      const proj1y = corner1.y + (dir1y / len1) * projectionDist;
+      
+      const proj2x = corner2.x + (dir2x / len2) * projectionDist;
+      const proj2y = corner2.y + (dir2y / len2) * projectionDist;
+      
+      ctx.beginPath();
+      ctx.moveTo(corner1.x, corner1.y);
+      ctx.lineTo(corner2.x, corner2.y);
+      ctx.lineTo(proj2x, proj2y);
+      ctx.lineTo(proj1x, proj1y);
       ctx.fill();
     }
   }
@@ -3704,13 +3909,14 @@ function drawDungeonProps() {
 
   for (let i = 0; i < dungeonAesthetics.props.length; i++) {
     const p = dungeonAesthetics.props[i];
+    if (!isEffectVisibleInWorld(p.x, p.y, p.w, p.h, 80)) continue;
+
     ctx.save();
     ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
     ctx.rotate(p.rotation);
     ctx.globalAlpha = p.alpha;
-    ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 2;
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
 
     if (p.type === "crate") {
       ctx.fillStyle = "#7a5330";
@@ -3743,12 +3949,14 @@ function drawDungeonProps() {
     } else if (p.type === "candle") {
       ctx.fillStyle = "#d5c8a2";
       ctx.fillRect(-p.w * 0.16, -p.h * 0.48, p.w * 0.32, p.h * 0.82);
+      ctx.fillStyle = "rgba(255, 164, 75, 0.18)";
+      ctx.beginPath();
+      ctx.ellipse(0, -p.h * 0.55, p.w * 0.5, p.h * 0.45, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = "rgba(255, 164, 75, 0.9)";
       ctx.beginPath();
       ctx.ellipse(0, -p.h * 0.56, p.w * 0.13, p.h * 0.2, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = "rgba(255, 140, 70, 0.7)";
       ctx.fillStyle = "rgba(255, 194, 120, 0.45)";
       ctx.beginPath();
       ctx.ellipse(0, -p.h * 0.54, p.w * 0.35, p.h * 0.35, 0, 0, Math.PI * 2);
@@ -3776,8 +3984,11 @@ function drawOrbiters() {
     if (orb.screenX === undefined) continue;
 
     ctx.save();
-    ctx.shadowColor = "#adf";
-    ctx.shadowBlur = 10;
+    ctx.fillStyle = "rgba(170, 221, 255, 0.18)";
+    ctx.beginPath();
+    ctx.arc(orb.screenX, orb.screenY, orb.size * 2.7, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.fillStyle = "#8fc";
     ctx.beginPath();
     ctx.arc(orb.screenX, orb.screenY, orb.size, 0, Math.PI * 2);
@@ -3805,10 +4016,14 @@ function drawXPBar() {
   // Fill
   const pct = Math.min(xp / xpToNext, 1);
   const fillW = Math.floor(pct * barW);
-  const gradient = ctx.createLinearGradient(bx, by, bx + barW, by);
-  gradient.addColorStop(0, "#7b2fd4");
-  gradient.addColorStop(1, "#d46de8");
-  ctx.fillStyle = gradient;
+  
+  // Use cached gradient or create once
+  if (!window._xpBarGradient) {
+    window._xpBarGradient = ctx.createLinearGradient(0, 0, barW, 0);
+    window._xpBarGradient.addColorStop(0, "#7b2fd4");
+    window._xpBarGradient.addColorStop(1, "#d46de8");
+  }
+  ctx.fillStyle = window._xpBarGradient;
   ctx.fillRect(bx, by, fillW, barH);
 
   // Border
@@ -3995,7 +4210,9 @@ function initDungeonLighting() {
 
 function updateDungeonLighting() {
   dungeonLighting.ambientPulse += 0.01;
-  dungeonLighting.torches.forEach(torch => torch.update());
+  for (let i = 0; i < dungeonLighting.torches.length; i++) {
+    dungeonLighting.torches[i].update();
+  }
 }
 
 function drawDungeonLighting() {
@@ -4008,7 +4225,9 @@ function drawDungeonLighting() {
   ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
   
   // Draw torch lights
-  dungeonLighting.torches.forEach(torch => torch.draw(ctx));
+  for (let i = 0; i < dungeonLighting.torches.length; i++) {
+    dungeonLighting.torches[i].draw(ctx);
+  }
   
   ctx.restore();
 }
@@ -4120,6 +4339,8 @@ function drawLighting() {
   
   // Draw each light source
   for (let light of lights) {
+    if (!isEffectVisibleInWorld(light.x, light.y, light.radius * 2, light.radius * 2, light.radius)) continue;
+
     ctx.save();
 
   // Torch head + flame (visual only; lighting math below stays unchanged)
@@ -4135,8 +4356,10 @@ function drawLighting() {
   ctx.fillRect(light.x - 4, light.y - 3, 8, 4);
 
   // Outer flame
-  ctx.shadowBlur = 14;
-  ctx.shadowColor = 'rgba(255, 150, 60, 0.7)';
+  ctx.fillStyle = 'rgba(255, 150, 60, 0.18)';
+  ctx.beginPath();
+  ctx.arc(light.x, light.y - flameH * 0.55, 10, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = `rgba(255, 140, 40, ${0.72 + torchFlicker * 0.22})`;
   ctx.beginPath();
   ctx.moveTo(light.x, light.y - flameH - 1);
@@ -4145,15 +4368,12 @@ function drawLighting() {
   ctx.fill();
 
   // Inner hot core
-  ctx.shadowBlur = 8;
-  ctx.shadowColor = 'rgba(255, 230, 170, 0.8)';
   ctx.fillStyle = `rgba(255, 235, 170, ${0.7 + torchFlicker * 0.25})`;
   ctx.beginPath();
   ctx.moveTo(light.x, light.y - flameH + 2);
   ctx.quadraticCurveTo(light.x + 3, light.y - 6, light.x, light.y - 1);
   ctx.quadraticCurveTo(light.x - 3, light.y - 6, light.x, light.y - flameH + 2);
   ctx.fill();
-  ctx.shadowBlur = 0;
     
     let beamStopY = -2099;
     
@@ -4192,6 +4412,8 @@ function drawLighting() {
   if (settings.particles && atmosphericParticles.fireflies.length) {
     for (let i = 0; i < atmosphericParticles.fireflies.length; i++) {
       const f = atmosphericParticles.fireflies[i];
+      if (!isEffectVisibleInWorld(f.x, f.y, 64, 64, 32)) continue;
+
       const c = f.color || [170, 255, 190];
       const pulse = Math.sin(f.pulsePhase || 0) * 0.5 + 0.5;
       const r = 18 + pulse * 14;
@@ -4309,7 +4531,6 @@ if (p.screamTimer >= p.screamInterval) {
   playPotatoScream();
 }
     // Physics
-// Physics
     p.x += p.vx;
     p.y += p.vy;
 
@@ -5807,20 +6028,6 @@ walls.push({ x: 80, y: 980, width: 120, height: 20, ice: true });
     { x: 800, y: 1400, width: 200, height: 12, angle: 0, angularVelocity: 0 },
     { x: 1150, y: 1250, width: 200, height: 12, angle: 0, angularVelocity: 0 }
   );
-  
-  // --- BOX CHAOS ---
-/*boxes.push(
-{ x: 500, y: 1300, width: 40, height: 40, dx: 0, dy: 0},
-{ x: 850, y: 1300, width: 40, height: 40, dx: 0, dy: 0 }, 
-{ x: 1400, y: 1300, width: 40, height: 40, dx: 0, dy: 0 },
-{ x: 500, y: 1200, width: 40, height: 40, dx: 0, dy: 0},
-{ x: 600, y: 100, width: 40, height: 40, dx: 0, dy: 0},
-{ x: 500, y: 1300, width: 40, height: 40, dx: 0, dy: 0},
-{ x: 900, y: 1300, width: 40, height: 40, dx: 0, dy: 0},
-{ x: 2600, y: 100, width: 40, height: 40, dx: 0, dy: 0},
-{ x: 1200, y: 2000, width: 40, height: 40, dx: 0, dy: 0},
-);
-*/
 
   // --- ENEMIES ---
   G.yetis.push({
@@ -8195,7 +8402,10 @@ const player = {
   attackDuration: 10, // frames
   attackTimer: 0,
   attackCooldown: 30, // frames
-  attackDir: 1 // 1 = right, -1 = left
+  attackDir: 1, // 1 = right, -1 = left
+  featherBootsTimer: 0,
+  dashBatteryTimer: 0,
+  dashCooldownMultiplier: 1
 };
 
 player.facing = 1; // 1 = right, -1 = left, default right
@@ -8208,6 +8418,9 @@ player.attackCooldown = 0;       // prevents spamming
 player.attackDuration = 20;      // frames the swing lasts
 player.attackKnockback = 2;      // scales with charge
 player.attackHitObjects = new Set(); // track hits per swing
+player.featherBootsTimer = 0;
+player.dashBatteryTimer = 0;
+player.dashCooldownMultiplier = 1;
 
 // --- PLAYER ANIM STATE ---
 player.walkFrame    = 0;
@@ -8228,6 +8441,9 @@ player.rollMaxDuration = 30; // frames
 player.rollCooldown = 0;
 player.rollMaxCooldown = 40;
 player.rollActive = false;
+player.speedChiliTimer = 0;
+player.speedChiliDirection = 0;
+player.speedChiliTrailCooldown = 0;
 
 function addEnemyHealth() {
   // G.snails get 1-2 HP
@@ -8976,14 +9192,20 @@ const waveConfigurations = {
 };
 
 // Generate a random wave based on config
-function generateRandomWave(config) {
+function generateRandomWave(config, waveNumber = 1) {
   const totalEnemies = typeof config.totalEnemies === 'number' 
     ? config.totalEnemies 
     : randomBetween(config.totalEnemies.min, config.totalEnemies.max);
   
+  // Scale total enemies with wave number (1.1x per wave)
+  const scaledTotalEnemies = Math.ceil(totalEnemies * Math.pow(1.1, waveNumber - 1));
+  
   const enemies = [];
   
-  for (let i = 0; i < totalEnemies; i++) {
+  // Wave scaling multiplier: grows progressively, 1.1x per wave
+  const waveScaling = Math.pow(1.1, waveNumber - 1);
+  
+  for (let i = 0; i < scaledTotalEnemies; i++) {
     const enemyType = config.enemyPool[Math.floor(Math.random() * config.enemyPool.length)];
     
     // Base HP per enemy type
@@ -8996,10 +9218,13 @@ function generateRandomWave(config) {
       table: 4
     };
     
+    // Apply both config multiplier and wave scaling
+    const totalMultiplier = (config.hpMultiplier || 1) * waveScaling;
+    
     enemies.push({
       type: enemyType,
       count: 1,
-      hp: Math.ceil(baseHP[enemyType] * (config.hpMultiplier || 1))
+      hp: Math.ceil(baseHP[enemyType] * totalMultiplier)
     });
   }
   
@@ -9064,7 +9289,7 @@ function startNextWave() {
   
   // If this is a random wave, generate it
   if (waveConfig.random) {
-    const generated = generateRandomWave(waveConfig.randomConfig);
+    const generated = generateRandomWave(waveConfig.randomConfig, G.wavesystem.currentWave);
     waveConfig = { ...waveConfig, ...generated };
   }
   
@@ -9808,6 +10033,12 @@ player.dashSpeed = 14;
 player.dashMaxDuration = 12;
 player.attackDuration = 20;
 player.attackKnockback = 2;
+player.speedChiliTimer = 0;
+player.speedChiliDirection = 0;
+player.speedChiliTrailCooldown = 0;
+player.featherBootsTimer = 0;
+player.dashBatteryTimer = 0;
+player.dashCooldownMultiplier = 1;
   // reset roll state
   player.rollSpeed = 10;
   player.rollDuration = 0;
@@ -10841,6 +11072,13 @@ function resetPlayer() {
   player.dx = 0;
   player.dy = 0;
   player.iframes = 0;
+  player.speedChiliTimer = 0;
+  player.speedChiliDirection = 0;
+  player.speedChiliTrailCooldown = 0;
+  player.featherBootsTimer = 0;
+  player.dashBatteryTimer = 0;
+  player.dashCooldownMultiplier = 1;
+  speedChiliTrailParticles.length = 0;
 }
 
 // --- GAME OVER MODULE ---
@@ -11115,12 +11353,6 @@ document.addEventListener("keydown", (e) => {
      document.getElementById("game").style.display = "none";
 }
 
-document.addEventListener("keydown", (e) => {
-  if (e.key.toLowerCase() === "m") {
-    devMapView = !devMapView;
-  }
-});
-
   if (e.key === "Escape") togglePause();
 });
 document.addEventListener("keyup", (e) => keys[e.key] = false);
@@ -11130,6 +11362,12 @@ document.addEventListener("keydown", e => {
 
     // Start charging if not attacking or on cooldown
     if (e.key === "Shift") { e.preventDefault(); tryDash(); }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "m") {
+    devMapView = !devMapView;
+  }
 });
 
 document.addEventListener("keyup", e => {
@@ -11442,7 +11680,7 @@ function tryDash() {
 
   player.dashActive = true;
   player.dashDuration = player.dashMaxDuration;
-  player.dashCooldown = player.dashMaxCooldown;
+  player.dashCooldown = Math.max(1, Math.floor(player.dashMaxCooldown * player.dashCooldownMultiplier));
   player.dy = player.wallSliding ? 0 : player.dy * 0.2;
   player.dx = player.facing * player.dashSpeed;
   playerUpgrades.dashHitEnemies.clear(); // ← clear per-dash hit registry
@@ -12126,6 +12364,8 @@ function updatePlayer() {
   if (gameOver || levelUpPending) return;
   if (playerInVehicle) return;
 
+  const speedChiliActive = player.speedChiliTimer > 0;
+
   prevInput  = { ...localInput };
 localInput = getLocalInput();
 
@@ -12193,6 +12433,10 @@ if (localInput.down && player.onGround) {
   }
 }
 
+if (speedChiliActive) {
+  player.slowMultiplier = 1;
+}
+
 if (player.attackTimer > 0) {
     player.attackTimer--;
   }
@@ -12211,32 +12455,45 @@ const onIce = ground && ground.ice;
 let accel = onIce ? 0.6 : player.speed;
 let friction = onIce ? 0.99 : 0.0;
 
-const moveSpeed = player.speed * player.slowMultiplier;
+const moveSpeed = speedChiliActive ? SPEED_CHILI_SPEED : player.speed * player.slowMultiplier;
 
-// input
-if (localInput.left) {
-  player.dx -= accel;
-  player.facing = -1;
-}
-if (localInput.right) {
-  player.dx += accel;
-  player.facing = 1;
-}
+if (speedChiliActive) {
+  if (localInput.left && !localInput.right) {
+    player.speedChiliDirection = -1;
+  } else if (localInput.right && !localInput.left) {
+    player.speedChiliDirection = 1;
+  } else if (!player.speedChiliDirection) {
+    player.speedChiliDirection = player.facing || 1;
+  }
 
-// friction when no input
-if (
-  !localInput.left &&
-  !localInput.right
-) {
-  player.dx *= friction;
-}
+  player.facing = player.speedChiliDirection;
+  player.dx = player.speedChiliDirection * moveSpeed;
+} else {
+  // input
+  if (localInput.left) {
+    player.dx -= accel;
+    player.facing = -1;
+  }
+  if (localInput.right) {
+    player.dx += accel;
+    player.facing = 1;
+  }
 
-// hard clamp speed (THIS is the important part)
-if (!player.dashActive) {
-  player.dx = Math.max(
-    -moveSpeed,
-    Math.min(player.dx, moveSpeed)
-  );
+  // friction when no input
+  if (
+    !localInput.left &&
+    !localInput.right
+  ) {
+    player.dx *= friction;
+  }
+
+  // hard clamp speed (THIS is the important part)
+  if (!player.dashActive) {
+    player.dx = Math.max(
+      -moveSpeed,
+      Math.min(player.dx, moveSpeed)
+    );
+  }
 }
 
 if (localInput.dash) {
@@ -12285,7 +12542,18 @@ if (player.attackCooldown > 0) player.attackCooldown--;
     }
   } else {
     // Gravity
-    player.dy += gravity;
+    if (player.featherBootsTimer > 0 && player.dy > 0) {
+      player.dy += gravity * FEATHER_BOOTS_FALL_GRAVITY_MULTIPLIER;
+      if (player.dy > FEATHER_BOOTS_MAX_FALL_SPEED) {
+        player.dy = FEATHER_BOOTS_MAX_FALL_SPEED;
+      }
+    } else {
+      player.dy += gravity;
+    }
+  }
+
+  if (speedChiliActive) {
+    player.dx = player.speedChiliDirection * moveSpeed;
   }
 
   // Wall jump horizontal boost
@@ -13953,7 +14221,9 @@ drawMouseCoords();
 drawBackground();
 drawDungeonFloorTexture();
 
-atmosphericParticles.fogLayers.forEach(p => p.draw(ctx));
+for (let i = 0; i < atmosphericParticles.fogLayers.length; i++) {
+  atmosphericParticles.fogLayers[i].draw(ctx);
+}
 
   for (let s of seesaws) {
   ctx.save();
@@ -13981,13 +14251,15 @@ ctx.fill();
 }
   
   drawLadders();
-  drawSnow();
-  drawIcicles();
   drawSnowmen();
    drawPotato();
   drawOven();
-  atmosphericParticles.debris.forEach(p => p.draw(ctx));
-  atmosphericParticles.dustMotes.forEach(p => p.draw(ctx));
+  for (let i = 0; i < atmosphericParticles.debris.length; i++) {
+    atmosphericParticles.debris[i].draw(ctx);
+  }
+  for (let i = 0; i < atmosphericParticles.dustMotes.length; i++) {
+    atmosphericParticles.dustMotes[i].draw(ctx);
+  }
   drawDroppedParts();
   // Draw walls
   for (let wall of walls) {
@@ -14124,17 +14396,8 @@ drawWolf();
   drawSuperSnails();
   drawYetis();
   drawSnowballs();
+  drawSpeedChiliTrail();
 
-
-/*  ctx.save();
-if (player.facing === -1) {
-  ctx.translate(player.x + player.width, player.y);
-  ctx.scale(-1, 1);
-  ctx.drawImage(playerImg, 0, 0, player.width, player.height);
-} else {
-  ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
-}
-ctx.restore();*/
   drawPlayer();
 
   
@@ -14144,8 +14407,6 @@ for (const [id, p] of Network.remotePlayers) {
 }
 
 drawAtmosphericParticles()
-atmosphericParticles.embers.forEach(p => p.draw(ctx));
-atmosphericParticles.fireflies.forEach(p => p.draw(ctx));
 
   // --- POTATO FLOATING MESSAGE ---
 // Top-center spawn HUD (drawn in screen space)
@@ -14436,6 +14697,10 @@ function gameLoop(currentTime) {
         updateEnemyHitFlashes();
         applySnowmanSlow();
       }
+
+      updateSpeedChiliState();
+      updateFeatherBootsState();
+      updateDashBatteryState();
     
       if (!buildMode) {
         if (isSim) {
@@ -14481,6 +14746,7 @@ function gameLoop(currentTime) {
         updateDashDamage();
         if (debugTestMode) runDebugTests();
       }
+      updateSpeedChiliTrail();
       updateLights();
       spawnSnow();
       updateAtmosphericParticles();
