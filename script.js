@@ -4,11 +4,15 @@ const pixelToggle = document.getElementById("pixelToggle");
 canvas.width = 800;
 canvas.height = 400;
 let pixelMode = false;
+const editorPreviewMode = new URLSearchParams(window.location.search).has('editorPreview');
 
 const TARGET_FPS = 60;
 const FRAME_DURATION = 1000 / TARGET_FPS; // ~16.67ms per frame
 let lastFrameTime = 0;
 let deltaTime = 0;
+let fpsSampleTime = 0;
+let fpsFrameCount = 0;
+let fpsDisplay = 60;
 
 function isEffectVisibleInWorld(x, y, width = 0, height = 0, padding = 96) {
   if (typeof devMapView !== 'undefined' && devMapView) return true;
@@ -447,6 +451,9 @@ const ATMOSPHERIC_TARGETS = {
   fogLayers: 3
 };
 
+let atmosphericStepMs = 1000 / 20; // throttle ambient particle sim to 20 FPS
+let atmosphericAccumMs = 0;
+
 // Particle class for dust motes floating in light rays
 class DustMote {
   constructor() {
@@ -761,6 +768,20 @@ function updateAtmosphericParticles() {
   }
 }
 
+function updateAtmosphericParticlesThrottled(deltaMs) {
+  if (!settings.particles) return;
+  if (atmosphericStepMs <= 0) {
+    updateAtmosphericParticles();
+    return;
+  }
+  atmosphericAccumMs += deltaMs;
+  const maxAccum = atmosphericStepMs * 3;
+  if (atmosphericAccumMs > maxAccum) atmosphericAccumMs = maxAccum;
+  if (atmosphericAccumMs < atmosphericStepMs) return;
+  atmosphericAccumMs -= atmosphericStepMs;
+  updateAtmosphericParticles();
+}
+
 // Draw atmospheric particles (call this in your draw function)
 function drawAtmosphericParticles() {
   if (!settings.particles) return;
@@ -838,8 +859,10 @@ for (let i = 0; i < 5; i++) {
 
 const settings = {
   // Graphics
+  graphicsQuality: 50,
   lighting: true,
   particles: true,
+  decor: true,
   enemyHealthBars: true,
   screenShake: true,
   offScreenIndicators: true,
@@ -874,6 +897,16 @@ const settings = {
   // Dev / Commands
   commandsEnabled: false,
 };
+
+function applyGraphicsQuality() {
+  const q = Math.max(0, Math.min(100, settings.graphicsQuality || 0));
+  const t = q / 100;
+  const particleFps = 20 + (60 - 20) * t;
+  const lightingFps = 20 + (60 - 20) * t;
+  atmosphericStepMs = 1000 / particleFps;
+  lightingCacheMs = 1000 / lightingFps;
+  lightingCacheDirty = true;
+}
 
 // ── MULTIPLAYER IDENTITY ──
 // Unique session ID — will be assigned by server in multiplayer
@@ -992,6 +1025,13 @@ function createShopUI() {
 }
 
 function toggleInventory() {
+  if (!gameRunning || gamePaused || gameOver) {
+    if (inventoryOpen && inventoryUI) {
+      inventoryOpen = false;
+      inventoryUI.classList.add('hidden');
+    }
+    return;
+  }
   createInventoryUI();
   inventoryOpen = !inventoryOpen;
   inventoryUI.classList.toggle('hidden', !inventoryOpen);
@@ -1221,6 +1261,18 @@ function skipIntermissionToThreeSeconds() {
   return true;
 }
 
+function attemptShopInteract() {
+  if (inventoryOpen || shopOpen) return;
+  const interacted = tryInteractWithShop();
+  if (!interacted) {
+    const nearestDist = getNearestShopkeeperDistance();
+    if (nearestDist > 0 && nearestDist < 200) {
+      potatoMessage = "Move closer to the shopkeeper";
+      potatoMessageTimer = 60;
+    }
+  }
+}
+
 // Quick keybinding: I toggles inventory
 document.addEventListener('keydown', (e) => {
   if (e.key === 'i' || e.key === 'I') {
@@ -1229,16 +1281,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'e' || e.key === 'E') {
     e.preventDefault();
-    if (!inventoryOpen && !shopOpen) {
-      const interacted = tryInteractWithShop();
-      if (!interacted) {
-        const nearestDist = getNearestShopkeeperDistance();
-        if (nearestDist > 0 && nearestDist < 200) {
-          potatoMessage = "Move closer to the shopkeeper";
-          potatoMessageTimer = 60;
-        }
-      }
-    }
+    attemptShopInteract();
   }
   if (e.key === 'n' || e.key === 'N') {
     if (skipIntermissionToThreeSeconds()) {
@@ -1489,6 +1532,13 @@ G.shopkeepers = [];
 let wasOff = true; 
 let lightingEnabled = true;
 let lights = [];
+let lightingCacheMs = 1000 / 20; // throttle lighting redraw to 20 FPS
+let lightingCacheCanvas = null;
+let lightingCacheCtx = null;
+let lightingCacheTime = 0;
+let lightingCacheCamX = 0;
+let lightingCacheCamY = 0;
+let lightingCacheDirty = true;
 let gameRunning = false;
 let gamePaused = false;
 let tutorialActive = false;
@@ -1737,6 +1787,8 @@ window.addEventListener("gamepaddisconnected", () => {
 });
   
 const attackBtn = document.getElementById("btnAttack");
+const inventoryBtn = document.getElementById("btnInventory");
+const shopBtn = document.getElementById("btnShop");
 // Joystick state (mobile aiming)
 const joystick = {
   active: false,
@@ -1855,9 +1907,12 @@ function loadSettings() {
   // Apply settings object to all checkboxes/sliders
   document.getElementById("settingLighting").checked     = settings.lighting;
   document.getElementById("settingParticles").checked    = settings.particles;
+  document.getElementById("settingDecor").checked        = settings.decor;
   document.getElementById("settingHealthBars").checked   = settings.enemyHealthBars;
   document.getElementById("settingScreenShake").checked  = settings.screenShake;
   document.getElementById("settingIndicators").checked   = settings.offScreenIndicators;
+  document.getElementById("settingGraphicsQuality").value = settings.graphicsQuality;
+  document.getElementById("graphicsQualityLabel").textContent = Math.round(settings.graphicsQuality) + "%";
   document.getElementById("settingSFX").checked          = settings.sfxEnabled;
   document.getElementById("settingMusicVolume").value    = settings.musicVolume;
   document.getElementById("musicVolumeLabel").textContent = Math.round(settings.musicVolume * 100) + "%";
@@ -1877,6 +1932,7 @@ function loadSettings() {
 
   // Apply side effects that normally fire from listeners
   lightingEnabled = settings.lighting;
+  applyGraphicsQuality();
   if (settings.highContrast) document.body.classList.add("high-contrast");
 
   // CRT / pixel / music toggles (stored separately)
@@ -2523,10 +2579,21 @@ document.getElementById("musicToggle").addEventListener("change", function () {
 document.getElementById("settingLighting").addEventListener("change", function() {
   settings.lighting = this.checked;
   lightingEnabled = this.checked;
+  lightingCacheDirty = true;
+  saveSettings();
+});
+document.getElementById("settingGraphicsQuality").addEventListener("input", function() {
+  settings.graphicsQuality = parseInt(this.value, 10);
+  document.getElementById("graphicsQualityLabel").textContent = Math.round(settings.graphicsQuality) + "%";
+  applyGraphicsQuality();
   saveSettings();
 });
 document.getElementById("settingParticles").addEventListener("change", function() {
   settings.particles = this.checked;
+  saveSettings();
+});
+document.getElementById("settingDecor").addEventListener("change", function() {
+  settings.decor = this.checked;
   saveSettings();
 });
 document.getElementById("settingHealthBars").addEventListener("change", function() {
@@ -2795,6 +2862,26 @@ attackBtn.addEventListener("touchend", e => {
   e.preventDefault();
   releaseAttack();
 });
+
+if (inventoryBtn) {
+  inventoryBtn.addEventListener("touchstart", e => {
+    e.preventDefault();
+    toggleInventory();
+  });
+  inventoryBtn.addEventListener("mousedown", () => {
+    toggleInventory();
+  });
+}
+
+if (shopBtn) {
+  shopBtn.addEventListener("touchstart", e => {
+    e.preventDefault();
+    attemptShopInteract();
+  });
+  shopBtn.addEventListener("mousedown", () => {
+    attemptShopInteract();
+  });
+}
 
 canvas.addEventListener("touchstart", (e) => {
   const rect   = canvas.getBoundingClientRect();
@@ -3122,6 +3209,20 @@ function syncJoystickVisibility() {
   zone.style.display = hasPotato ? "flex" : "none";
 }
 
+function syncShopButtonVisibility() {
+  if (!shopBtn) return;
+  if (!gameRunning || gamePaused || buildMode) {
+    shopBtn.style.display = "none";
+    return;
+  }
+  if (shopOpen) {
+    shopBtn.style.display = "none";
+    return;
+  }
+  const nearestDist = getNearestShopkeeperDistance();
+  shopBtn.style.display = nearestDist > 0 && nearestDist <= 160 ? "block" : "none";
+}
+
 function updateGamepad() {
   if (gamepadIndex === null) return;
   const gp = navigator.getGamepads()[gamepadIndex];
@@ -3409,6 +3510,7 @@ setInterval(() => {
     if (wasOff) {
       initializeLevelLights();
       wasOff = false;
+      lightingCacheDirty = true;
     }
 
     for (let light of lights) {
@@ -3468,6 +3570,7 @@ function updateLights() {
     if (wasOff) {
       initializeLevelLights();
       wasOff = false;
+      lightingCacheDirty = true;
     }
 
     for (let light of lights) {
@@ -3493,6 +3596,7 @@ function updateLights() {
         light.intensity = 0;
         light.radius = 0;
       }
+      lightingCacheDirty = true;
     }
   }
 }
@@ -3541,6 +3645,8 @@ function initializeLevelLights() {
     lights[1].flickerSpeed = 0.15;
     lights[1].flickerAmount = 0.3;
   }
+
+  lightingCacheDirty = true;
 }
 
 function createLight(x, y, radius, color, intensity = 1.0) {
@@ -3613,10 +3719,10 @@ function drawMinimap() {
 }
 
 // Cast shadows from a light source
-function drawShadows(light) {
+function drawShadows(renderCtx, light) {
   // Iterate shadow casters without creating temporary objects
   
-  ctx.fillStyle = `rgba(0, 0, 0, ${0.7 - ambientLight})`;
+  renderCtx.fillStyle = `rgba(0, 0, 0, ${0.7 - ambientLight})`;
   
   // Shadow walls
   for (let wall of walls) {
@@ -3662,12 +3768,12 @@ function drawShadows(light) {
       const proj2x = corner2.x + (dir2x / len2) * projectionDist;
       const proj2y = corner2.y + (dir2y / len2) * projectionDist;
       
-      ctx.beginPath();
-      ctx.moveTo(corner1.x, corner1.y);
-      ctx.lineTo(corner2.x, corner2.y);
-      ctx.lineTo(proj2x, proj2y);
-      ctx.lineTo(proj1x, proj1y);
-      ctx.fill();
+      renderCtx.beginPath();
+      renderCtx.moveTo(corner1.x, corner1.y);
+      renderCtx.lineTo(corner2.x, corner2.y);
+      renderCtx.lineTo(proj2x, proj2y);
+      renderCtx.lineTo(proj1x, proj1y);
+      renderCtx.fill();
     }
   }
   
@@ -3715,12 +3821,12 @@ function drawShadows(light) {
       const proj2x = corner2.x + (dir2x / len2) * projectionDist;
       const proj2y = corner2.y + (dir2y / len2) * projectionDist;
       
-      ctx.beginPath();
-      ctx.moveTo(corner1.x, corner1.y);
-      ctx.lineTo(corner2.x, corner2.y);
-      ctx.lineTo(proj2x, proj2y);
-      ctx.lineTo(proj1x, proj1y);
-      ctx.fill();
+      renderCtx.beginPath();
+      renderCtx.moveTo(corner1.x, corner1.y);
+      renderCtx.lineTo(corner2.x, corner2.y);
+      renderCtx.lineTo(proj2x, proj2y);
+      renderCtx.lineTo(proj1x, proj1y);
+      renderCtx.fill();
     }
   }
 }
@@ -3779,6 +3885,39 @@ function overlapsSolidAt(x, y, w, h) {
   return false;
 }
 
+function pickPlatformSpot(rng, platforms, w, h) {
+  const pad = 6;
+  for (let i = 0; i < 40; i++) {
+    const wall = platforms[(rng() * platforms.length) | 0];
+    if (!wall || wall.width < w + pad * 2) continue;
+    const x = wall.x + pad + rng() * (wall.width - w - pad * 2);
+    const y = wall.y - h;
+    if (y < 10) continue;
+    if (overlapsSolidAt(x, y, w, h)) continue;
+    return { x, y };
+  }
+  return null;
+}
+
+function pickPlatformSpotNear(rng, platforms, w, h, ax, ay) {
+  const pad = 6;
+  for (let i = 0; i < 40; i++) {
+    const wall = platforms[(rng() * platforms.length) | 0];
+    if (!wall || wall.width < w + pad * 2) continue;
+    const cx = wall.x + wall.width / 2;
+    const cy = wall.y;
+    const dx = cx - ax;
+    const dy = cy - ay;
+    if (dx * dx + dy * dy > 520 * 520) continue;
+    const x = wall.x + pad + rng() * (wall.width - w - pad * 2);
+    const y = wall.y - h;
+    if (y < 10) continue;
+    if (overlapsSolidAt(x, y, w, h)) continue;
+    return { x, y };
+  }
+  return null;
+}
+
 function initDungeonAesthetics() {
   const key = `${currentMap}|${currentLevel}|${MAP_WIDTH}|${MAP_HEIGHT}|${walls.length}|${boxes.length}`;
   if (dungeonAesthetics.key === key) return;
@@ -3788,9 +3927,10 @@ function initDungeonAesthetics() {
   dungeonAesthetics.props.length = 0;
 
   const rng = createAestheticRng(hashAestheticKey(key));
+  const platforms = walls.filter(w => !w.moving && w.width >= 24 && w.height >= 6);
 
   // Floor texture details: cracks, stains and worn tile seams.
-  for (let i = 0; i < 460; i++) {
+  for (let i = 0; i < 260; i++) {
     const x = 30 + rng() * (MAP_WIDTH - 60);
     const y = 30 + rng() * (MAP_HEIGHT - 60);
     if (rng() < 0.58) {
@@ -3816,21 +3956,19 @@ function initDungeonAesthetics() {
 
   const propTypes = ["crate", "urn", "bones", "candle", "rubble"];
   let attempts = 0;
-  while (dungeonAesthetics.props.length < 180 && attempts < 1400) {
+  while (dungeonAesthetics.props.length < 90 && attempts < 900) {
     attempts++;
     const t = propTypes[(rng() * propTypes.length) | 0];
     const scale = 1.15 + rng() * 1.1;
     const w = (t === "crate" ? 26 : t === "urn" ? 20 : t === "rubble" ? 22 : 14) * scale;
     const h = (t === "crate" ? 22 : t === "urn" ? 24 : t === "rubble" ? 14 : 12) * scale;
-    const x = 24 + rng() * (MAP_WIDTH - w - 48);
-    const y = 24 + rng() * (MAP_HEIGHT - h - 48);
-
-    if (overlapsSolidAt(x, y, w, h)) continue;
+    const spot = pickPlatformSpot(rng, platforms, w, h);
+    if (!spot) continue;
 
     dungeonAesthetics.props.push({
       type: t,
-      x,
-      y,
+      x: spot.x,
+      y: spot.y,
       w,
       h,
       rotation: (rng() - 0.5) * 0.35,
@@ -3841,20 +3979,18 @@ function initDungeonAesthetics() {
   // Ensure some visible dressing near the level's starting area.
   const anchorX = Math.max(80, Math.min(MAP_WIDTH - 80, (player.x || 120) + player.width / 2));
   const anchorY = Math.max(80, Math.min(MAP_HEIGHT - 80, (player.y || 120) + player.height / 2));
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 8; i++) {
     const t = propTypes[(rng() * propTypes.length) | 0];
     const scale = 1.2 + rng() * 0.8;
     const w = (t === "crate" ? 26 : t === "urn" ? 20 : t === "rubble" ? 22 : 14) * scale;
     const h = (t === "crate" ? 22 : t === "urn" ? 24 : t === "rubble" ? 14 : 12) * scale;
-    const radius = 120 + rng() * 230;
-    const a = rng() * Math.PI * 2;
-    const x = Math.max(24, Math.min(MAP_WIDTH - w - 24, anchorX + Math.cos(a) * radius));
-    const y = Math.max(24, Math.min(MAP_HEIGHT - h - 24, anchorY + Math.sin(a) * radius));
-    if (overlapsSolidAt(x, y, w, h)) continue;
+    let spot = pickPlatformSpotNear(rng, platforms, w, h, anchorX, anchorY);
+    if (!spot) spot = pickPlatformSpot(rng, platforms, w, h);
+    if (!spot) continue;
     dungeonAesthetics.props.push({
       type: t,
-      x,
-      y,
+      x: spot.x,
+      y: spot.y,
       w,
       h,
       rotation: (rng() - 0.5) * 0.25,
@@ -3864,6 +4000,7 @@ function initDungeonAesthetics() {
 }
 
 function drawDungeonFloorTexture() {
+  if (!settings.decor) return;
   if (!dungeonAesthetics.floorDetails.length) return;
 
   ctx.save();
@@ -3905,6 +4042,7 @@ function drawDungeonFloorTexture() {
 }
 
 function drawDungeonProps() {
+  if (!settings.decor) return;
   if (!dungeonAesthetics.props.length) return;
 
   for (let i = 0; i < dungeonAesthetics.props.length; i++) {
@@ -4226,7 +4364,9 @@ function drawDungeonLighting() {
   
   // Draw torch lights
   for (let i = 0; i < dungeonLighting.torches.length; i++) {
-    dungeonLighting.torches[i].draw(ctx);
+    const t = dungeonLighting.torches[i];
+    if (!isEffectVisibleInWorld(t.x, t.y, t.radius * 2, t.radius * 2, t.radius)) continue;
+    t.draw(ctx);
   }
   
   ctx.restore();
@@ -4325,128 +4465,168 @@ function triggerScreenShake(intensity = 5) {
 }
 
 // Draw lighting layer
+function ensureLightingCache() {
+  if (!lightingCacheCanvas) {
+    lightingCacheCanvas = document.createElement("canvas");
+    lightingCacheCtx = lightingCacheCanvas.getContext("2d");
+    lightingCacheDirty = true;
+  }
+  if (lightingCacheCanvas.width !== canvas.width || lightingCacheCanvas.height !== canvas.height) {
+    lightingCacheCanvas.width = canvas.width;
+    lightingCacheCanvas.height = canvas.height;
+    lightingCacheDirty = true;
+  }
+}
+
 function drawLighting() {
   if (!lightingEnabled && ambientLight < 0.75) return;
+  if (!settings.lighting) return;
 
-  ctx.save();
-  
-  // Create darkness overlay
-  ctx.fillStyle = `rgba(0, 0, 0, ${1 - ambientLight})`;
-  ctx.fillRect(0, 0, world.width, world.height);
-  
-  // Set blend mode for lights
-  ctx.globalCompositeOperation = 'lighter';
-  
-  // Draw each light source
-  for (let light of lights) {
-    if (!isEffectVisibleInWorld(light.x, light.y, light.radius * 2, light.radius * 2, light.radius)) continue;
+  ensureLightingCache();
 
-    ctx.save();
+  const now = performance.now();
+  const camMoved = Math.abs(camera.x - lightingCacheCamX) > 0.5 ||
+                   Math.abs(camera.y - lightingCacheCamY) > 0.5;
+  const timeSince = now - lightingCacheTime;
+  const needsRedraw = camMoved || lightingCacheDirty || lightingCacheMs <= 0 || timeSince >= lightingCacheMs;
 
-  // Torch head + flame (visual only; lighting math below stays unchanged)
-  const torchFlicker = Math.sin(performance.now() * 0.02 + light.x * 0.05) * 0.5 + 0.5;
-  const flameH = 10 + torchFlicker * 3;
+  if (needsRedraw) {
+    lightingCacheTime = now;
+    lightingCacheCamX = camera.x;
+    lightingCacheCamY = camera.y;
+    lightingCacheDirty = false;
 
-  // Wooden torch handle
-  ctx.fillStyle = '#5c3b1d';
-  ctx.fillRect(light.x - 1.5, light.y - 2, 3, 14);
+    const renderCtx = lightingCacheCtx;
+    renderCtx.setTransform(1, 0, 0, 1, 0, 0);
+    renderCtx.clearRect(0, 0, lightingCacheCanvas.width, lightingCacheCanvas.height);
 
-  // Metal collar near the flame
-  ctx.fillStyle = '#8a8f98';
-  ctx.fillRect(light.x - 4, light.y - 3, 8, 4);
+    renderCtx.save();
+    renderCtx.translate(-camera.x, -camera.y);
 
-  // Outer flame
-  ctx.fillStyle = 'rgba(255, 150, 60, 0.18)';
-  ctx.beginPath();
-  ctx.arc(light.x, light.y - flameH * 0.55, 10, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = `rgba(255, 140, 40, ${0.72 + torchFlicker * 0.22})`;
-  ctx.beginPath();
-  ctx.moveTo(light.x, light.y - flameH - 1);
-  ctx.quadraticCurveTo(light.x + 6, light.y - 5, light.x, light.y + 1);
-  ctx.quadraticCurveTo(light.x - 6, light.y - 5, light.x, light.y - flameH - 1);
-  ctx.fill();
+    // Create darkness overlay
+    renderCtx.fillStyle = `rgba(0, 0, 0, ${1 - ambientLight})`;
+    renderCtx.fillRect(camera.x, camera.y, canvas.width, canvas.height);
 
-  // Inner hot core
-  ctx.fillStyle = `rgba(255, 235, 170, ${0.7 + torchFlicker * 0.25})`;
-  ctx.beginPath();
-  ctx.moveTo(light.x, light.y - flameH + 2);
-  ctx.quadraticCurveTo(light.x + 3, light.y - 6, light.x, light.y - 1);
-  ctx.quadraticCurveTo(light.x - 3, light.y - 6, light.x, light.y - flameH + 2);
-  ctx.fill();
-    
-    let beamStopY = -2099;
-    
-    const beamOccluders = [...walls, ...boxes];
-    for (let obj of beamOccluders) {
-      // Check if light is horizontally aligned with the object
-      if (light.x >= obj.x && light.x <= obj.x + obj.width) {
-        // Find the bottom edge of the object that is ABOVE the light
-        let objBottom = obj.y + obj.height;
-        if (objBottom < light.y && objBottom > beamStopY) {
-          beamStopY = objBottom;
+    // Set blend mode for lights
+    renderCtx.globalCompositeOperation = 'lighter';
+
+    // Draw each light source
+    for (let light of lights) {
+      if (!isEffectVisibleInWorld(light.x, light.y, light.radius * 2, light.radius * 2, light.radius)) continue;
+
+      renderCtx.save();
+
+      // Torch head + flame (visual only; lighting math below stays unchanged)
+      const torchFlicker = Math.sin(now * 0.02 + light.x * 0.05) * 0.5 + 0.5;
+      const flameH = 10 + torchFlicker * 3;
+
+      // Wooden torch handle
+      renderCtx.fillStyle = '#5c3b1d';
+      renderCtx.fillRect(light.x - 1.5, light.y - 2, 3, 14);
+
+      // Metal collar near the flame
+      renderCtx.fillStyle = '#8a8f98';
+      renderCtx.fillRect(light.x - 4, light.y - 3, 8, 4);
+
+      // Outer flame
+      renderCtx.fillStyle = 'rgba(255, 150, 60, 0.18)';
+      renderCtx.beginPath();
+      renderCtx.arc(light.x, light.y - flameH * 0.55, 10, 0, Math.PI * 2);
+      renderCtx.fill();
+      renderCtx.fillStyle = `rgba(255, 140, 40, ${0.72 + torchFlicker * 0.22})`;
+      renderCtx.beginPath();
+      renderCtx.moveTo(light.x, light.y - flameH - 1);
+      renderCtx.quadraticCurveTo(light.x + 6, light.y - 5, light.x, light.y + 1);
+      renderCtx.quadraticCurveTo(light.x - 6, light.y - 5, light.x, light.y - flameH - 1);
+      renderCtx.fill();
+
+      // Inner hot core
+      renderCtx.fillStyle = `rgba(255, 235, 170, ${0.7 + torchFlicker * 0.25})`;
+      renderCtx.beginPath();
+      renderCtx.moveTo(light.x, light.y - flameH + 2);
+      renderCtx.quadraticCurveTo(light.x + 3, light.y - 6, light.x, light.y - 1);
+      renderCtx.quadraticCurveTo(light.x - 3, light.y - 6, light.x, light.y - flameH + 2);
+      renderCtx.fill();
+
+      let beamStopY = -2099;
+
+      const beamOccluders = [...walls, ...boxes];
+      for (let obj of beamOccluders) {
+        // Check if light is horizontally aligned with the object
+        if (light.x >= obj.x && light.x <= obj.x + obj.width) {
+          // Find the bottom edge of the object that is ABOVE the light
+          let objBottom = obj.y + obj.height;
+          if (objBottom < light.y && objBottom > beamStopY) {
+            beamStopY = objBottom;
+          }
         }
+      }
+
+      // Create radial gradient for light
+      const gradient = renderCtx.createRadialGradient(
+        light.x, light.y, 0,
+        light.x, light.y, light.radius
+      );
+
+      const alpha = (light.intensity || 0) * 0.8;
+      gradient.addColorStop(0, `${light.color}${Math.floor(alpha * 255).toString(16).padStart(2, '0')}`);
+      gradient.addColorStop(0.4, `${light.color}${Math.floor(alpha * 0.5 * 255).toString(16).padStart(2, '0')}`);
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+      renderCtx.fillStyle = gradient;
+      renderCtx.beginPath();
+      renderCtx.arc(light.x, light.y, light.radius, 0, Math.PI * 2);
+      renderCtx.fill();
+
+      renderCtx.restore();
+    }
+
+    // Fireflies act as tiny, dim moving light sources.
+    if (settings.particles && atmosphericParticles.fireflies.length) {
+      for (let i = 0; i < atmosphericParticles.fireflies.length; i++) {
+        const f = atmosphericParticles.fireflies[i];
+        if (!isEffectVisibleInWorld(f.x, f.y, 64, 64, 32)) continue;
+
+        const c = f.color || [170, 255, 190];
+        const pulse = Math.sin(f.pulsePhase || 0) * 0.5 + 0.5;
+        const r = 18 + pulse * 14;
+        const a = 0.09 + pulse * 0.12;
+        const g = renderCtx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+        g.addColorStop(0, `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`);
+        g.addColorStop(0.6, `rgba(${Math.round(c[0] * 0.75)}, ${Math.round(c[1] * 0.75)}, ${Math.round(c[2] * 0.75)}, ${a * 0.45})`);
+        g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        renderCtx.fillStyle = g;
+        renderCtx.beginPath();
+        renderCtx.arc(f.x, f.y, r, 0, Math.PI * 2);
+        renderCtx.fill();
       }
     }
 
-    // Create radial gradient for light
-    const gradient = ctx.createRadialGradient(
-      light.x, light.y, 0,
-      light.x, light.y, light.radius
-    );
-    
-    const alpha = (light.intensity || 0) * 0.8;
-    gradient.addColorStop(0, `${light.color}${Math.floor(alpha * 255).toString(16).padStart(2, '0')}`);
-    gradient.addColorStop(0.4, `${light.color}${Math.floor(alpha * 0.5 * 255).toString(16).padStart(2, '0')}`);
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(light.x, light.y, light.radius, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.restore();
-  }
+    // Reset blend mode
+    renderCtx.globalCompositeOperation = 'source-over';
 
-  // Fireflies act as tiny, dim moving light sources.
-  if (settings.particles && atmosphericParticles.fireflies.length) {
-    for (let i = 0; i < atmosphericParticles.fireflies.length; i++) {
-      const f = atmosphericParticles.fireflies[i];
-      if (!isEffectVisibleInWorld(f.x, f.y, 64, 64, 32)) continue;
-
-      const c = f.color || [170, 255, 190];
-      const pulse = Math.sin(f.pulsePhase || 0) * 0.5 + 0.5;
-      const r = 18 + pulse * 14;
-      const a = 0.09 + pulse * 0.12;
-      const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
-      g.addColorStop(0, `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`);
-      g.addColorStop(0.6, `rgba(${Math.round(c[0] * 0.75)}, ${Math.round(c[1] * 0.75)}, ${Math.round(c[2] * 0.75)}, ${a * 0.45})`);
-      g.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
-      ctx.fill();
+    // Draw shadows
+    for (let light of lights) {
+      drawShadows(renderCtx, light);
     }
+
+    renderCtx.restore();
   }
-  
-  // Reset blend mode
-  ctx.globalCompositeOperation = 'source-over';
-  
-  // Draw shadows
-  for (let light of lights) {
-    drawShadows(light);
-  }
-  
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(lightingCacheCanvas, 0, 0);
   ctx.restore();
 }
-
+/*
 // Toggle lighting (for testing)
 document.addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "l") {
     lightingEnabled = !lightingEnabled;
+    lightingCacheDirty = true;
   }
 });
-
+*/
 // --- Aim update (called every frame in gameLoop) ---
 function updateCannonAim() {
   if (!hasPotato) return;
@@ -5130,17 +5310,97 @@ function openControls() {
     document.getElementById("controls").classList.remove("hidden");
 }
 
-function loadLevel(level) {
+function resetLevelGeometry() {
+  walls = [];
+  seesaws = [];
+  boxes = [];
+  spikes = [];
+  ladders = [];
+  ovens = [];
+  G.turrets = [];
+  G.snails = [];
+  G.SuperSnails = [];
+  G.chairs = [];
+  G.tables = [];
+  G.bats = [];
+  G.yetis = [];
+  G.snowmen = [];
+  G.icicles = [];
+}
+
+function applyEditorObjects(objs, withBounds = true) {
+  resetLevelGeometry();
+  if (withBounds) addMapBounds();
+
+  for (const o of objs) {
+    if (o.type === 'wall') {
+      walls.push({ x: o.x, y: o.y, width: o.width, height: o.height });
+    } else if (o.type === 'wall-moving') {
+      const axKey = o.axis === 'h' ? 'startX' : 'startY';
+      const axVal = o.axis === 'h' ? o.x : o.y;
+      walls.push({ x: o.x, y: o.y, width: o.width, height: o.height, moving: true, dir: 1, speed: o.speed || 1.5, [axKey]: axVal, range: o.range || 100 });
+    } else if (o.type === 'spike') {
+      spikes.push({ x: o.x, y: o.y, width: o.width || 40, height: o.height || 26 });
+    } else if (o.type === 'ladder') {
+      ladders.push({ x: o.x, y: o.y, width: o.width, height: o.height });
+    } else if (o.type === 'seesaw') {
+      seesaws.push({ x: o.x, y: o.y, width: o.width, height: o.height, angle: 0, angularVelocity: 0 });
+    }
+  }
+}
+
+async function loadMap_LevelFile(level) {
+  const url = `levels/level${level}.lvl`;
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return false;
+    const raw = await res.text();
+    const data = JSON.parse(raw);
+    const objs = Array.isArray(data.objects) ? data.objects : (Array.isArray(data) ? data : []);
+    if (!objs.length) return false;
+    applyEditorObjects(objs, true);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function loadLevel(level) {
   resetWorld(); // clear previous map junk
   currentLevel = level;
-  if (level === 0) loadMap_Tutorial();
-  if (level === 1) loadMap_Level1();
-  if (level === 2) loadMap_Level2();
-  if (level === 3) loadMap_Level3();
-  //if (level === 4) loadMap_Level4();
+  if (editorPreviewMode) {
+    loadMap_EditorPreview();
+  } else {
+    if (level === 0) {
+      loadMap_Tutorial();
+    } else {
+      const loaded = await loadMap_LevelFile(level);
+      if (!loaded) {
+        if (level === 1) loadMap_Level1();
+        if (level === 2) loadMap_Level2();
+        if (level === 3) loadMap_Level3();
+        //if (level === 4) loadMap_Level4();
+      }
+    }
+  }
 
   initializeLevelLights();
   saveInitialState(); // allow reset after death
+}
+
+function loadMap_EditorPreview() {
+  const raw = localStorage.getItem('yt_editor_preview');
+  if (!raw) return;
+  let data = null;
+  try {
+    data = JSON.parse(raw);
+  } catch (err) {
+    console.error('Preview load failed:', err);
+    return;
+  }
+
+  const objs = Array.isArray(data.objects) ? data.objects : [];
+  applyEditorObjects(objs, true);
 }
 
 function startTutorial() {
@@ -5180,192 +5440,232 @@ function loadMap_Tutorial() {
   tutorialState.checkpointArrows= [];
   tutorialState.museumLabels    = [];
 
-  const FLOOR = 530;
-  const WT    = 20;
+  const WT = 20;
+  const floorPlan = [
+    { y: 1900, segments: [[40, MAP_WIDTH - 80]], ladderX: 2200, zone: 'move' },
+    { y: 1650, segments: [[40, MAP_WIDTH - 80]], ladderX: 300,  zone: 'jump' },
+    { y: 1400, segments: [[40, MAP_WIDTH - 80]], ladderX: 2200, zone: 'walljump' },
+    { y: 1150, segments: [[40, 1160], [1380, MAP_WIDTH - 80 - 1380]], ladderX: 300, zone: 'dash' },
+    { y: 900,  segments: [[40, MAP_WIDTH - 80]], ladderX: 2200, zone: 'sword' },
+    { y: 650,  segments: [[40, MAP_WIDTH - 80]], ladderX: 300,  zone: 'museum' },
+    { y: 400,  segments: [[40, MAP_WIDTH - 80]], ladderX: 2200, zone: 'hazards' },
+    { y: 180,  segments: [[40, MAP_WIDTH - 80]], ladderX: null, zone: 'potato' },
+  ];
 
   addMapBounds();
 
+  for (const floor of floorPlan) {
+    for (const [x, w] of floor.segments) {
+      walls.push({ x, y: floor.y, width: w, height: WT });
+    }
+  }
+
+  for (let i = 0; i < floorPlan.length - 1; i++) {
+    const lower = floorPlan[i];
+    const upper = floorPlan[i + 1];
+    if (!lower.ladderX) continue;
+    ladders.push({
+      x: lower.ladderX,
+      y: upper.y - 8,
+      width: 30,
+      height: (lower.y - upper.y) + 16
+    });
+  }
+
+  const floorFillers = [
+    { y: floorPlan[0].y - 120, segments: [[260, 160], [640, 140], [980, 160], [1400, 180], [1820, 160]] },
+    { y: floorPlan[1].y - 110, segments: [[220, 140], [520, 160], [860, 140], [1200, 160], [1600, 160]] },
+    { y: floorPlan[2].y - 120, segments: [[320, 120], [640, 140], [980, 140], [1360, 120], [1720, 140]] },
+    { y: floorPlan[3].y - 120, segments: [[220, 140], [520, 160], [980, 120], [1560, 160], [2000, 140]] },
+    { y: floorPlan[4].y - 120, segments: [[260, 160], [620, 140], [980, 160], [1380, 140], [1760, 160]] },
+    { y: floorPlan[5].y - 120, segments: [[260, 140], [620, 140], [980, 140], [1340, 140], [1700, 140]] },
+    { y: floorPlan[6].y - 110, segments: [[320, 160], [720, 140], [1100, 160], [1480, 140], [1880, 160]] },
+    { y: floorPlan[7].y - 110, segments: [[260, 160], [620, 160], [980, 160], [1340, 160], [1760, 160]] },
+  ];
+
+  for (const filler of floorFillers) {
+    for (const [x, w] of filler.segments) {
+      walls.push({ x, y: filler.y, width: w, height: WT });
+    }
+  }
+
   // ── ZONE 1: MOVEMENT ──────────────────────────
-  walls.push({ x: 60, y: FLOOR, width: 400, height: WT });
   tutorialState.groundPaintings.push(
-    { wx: 80, wy: FLOOR - 8, text: '← A / D / ARROWS →', font: 'bold 14px monospace', color: '#4fc3f7' }
+    { wx: 120, wy: floorPlan[0].y - 8, text: '← A / D / ARROWS →', font: 'bold 14px monospace', color: '#4fc3f7' }
   );
   tutorialState.zoneSigns.push({
-    wx: 90, wy: FLOOR - 140, title: '[ ZONE 1 ]  MOVEMENT',
-    lines: ['Press A / D or ← → to MOVE', 'Walk to the right!'],
+    wx: 120, wy: floorPlan[0].y - 140, title: '[ ZONE 1 ]  MOVEMENT',
+    lines: ['Press A / D or ← → to MOVE', 'Head for the ladder!'],
     color: '#4fc3f7', width: 240
   });
-  tutorialState.zoneDividers.push({ wx: 460, wy: FLOOR - 260, height: 270, color: '#4fc3f7' });
-  tutorialState.checkpointArrows.push({ wx: 420, wy: FLOOR - 60, dir: 'right', color: '#4fc3f7' });
-  TUTORIAL_TRIGGERS.push({ x: 350, y: FLOOR - 200, w: 80, h: 200,
+  tutorialState.checkpointArrows.push({ wx: floorPlan[0].ladderX - 40, wy: floorPlan[0].y - 60, dir: 'right', color: '#4fc3f7' });
+  tutorialState.zoneDividers.push({ wx: floorPlan[0].ladderX - 20, wy: floorPlan[0].y - 260, height: 260, color: '#4fc3f7' });
+  TUTORIAL_TRIGGERS.push({ x: 160, y: floorPlan[0].y - 200, w: 160, h: 200,
     zoneId: 'move', message: '✅ Zone 1 — You can MOVE!', color: '#4fc3f7' });
 
   // ── ZONE 2: JUMPING ───────────────────────────
-  walls.push({ x: 500, y: FLOOR,       width: 60,  height: WT });
-  walls.push({ x: 580, y: FLOOR - 90,  width: 80,  height: WT });
-  walls.push({ x: 680, y: FLOOR - 170, width: 80,  height: WT });
-  walls.push({ x: 760, y: FLOOR,       width: 60,  height: WT });
+  walls.push(
+    { x: 320, y: floorPlan[1].y - 90, width: 120, height: WT },
+    { x: 560, y: floorPlan[1].y - 170, width: 120, height: WT },
+    { x: 820, y: floorPlan[1].y - 250, width: 120, height: WT }
+  );
   tutorialState.groundPaintings.push(
-    { wx: 510, wy: FLOOR - 8, text: 'JUMP →', font: 'bold 13px monospace', color: '#81c784' }
+    { wx: 120, wy: floorPlan[1].y - 8, text: 'JUMP →', font: 'bold 13px monospace', color: '#81c784' }
   );
   tutorialState.zoneSigns.push({
-    wx: 510, wy: FLOOR - 120, title: '[ ZONE 2 ]  JUMPING',
-    lines: ['Press W / ↑ to JUMP', 'Make it across the platforms!'],
+    wx: 120, wy: floorPlan[1].y - 130, title: '[ ZONE 2 ]  JUMPING',
+    lines: ['Press W / ↑ to JUMP', 'Hop the steps upward.'],
     color: '#81c784', width: 230
   });
-  tutorialState.zoneDividers.push({ wx: 820, wy: FLOOR - 260, height: 270, color: '#81c784' });
-  tutorialState.checkpointArrows.push({ wx: 790, wy: FLOOR - 60, dir: 'right', color: '#81c784' });
-  TUTORIAL_TRIGGERS.push({ x: 760, y: FLOOR - 200, w: 60, h: 200,
+  tutorialState.checkpointArrows.push({ wx: floorPlan[1].ladderX + 20, wy: floorPlan[1].y - 60, dir: 'left', color: '#81c784' });
+  tutorialState.zoneDividers.push({ wx: floorPlan[1].ladderX + 30, wy: floorPlan[1].y - 260, height: 260, color: '#81c784' });
+  TUTORIAL_TRIGGERS.push({ x: 200, y: floorPlan[1].y - 200, w: 200, h: 200,
     zoneId: 'jump', message: '✅ Zone 2 — You can JUMP!', color: '#81c784' });
 
   // ── ZONE 3: WALL JUMP ─────────────────────────
-  walls.push({ x: 860,  y: FLOOR,        width: 40,  height: WT });
-  walls.push({ x: 860,  y: FLOOR - 360,  width: 20,  height: 340 });
-  walls.push({ x: 1040, y: FLOOR - 360,  width: 20,  height: 340 });
-  walls.push({ x: 860,  y: FLOOR - 380,  width: 220, height: WT });
-  walls.push({ x: 1060, y: FLOOR,        width: 40,  height: WT });
-  ladders.push({ x: 872, y: FLOOR - 380, width: 24, height: 380 }); // escape ladder
+  walls.push(
+    { x: 1280, y: floorPlan[2].y - 300, width: 20, height: 300 },
+    { x: 1460, y: floorPlan[2].y - 300, width: 20, height: 300 },
+    { x: 1240, y: floorPlan[2].y - 320, width: 260, height: WT }
+  );
+  ladders.push({ x: 200, y: floorPlan[2].y - 320, width: 30, height: 320 });
   tutorialState.zoneSigns.push({
-    wx: 862, wy: FLOOR - 490, title: '[ ZONE 3 ]  WALL JUMP',
-    lines: ['Hold INTO a wall to SLIDE.', 'Press W to WALL JUMP!', 'Bounce between the walls!'],
-    color: '#ffb74d', width: 230
+    wx: 1080, wy: floorPlan[2].y - 420, title: '[ ZONE 3 ]  WALL JUMP',
+    lines: ['Hold INTO a wall to SLIDE.', 'Press W to WALL JUMP!', 'Climb the shaft.'],
+    color: '#ffb74d', width: 245
   });
-  tutorialState.zoneDividers.push({ wx: 1100, wy: FLOOR - 260, height: 270, color: '#ffb74d' });
-  tutorialState.checkpointArrows.push({ wx: 940, wy: FLOOR - 180, dir: 'up', color: '#ffb74d' });
-  TUTORIAL_TRIGGERS.push({ x: 920, y: FLOOR - 380, w: 80, h: 40,
+  tutorialState.checkpointArrows.push({ wx: 1360, wy: floorPlan[2].y - 60, dir: 'up', color: '#ffb74d' });
+  tutorialState.zoneDividers.push({ wx: 1510, wy: floorPlan[2].y - 260, height: 260, color: '#ffb74d' });
+  TUTORIAL_TRIGGERS.push({ x: 1320, y: floorPlan[2].y - 300, w: 120, h: 300,
     zoneId: 'walljump', message: '✅ Zone 3 — WALL JUMP mastered!', color: '#ffb74d' });
 
   // ── ZONE 4: DASH ──────────────────────────────
-  walls.push({ x: 1140, y: FLOOR, width: 100, height: WT });
-  walls.push({ x: 1390, y: FLOOR, width: 80,  height: WT }); // gap between = 150px, needs dash
   tutorialState.groundPaintings.push(
-    { wx: 1142, wy: FLOOR - 8, text: '→ DASH!', font: 'bold 13px monospace', color: '#00e5ff' }
+    { wx: 120, wy: floorPlan[3].y - 8, text: '→ DASH!', font: 'bold 13px monospace', color: '#00e5ff' }
   );
   tutorialState.zoneSigns.push({
-    wx: 1142, wy: FLOOR - 130, title: '[ ZONE 4 ]  DASH',
-    lines: ['Press SHIFT to DASH!', 'One free air-dash per jump.', 'Cross the gap!'],
+    wx: 120, wy: floorPlan[3].y - 130, title: '[ ZONE 4 ]  DASH',
+    lines: ['Press SHIFT to DASH!', 'Cross the gap to the right.'],
     color: '#00e5ff', width: 230
   });
-  tutorialState.zoneDividers.push({ wx: 1470, wy: FLOOR - 260, height: 270, color: '#00e5ff' });
-  tutorialState.checkpointArrows.push({ wx: 1220, wy: FLOOR - 60, dir: 'right', color: '#00e5ff' });
-  TUTORIAL_TRIGGERS.push({ x: 1390, y: FLOOR - 200, w: 80, h: 200,
+  tutorialState.checkpointArrows.push({ wx: 1220, wy: floorPlan[3].y - 60, dir: 'right', color: '#00e5ff' });
+  tutorialState.zoneDividers.push({ wx: 1340, wy: floorPlan[3].y - 260, height: 260, color: '#00e5ff' });
+  TUTORIAL_TRIGGERS.push({ x: 1120, y: floorPlan[3].y - 200, w: 160, h: 200,
     zoneId: 'dash', message: '✅ Zone 4 — You can DASH!', color: '#00e5ff' });
 
   // ── ZONE 5: SWORD ─────────────────────────────
-  walls.push({ x: 1490, y: FLOOR, width: 230, height: WT });
-  G.snails.push({ x: 1560, y: FLOOR - 28, width: 28, height: 20,
+  G.snails.push({ x: 520, y: floorPlan[4].y - 28, width: 28, height: 20,
     dx: 0, dy: 0, dir: 1, speed: 0.2, gravity: 0.6, chaseRange: 80,
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
-  G.snails.push({ x: 1640, y: FLOOR - 28, width: 28, height: 20,
+  G.snails.push({ x: 720, y: floorPlan[4].y - 28, width: 28, height: 20,
     dx: 0, dy: 0, dir: -1, speed: 0.2, gravity: 0.6, chaseRange: 80,
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
   tutorialState.zoneSigns.push({
-    wx: 1492, wy: FLOOR - 150, title: '[ ZONE 5 ]  SWORD',
-    lines: ['Hold F to CHARGE.', 'Release F to SWING!', 'More charge = more KNOCKBACK.'],
-    color: '#f06292', width: 245
+    wx: 120, wy: floorPlan[4].y - 150, title: '[ ZONE 5 ]  SWORD',
+    lines: ['Hold F to CHARGE.', 'Release F to SWING!', 'Practice on snails.'],
+    color: '#f06292', width: 255
   });
-  tutorialState.zoneDividers.push({ wx: 1720, wy: FLOOR - 260, height: 270, color: '#f06292' });
-  TUTORIAL_TRIGGERS.push({ x: 1700, y: FLOOR - 200, w: 40, h: 200,
+  tutorialState.zoneDividers.push({ wx: 320, wy: floorPlan[4].y - 260, height: 260, color: '#f06292' });
+  TUTORIAL_TRIGGERS.push({ x: 160, y: floorPlan[4].y - 200, w: 200, h: 200,
     zoneId: 'sword', message: '✅ Zone 5 — SWORD ATTACKS learned!', color: '#f06292' });
 
   // ── ZONE 6: ENEMY MUSEUM ──────────────────────
-  walls.push({ x: 1760, y: FLOOR, width: 490, height: WT });
+  const museumY = floorPlan[5].y;
   const museum = [
-    { x: 1785, label: '🐌 SNAIL',       desc: 'Ground patroller.\nChases, bounces off walls.',  color: '#69f0ae' },
-    { x: 1870, label: '💚 SUPER SNAIL', desc: 'Wall-climber! Jumps\nand crawls ceilings.',       color: '#00e676' },
-    { x: 1960, label: '🦇 BAT',         desc: 'Flies at you.\nSword it from any angle.',         color: '#b39ddb' },
-    { x: 2050, label: '🔴 TURRET',      desc: 'Fires G.fireballs in range.\nDestroy it with sword!', color: '#ef5350' },
-    { x: 2140, label: '⛄ SNOWMAN',     desc: 'Emits a SLOW FIELD.\nStay back or use potato!',  color: '#e0f7fa' },
-    { x: 2210, label: '🦣 YETI',        desc: 'Boss-tier. Throws\nsnowballs. Very tanky.',       color: '#e0e0e0' },
-    { x: 2000, label: '🪑 CHAIR',  desc: 'Bouncy furniture enemy.\nKnockback sends it flying.', color: '#ffcc80' },
-    { x: 2300, label: '🪵 TABLE',  desc: 'Heavy patroller. Hit it\nto trigger a dramatic FLIP!', color: '#c8922a' },
+    { x: 360, label: '🐌 SNAIL',       desc: 'Ground patroller.\nChases, bounces off walls.',  color: '#69f0ae' },
+    { x: 520, label: '💚 SUPER SNAIL', desc: 'Wall-climber! Jumps\nand crawls ceilings.',       color: '#00e676' },
+    { x: 680, label: '🦇 BAT',         desc: 'Flies at you.\nSword it from any angle.',         color: '#b39ddb' },
+    { x: 840, label: '🔴 TURRET',      desc: 'Fires G.fireballs in range.\nDestroy it with sword!', color: '#ef5350' },
+    { x: 1000, label: '⛄ SNOWMAN',    desc: 'Emits a SLOW FIELD.\nStay back or use potato!',  color: '#e0f7fa' },
+    { x: 1160, label: '🦣 YETI',       desc: 'Boss-tier. Throws\nsnowballs. Very tanky.',       color: '#e0e0e0' },
+    { x: 1320, label: '🪑 CHAIR',      desc: 'Bouncy furniture enemy.\nKnockback sends it flying.', color: '#ffcc80' },
+    { x: 1480, label: '🪵 TABLE',      desc: 'Heavy patroller. Hit it\nto trigger a dramatic FLIP!', color: '#c8922a' },
   ];
   for (const me of museum) {
-    walls.push({ x: me.x, y: FLOOR - 45, width: 50, height: 45 });
-    tutorialState.museumLabels.push({ wx: me.x, wy: FLOOR - 45, label: me.label, desc: me.desc, color: me.color, width: 50 });
+    walls.push({ x: me.x, y: museumY - 45, width: 50, height: 45 });
+    tutorialState.museumLabels.push({ wx: me.x, wy: museumY - 45, label: me.label, desc: me.desc, color: me.color, width: 50 });
   }
-  // Display enemies — zero speed, very high HP so they can't be killed
-  G.chairs.push({ ...createChair(2005, FLOOR - 93), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
-  G.tables.push({ ...createTable(2305, FLOOR - 101), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
-  G.snails.push({ x: 1790, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0, dir: 1,
+  G.chairs.push({ ...createChair(1325, museumY - 93), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
+  G.tables.push({ ...createTable(1485, museumY - 101), hp: 999, maxHp: 999, dx: 0, dy: 0, tutorialDisplay: true });
+  G.snails.push({ x: 365, y: museumY - 73, width: 28, height: 20, dx: 0, dy: 0, dir: 1,
     speed: 0, gravity: 0, chaseRange: 0, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     hp: 999, maxHp: 999, hitFlash: 0, frame: 0, frameTimer: 0, tutorialDisplay: true});
-  G.SuperSnails.push({ x: 1875, y: FLOOR - 73, width: 28, height: 20, dx: 0, dy: 0,
+  G.SuperSnails.push({ x: 525, y: museumY - 73, width: 28, height: 20, dx: 0, dy: 0,
     speed: 0, gravity: 0, dir: 1, jumpPower: 0, mode: 'ground',
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     jumpTimer: 99999, lastWallSide: null, prevMode: 'ground', hp: 999, maxHp: 999, hitFlash: 0, tutorialDisplay: true });
-  G.bats.push({ x: 1965, y: FLOOR - 115, width: 28, height: 20, dx: 0, dy: 0,
+  G.bats.push({ x: 685, y: museumY - 115, width: 28, height: 20, dx: 0, dy: 0,
     hp: 999, maxHp: 999, hitFlash: 0, tutorialDisplay: true });
-  G.turrets.push({ x: 2058, y: FLOOR - 77, cooldown: 999999, fireRate: 999999,
+  G.turrets.push({ x: 848, y: museumY - 77, cooldown: 999999, fireRate: 999999,
     hp: 999, maxHp: 999, armed: false, tutorialDisplay: true });
-  G.snowmen.push({ x: 2145, y: FLOOR - 83, width: 26, height: 38, speed: 0,
+  G.snowmen.push({ x: 1005, y: museumY - 83, width: 26, height: 38, speed: 0,
     slowRadius: 140, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [],
     hp: 999, maxHp: 999, hitFlash: 0, tutorialDisplay: true });
-  G.yetis.push({ x: 2212, y: FLOOR - 114, width: 48, height: 64, dx: 0, dy: 0,
+  G.yetis.push({ x: 1165, y: museumY - 114, width: 48, height: 64, dx: 0, dy: 0,
     dead: false, speed: 0, chaseRange: 0, hp: 999, alive: true,
     throwCooldown: 999999, facing: 1, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     maxHp: 999, hitFlash: 0, tutorialDisplay: true });
   tutorialState.zoneSigns.push({
-    wx: 1762, wy: FLOOR - 230, title: '[ ZONE 6 ]  ENEMY MUSEUM',
+    wx: 1680, wy: museumY - 230, title: '[ ZONE 6 ]  ENEMY MUSEUM',
     lines: ['These are your foes.', 'Read the labels!'],
     color: '#ce93d8', width: 260
   });
-  tutorialState.zoneDividers.push({ wx: 2260, wy: FLOOR - 260, height: 270, color: '#ce93d8' });
-  TUTORIAL_TRIGGERS.push({ x: 2230, y: FLOOR - 200, w: 40, h: 200,
+  tutorialState.zoneDividers.push({ wx: 1960, wy: museumY - 260, height: 260, color: '#ce93d8' });
+  TUTORIAL_TRIGGERS.push({ x: 1700, y: museumY - 200, w: 200, h: 200,
     zoneId: 'museum', message: '✅ Zone 6 — ENEMIES identified!', color: '#ce93d8' });
 
   // ── ZONE 7: HAZARDS ───────────────────────────
-  walls.push({ x: 1760, y: FLOOR, width: 640, height: WT }); // was 490
-  walls.push({ x: 2300, y: FLOOR, width: 220, height: WT });
-  spikes.push({ x: 2365, y: FLOOR - 26, width: 40, height: 26 });
-  spikes.push({ x: 2415, y: FLOOR - 26, width: 40, height: 26 });
-  walls.push({ x: 2360, y: FLOOR - 100, width: 100, height: 14,
-    moving: true, dir: 1, speed: 1.5, startX: 2360, range: 80 });
-  G.turrets.push({ x: 2480, y: FLOOR - 32, cooldown: 0, fireRate: 140,
+  const hazardY = floorPlan[6].y;
+  spikes.push(
+    { x: 1180, y: hazardY - 26, width: 40, height: 26 },
+    { x: 1220, y: hazardY - 26, width: 40, height: 26 },
+    { x: 1260, y: hazardY - 26, width: 40, height: 26 },
+    { x: 1300, y: hazardY - 26, width: 40, height: 26 },
+    { x: 1340, y: hazardY - 26, width: 40, height: 26 }
+  );
+  walls.push({ x: 1180, y: hazardY - 120, width: 220, height: 14, moving: true, dir: 1, speed: 1.5, startX: 1180, range: 120 });
+  G.turrets.push({ x: 2000, y: hazardY - 32, cooldown: 0, fireRate: 140,
     hp: 3, maxHp: 3, armed: true });
   tutorialState.zoneSigns.push({
-    wx: 2302, wy: FLOOR - 200, title: '[ ZONE 7 ]  HAZARDS',
+    wx: 160, wy: hazardY - 200, title: '[ ZONE 7 ]  HAZARDS',
     lines: ['RED SPIKES = instant death!', 'Ride the moving platform.', 'Destroy the turret!'],
     color: '#ef9a9a', width: 252
   });
-  tutorialState.zoneDividers.push({ wx: 2530, wy: FLOOR - 260, height: 270, color: '#ef9a9a' });
-  TUTORIAL_TRIGGERS.push({ x: 2500, y: FLOOR - 200, w: 40, h: 200,
+  tutorialState.zoneDividers.push({ wx: 420, wy: hazardY - 260, height: 260, color: '#ef9a9a' });
+  TUTORIAL_TRIGGERS.push({ x: 200, y: hazardY - 200, w: 200, h: 200,
     zoneId: 'hazards', message: '✅ Zone 7 — HAZARDS survived!', color: '#ef9a9a' });
 
   // ── ZONE 8: POTATO CANNON ─────────────────────
-  walls.push({ x: 2560, y: FLOOR, width: 210, height: WT });
-  potato.x = 2600; potato.y = FLOOR - 30;
+  const potatoY = floorPlan[7].y;
+  potato.x = 2600; potato.y = potatoY - 30;
   potato.collected = false;
   hasPotato = false;
-  ovens.push({ x: 2710, y: FLOOR - 60, width: 40, height: 50, active: true, baked: false, glow: 0 });
-  G.snails.push({ x: 2680, y: FLOOR - 28, width: 28, height: 20,
+  ovens.push({ x: 2700, y: potatoY - 60, width: 40, height: 50, active: true, baked: false, glow: 0 });
+  G.snails.push({ x: 2480, y: potatoY - 28, width: 28, height: 20,
     dx: 0, dy: 0, dir: -1, speed: 0.4, gravity: 0.6, chaseRange: 200,
     knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
     hp: 3, maxHp: 3, hitFlash: 0, frame: 0, frameTimer: 0 });
   tutorialState.zoneSigns.push({
-    wx: 2562, wy: FLOOR - 210, title: '[ ZONE 8 ]  POTATO CANNON 🥔',
+    wx: 2200, wy: potatoY - 210, title: '[ ZONE 8 ]  POTATO CANNON 🥔',
     lines: ['Pick up the POTATO.', 'AIM with MOUSE, CLICK to fire.', 'Walk into the OVEN to BAKE', 'for EXPLOSIVE shots!'],
     color: '#ffd54f', width: 265
   });
-  TUTORIAL_TRIGGERS.push({ x: 2760, y: FLOOR - 200, w: 40, h: 200,
+  TUTORIAL_TRIGGERS.push({ x: 2400, y: potatoY - 200, w: 200, h: 200,
     zoneId: 'potato', message: '🥔 Zone 8 — Tutorial COMPLETE!', color: '#ffd54f' });
-
-  // ── SHARED INFRASTRUCTURE ─────────────────────
-  ladders.push({ x: 62, y: FLOOR, width: 30, height: 1550 }); // left recovery
 
   // Zone lighting
   const zColors  = ['#4fc3f7','#81c784','#ffb74d','#00e5ff','#f06292','#ce93d8','#ef9a9a','#ffd54f'];
-  const zCenters = [260, 630, 950, 1270, 1600, 1990, 2410, 2660];
-  for (let i = 0; i < 8; i++) {
-    lights.push({ x: zCenters[i], y: FLOOR - 20, radius: 280, intensity: 0.75,
+  const zXs      = [220, 260, 1200, 220, 220, 1800, 220, 2400];
+  for (let i = 0; i < floorPlan.length; i++) {
+    lights.push({ x: zXs[i], y: floorPlan[i].y - 20, radius: 280, intensity: 0.75,
       color: zColors[i], baseRadius: 280, baseIntensity: 0.75,
       flickerSpeed: 0.3 + i * 0.08, flickerAmount: 0.08 });
   }
 
-  player.x = 100;
-  player.y = FLOOR - 50;
+  player.x = 80;
+  player.y = floorPlan[7].y - 50;
 }
     
 //Debugging Map
@@ -5692,301 +5992,115 @@ function loadMap_Level2() {
   G.tables = [];
   addMapBounds();
 
-  /* ==================== LEVEL 2: THE TOWER ====================
-   * Theme: Vertical platforming with branching paths
-   * Features: Multiple routes (left/right), seesaw puzzles, trap gauntlets
-   * Design: Bottom → Mid → Upper → Summit
-   * =========================================================== */
+  // ── Level: Spikes and Moving ── (generated by Level Editor)
+// Paste inside your startLevel / wave function after clearing arrays
 
-  /* ------------------ GROUND FLOOR (Safe spawn) ------------------ */
-  walls.push(
-    { x: 50, y: 1950, width: 700, height: 30 },    // Main floor
-    { x: 900, y: 1950, width: 700, height: 30 }
-  );
+walls.push(
+  { x: 1740, y: 1388, width: 150, height: 20 },
+  { x: 1824, y: 976, width: 100, height: 20 },
+  { x: 1736, y: 976, width: 52, height: 20 }
+);
 
-  // Starting platforms
-  walls.push(
-    { x: 200, y: 1850, width: 120, height: 20 },
-    { x: 400, y: 1750, width: 120, height: 20 },
-    { x: 200, y: 1650, width: 120, height: 20 }
-  );
+walls.push(
+  { x: 420, y: 460, width: 500, height: 20, moving: true, dir: 1, speed: 3, startX: 420, range: 100 },
+  { x: 30, y: 420, width: 200, height: 20, moving: true, dir: 1, speed: 1.1, startY: 420, range: 300 },
+  { x: 1824, y: 1168, width: 24, height: 80, moving: true, dir: -1, speed: 1.5, startX: 1824, range: 50 },
+  { x: 1760, y: 1088, width: 24, height: 80, moving: true, dir: 1, speed: 1.5, startX: 1760, range: 50 },
+  { x: 1824, y: 1008, width: 24, height: 80, moving: true, dir: -1, speed: 1.5, startX: 1824, range: 50 },
+  { x: 1760, y: 1252, width: 24, height: 80, moving: true, dir: 1, speed: 1.5, startX: 1760, range: 50 },
+  { x: 408, y: 580, width: 24, height: 328, moving: true, dir: 1, speed: 1.5, startX: 408, range: 100 },
+  { x: 1284, y: 748, width: 16, height: 368, moving: true, dir: 1, speed: 2.5, startY: 748, range: 100 },
+  { x: 576, y: 1108, width: 472, height: 20, moving: true, dir: 1, speed: 1, startX: 576, range: 100 },
+  { x: 1648, y: 520, width: 140, height: 20, moving: true, dir: 1, speed: 1.5, startX: 1648, range: 100 },
+  { x: 1350, y: 2024, width: 152, height: 20, moving: true, dir: 1, speed: 3.5, startX: 1350, range: 1350 },
+  { x: 516, y: 1788, width: 356, height: 20, moving: true, dir: 1, speed: 1.5, startX: 516, range: 100 },
+  { x: 2520, y: 1604, width: 20, height: 400, moving: true, dir: 1, speed: 1.5, startX: 2520, range: 100 },
+  { x: 2442, y: 1604, width: 20, height: 400, moving: true, dir: 1, speed: 1.5, startX: 2442, range: 100 },
+  { x: 2196, y: 1604, width: 168, height: 20, moving: true, dir: 1, speed: 1.7, startX: 2196, range: 200 }
+);
 
-  /* ------------------ LEFT PATH: Box Puzzle Route ------------------ */
-  
-  // Left staircase with boxes
-  walls.push(
-    { x: 100, y: 1550, width: 150, height: 20 },
-    { x: 100, y: 1450, width: 150, height: 20 },
-    { x: 100, y: 1350, width: 150, height: 20 }
-  );
+spikes.push(
+  { x: 0, y: 2044, width: 40, height: 26 },
+  { x: 40, y: 2044, width: 40, height: 26 },
+  { x: 80, y: 2044, width: 40, height: 26 },
+  { x: 200, y: 2044, width: 40, height: 26 },
+  { x: 160, y: 2044, width: 40, height: 26 },
+  { x: 120, y: 2044, width: 40, height: 26 },
+  { x: 240, y: 2044, width: 40, height: 26 },
+  { x: 360, y: 2044, width: 40, height: 26 },
+  { x: 320, y: 2044, width: 40, height: 26 },
+  { x: 280, y: 2044, width: 40, height: 26 },
+  { x: 400, y: 2044, width: 40, height: 26 },
+  { x: 600, y: 2044, width: 40, height: 26 },
+  { x: 480, y: 2044, width: 40, height: 26 },
+  { x: 680, y: 2044, width: 40, height: 26 },
+  { x: 520, y: 2044, width: 40, height: 26 },
+  { x: 560, y: 2044, width: 40, height: 26 },
+  { x: 640, y: 2044, width: 40, height: 26 },
+  { x: 440, y: 2044, width: 40, height: 26 },
+  { x: 1120, y: 2044, width: 40, height: 26 },
+  { x: 1240, y: 2044, width: 40, height: 26 },
+  { x: 1160, y: 2044, width: 40, height: 26 },
+  { x: 1280, y: 2044, width: 40, height: 26 },
+  { x: 1320, y: 2044, width: 40, height: 26 },
+  { x: 840, y: 2044, width: 40, height: 26 },
+  { x: 800, y: 2044, width: 40, height: 26 },
+  { x: 760, y: 2044, width: 40, height: 26 },
+  { x: 720, y: 2044, width: 40, height: 26 },
+  { x: 880, y: 2044, width: 40, height: 26 },
+  { x: 960, y: 2044, width: 40, height: 26 },
+  { x: 920, y: 2044, width: 40, height: 26 },
+  { x: 1000, y: 2044, width: 40, height: 26 },
+  { x: 1200, y: 2044, width: 40, height: 26 },
+  { x: 1080, y: 2044, width: 40, height: 26 },
+  { x: 1040, y: 2044, width: 40, height: 26 },
+  { x: 1400, y: 2044, width: 40, height: 26 },
+  { x: 1560, y: 2044, width: 40, height: 26 },
+  { x: 1520, y: 2044, width: 40, height: 26 },
+  { x: 1480, y: 2044, width: 40, height: 26 },
+  { x: 1720, y: 2044, width: 40, height: 26 },
+  { x: 1680, y: 2044, width: 40, height: 26 },
+  { x: 1640, y: 2044, width: 40, height: 26 },
+  { x: 1600, y: 2044, width: 40, height: 26 },
+  { x: 1440, y: 2044, width: 40, height: 26 },
+  { x: 1360, y: 2044, width: 40, height: 26 },
+  { x: 1760, y: 2044, width: 40, height: 26 },
+  { x: 1800, y: 2044, width: 40, height: 26 },
+  { x: 1840, y: 2044, width: 40, height: 26 },
+  { x: 1880, y: 2044, width: 40, height: 26 },
+  { x: 1920, y: 2044, width: 40, height: 26 },
+  { x: 1960, y: 2044, width: 40, height: 26 },
+  { x: 2000, y: 2044, width: 40, height: 26 },
+  { x: 2040, y: 2044, width: 40, height: 26 },
+  { x: 2080, y: 2044, width: 40, height: 26 },
+  { x: 2120, y: 2044, width: 40, height: 26 },
+  { x: 2160, y: 2044, width: 40, height: 26 },
+  { x: 2200, y: 2044, width: 40, height: 26 },
+  { x: 2240, y: 2044, width: 40, height: 26 },
+  { x: 2280, y: 2044, width: 40, height: 26 },
+  { x: 2320, y: 2044, width: 40, height: 26 },
+  { x: 2360, y: 2044, width: 40, height: 26 },
+  { x: 2400, y: 2044, width: 40, height: 26 },
+  { x: 2440, y: 2044, width: 40, height: 26 },
+  { x: 2480, y: 2044, width: 40, height: 26 },
+  { x: 2520, y: 2044, width: 40, height: 26 },
+  { x: 2560, y: 2044, width: 40, height: 26 },
+  { x: 2600, y: 2044, width: 40, height: 26 },
+  { x: 2640, y: 2044, width: 40, height: 26 },
+  { x: 2680, y: 2044, width: 40, height: 26 },
+  { x: 2720, y: 2044, width: 40, height: 26 },
+  { x: 2760, y: 2044, width: 40, height: 26 }
+);
 
-  // Box puzzle area
-  boxes.push(
-    createBox(120, 1518, BOX_TYPE.NORMAL),
-    createBox(152, 1518, BOX_TYPE.NORMAL),
-    createBox(136, 1486, BOX_TYPE.NORMAL),
-    createBox(120, 1418, BOX_TYPE.BOUNCY),  // Bouncy to reach upper
-    createBox(160, 1418, BOX_TYPE.HEAVY)
-  );
+ladders.push(
+  { x: 1788, y: 976, width: 36, height: 412 }
+);
 
-  // Left upper platforms
-  walls.push(
-    { x: 80, y: 1250, width: 140, height: 20 },
-    { x: 120, y: 1150, width: 140, height: 20 },
-    { x: 80, y: 1050, width: 140, height: 20 }
-  );
+seesaws.push(
+  { x: 336, y: 376, width: 150, height: 8, angle: 0, angularVelocity: 0 },
+  { x: 1240, y: 576, width: 120, height: 8, angle: 0, angularVelocity: 0 },
+  { x: 2092, y: 1108, width: 152, height: 12, angle: 0, angularVelocity: 0 }
 
-  // Left route snail
-  G.snails.push({
-    x: 140, y: 1520, width: 28, height: 20,
-    dx: 0, dy: 0, dir: 1, speed: 0.7,
-    chaseRange: 400, gravity: 0.6,
-    knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-    hp: 1, maxHp: 1, hitFlash: 0, frame: 0,
-  frameTimer: 0
-  });
-
-  /* ------------------ RIGHT PATH: Seesaw & Precision Route ------------------ */
-
-  // Right stepping stones
-  walls.push(
-    { x: 1100, y: 1850, width: 120, height: 20 },
-    { x: 1300, y: 1750, width: 120, height: 20 },
-    { x: 1500, y: 1650, width: 120, height: 20 }
-  );
-
-  // First seesaw challenge
-  seesaws.push({
-    x: 1150,
-    y: 1550,
-    width: 200,
-    height: 12,
-    angle: 0,
-    angularVelocity: 0
-  });
-
-  // Boxes for seesaw weight
-  boxes.push(
-    createBox(1180, 1518, BOX_TYPE.HEAVY),
-    createBox(1280, 1518, BOX_TYPE.NORMAL)
-  );
-
-  // Right upper platforms
-  walls.push(
-    { x: 1400, y: 1450, width: 140, height: 20 },
-    { x: 1500, y: 1350, width: 140, height: 20 },
-    { x: 1400, y: 1250, width: 140, height: 20 }
-  );
-
-  // Right route enemy
-  G.SuperSnails.push({
-    x: 1450, y: 1420, width: 28, height: 20,
-    dx: 0, dy: 0, speed: 1.8, gravity: 0.5,
-    dir: -1, jumpPower: -14, mode: "ground",
-    knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-    jumpTimer: 0, lastWallSide: null, prevMode: "ground",
-    hp: 3, maxHp: 3, hitFlash: 0
-  });
-
-  /* ------------------ MIDDLE SECTION: Convergence ------------------ */
-
-  // Center platform where paths meet
-  walls.push(
-    { x: 600, y: 1400, width: 300, height: 30 }
-  );
-
-  // Moving platform across gap
-  walls.push({
-    x: 400, y: 1300, width: 120, height: 20,
-    moving: true, dir: 1, speed: 2, startX: 400, range: 250
-  });
-
-  // Spike trap below moving platform
-  spikes.push(
-    { x: 420, y: 1374, width: 40, height: 26 },
-    { x: 480, y: 1374, width: 40, height: 26 },
-    { x: 540, y: 1374, width: 40, height: 26 },
-    { x: 600, y: 1374, width: 40, height: 26 }
-  );
-
-  // Turret guarding center
-  G.turrets.push(
-    { x: 720, y: 1370, cooldown: 0, fireRate: 110, hp: 2, maxHp: 2, hitFlash: 0 }
-  );
-
-  /* ------------------ UPPER SECTION: Seesaw Gauntlet ------------------ */
-
-  walls.push(
-    { x: 300, y: 1200, width: 140, height: 20 },
-    { x: 1200, y: 1200, width: 140, height: 20 }
-  );
-
-  // Triple seesaw challenge
-  seesaws.push(
-    {
-      x: 500,
-      y: 1150,
-      width: 180,
-      height: 12,
-      angle: 0,
-      angularVelocity: 0
-    },
-    {
-      x: 750,
-      y: 1050,
-      width: 180,
-      height: 12,
-      angle: 0,
-      angularVelocity: 0
-    },
-    {
-      x: 1000,
-      y: 950,
-      width: 180,
-      height: 12,
-      angle: 0,
-      angularVelocity: 0
-    }
-  );
-
-  // Boxes for seesaw puzzles
-  boxes.push(
-    createBox(520, 1118, BOX_TYPE.NORMAL),
-    createBox(620, 1118, BOX_TYPE.ICE),
-    createBox(770, 1018, BOX_TYPE.HEAVY),
-    createBox(1020, 918, BOX_TYPE.BOUNCY),
-    createBox(1100, 918, BOX_TYPE.BREAKABLE)
-  );
-
-  // Enemies in seesaw section
-  G.snails.push(
-    {
-      x: 550, y: 1118, width: 28, height: 20,
-      dx: 0, dy: 0, dir: 1, speed: 0.8,
-      chaseRange: 350, gravity: 0.6,
-      knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-      hp: 1, maxHp: 1, hitFlash: 0, frame: 0,
-  frameTimer: 0
-    },
-    {
-      x: 1050, y: 918, width: 28, height: 20,
-      dx: 0, dy: 0, dir: -1, speed: 0.8,
-      chaseRange: 350, gravity: 0.6,
-      knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-      hp: 1, maxHp: 1, hitFlash: 0, frame: 0,
-  frameTimer: 0
-    }
-  );
-
-  /* ------------------ TRAP CORRIDOR ------------------ */
-
-  walls.push(
-    { x: 1250, y: 850, width: 140, height: 20 },
-    { x: 1450, y: 750, width: 140, height: 20 },
-    { x: 1650, y: 650, width: 140, height: 20 }
-  );
-
-  // Spike gauntlet
-  spikes.push(
-    { x: 1270, y: 824, width: 40, height: 26 },
-    { x: 1330, y: 824, width: 40, height: 26 },
-    { x: 1470, y: 724, width: 40, height: 26 },
-    { x: 1530, y: 724, width: 40, height: 26 },
-    { x: 1670, y: 624, width: 40, height: 26 }
-  );
-
-  // G.turrets in corridor
-  G.turrets.push(
-    { x: 1300, y: 820, cooldown: 0, fireRate: 90, hp: 2, maxHp: 2, hitFlash: 0 },
-    { x: 1700, y: 620, cooldown: 0, fireRate: 80, hp: 2, maxHp: 2, hitFlash: 0 }
-  );
-
-  /* ------------------ UPPER PLATFORMS: Alternative Path ------------------ */
-
-  walls.push(
-    { x: 200, y: 850, width: 160, height: 20 },
-    { x: 400, y: 750, width: 160, height: 20 },
-    { x: 600, y: 650, width: 160, height: 20 },
-    { x: 800, y: 550, width: 160, height: 20 }
-  );
-
-  // Moving platform section
-  walls.push(
-    {
-      x: 1000, y: 500, width: 120, height: 20,
-      moving: true, dir: 1, speed: 2.5, startX: 1000, range: 200
-    }
-  );
-
-  // Super snail guardian
-  G.SuperSnails.push({
-    x: 650, y: 620, width: 28, height: 20,
-    dx: 0, dy: 0, speed: 2.0, gravity: 0.5,
-    dir: 1, jumpPower: -14, mode: "ground",
-    knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-    jumpTimer: 0, lastWallSide: null, prevMode: "ground",
-    hp: 4, maxHp: 4, hitFlash: 0
-  });
-
-  /* ------------------ SUMMIT AREA ------------------ */
-
-  walls.push(
-    { x: 1200, y: 450, width: 200, height: 20 },
-    { x: 1000, y: 350, width: 200, height: 20 },
-    { x: 1200, y: 250, width: 200, height: 20 }
-  );
-
-  // Final seesaw before summit
-  seesaws.push({
-    x: 1450,
-    y: 400,
-    width: 220,
-    height: 12,
-    angle: 0,
-    angularVelocity: 0
-  });
-
-  // Final boxes
-  boxes.push(
-    createBox(1480, 368, BOX_TYPE.HEAVY),
-    createBox(1520, 368, BOX_TYPE.HEAVY),
-    createBox(1580, 368, BOX_TYPE.BOUNCY)
-  );
-
-  // Victory platform
-  walls.push(
-    { x: 1700, y: 150, width: 300, height: 30 }
-  );
-
-  // Final guardian
-  G.SuperSnails.push({
-    x: 1250, y: 220, width: 28, height: 20,
-    dx: 0, dy: 0, speed: 2.2, gravity: 0.5,
-    dir: -1, jumpPower: -14, mode: "ground",
-    knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0,
-    jumpTimer: 0, lastWallSide: null, prevMode: "ground",
-    hp: 5, maxHp: 5, hitFlash: 0
-  });
-
-  /* ------------------ RECOVERY LADDERS ------------------ */
-
-  ladders.push(
-    // Left side recovery
-    { x: 40, y: 1000, width: 40, height: 1050 },
-    
-    // Center recovery
-    { x: 560, y: 650, width: 40, height: 800 },
-    
-    // Right side recovery
-    { x: 1850, y: 400, width: 40, height: 1600 }
-  );
-
-  /* ------------------ SAFETY NETS (prevent death loops) ------------------ */
-
-  walls.push(
-    { x: 0, y: 1700, width: 300, height: 20 },     // Left catch
-    { x: 1500, y: 1500, width: 300, height: 20 },  // Right catch
-    { x: 700, y: 900, width: 200, height: 20 }     // Mid catch
   );
 }
 
@@ -6135,7 +6249,7 @@ walls.push({ x: 80, y: 980, width: 120, height: 20, ice: true });
  addMapBounds();
 
         }*/
-function startLevel(level) {
+async function startLevel(level) {
   hideAllMenus();
   document.getElementById("game").style.display = "block";
 
@@ -6143,7 +6257,7 @@ function startLevel(level) {
   resetGameState(); // reset player & flags
   initAtmosphericParticles();
   initDungeonLighting();
-  loadLevel(level); // THIS is now the only loader
+  await loadLevel(level); // THIS is now the only loader
   initDungeonAesthetics();
   if (level === 0) tutorialActive = true;
   startMusic();
@@ -6153,6 +6267,22 @@ function startLevel(level) {
   lastTimestamp = performance.now();
 
   gameLoopId = requestAnimationFrame(gameLoop);
+}
+
+function startEditorPreview() {
+  hideAllMenus();
+  document.getElementById("game").style.display = "block";
+  stopGameLoop();
+  resetGameState();
+  tutorialActive = false;
+  startLevel(1);
+}
+
+if (editorPreviewMode) {
+  window.addEventListener('load', () => {
+    finishIntro();
+    startEditorPreview();
+  });
 }
 
 canvas.width = 800;
@@ -7116,6 +7246,8 @@ function checkVehicleEntry() {
 
 function drawVehicles() {
   for (const v of vehicles) {
+    const bounds = getVehicleBounds(v);
+    if (!isEffectVisibleInWorld(bounds.x, bounds.y, bounds.width, bounds.height, 160)) continue;
     const angle = v.angle ?? 0;
     const cosA  = Math.cos(angle);
     const sinA  = Math.sin(angle);
@@ -7863,6 +7995,7 @@ function updateCheeses() {
 
 function drawCheeses() {
   for (const c of cheeses) {
+    if (!isEffectVisibleInWorld(c.x, c.y, c.width, c.height, 120)) continue;
     ctx.save();
 
     // Warning flash in last 5 seconds
@@ -8315,6 +8448,7 @@ function drawTutorialHUD() {
   
 function drawBats() {
   for (let bat of G.bats) {
+    if (!isEffectVisibleInWorld(bat.x, bat.y, bat.width, bat.height, 120)) continue;
     ctx.save();
     
     // Hit flash
@@ -9833,7 +9967,10 @@ function startWaveModeLevel(level) {
   
   stopGameLoop();
   resetGameState();
+  initAtmosphericParticles();
+  initDungeonLighting();
   loadLevel(level);
+  initDungeonAesthetics();
   startMusic();
   startWaveMode(level);
   
@@ -10915,8 +11052,9 @@ function drawLadders() {
 function drawYetis() {
   for (let y of G.yetis) {
     if (!y.alive) continue;
+    if (!isEffectVisibleInWorld(y.x, y.y, y.width, y.height, 120)) continue;
 
-        if (yetis.hitFlash > 0) {
+        if (G.yetis.hitFlash > 0) {
       ctx.fillStyle = "#f00"; // red
     } else {
       ctx.fillStyle = "#eef"; // normal green
@@ -12016,6 +12154,7 @@ if (t.onGround) {
 
 function drawTables() {
   for (let t of G.tables) {
+    if (!isEffectVisibleInWorld(t.x - 10, t.y - 20, t.width + 20, t.height + 20, 120)) continue;
     ctx.save();
 
 const cx = t.x + t.width / 2;
@@ -12281,6 +12420,7 @@ function updateChairs() {
 
 function drawChairs() {
   for (let c of G.chairs) {
+    if (!isEffectVisibleInWorld(c.x - 10, c.y - 10, c.width + 20, c.height + 20, 120)) continue;
     const img = chairFrames[c.frame];
     if (!img || !img.complete) continue;
 
@@ -13584,18 +13724,26 @@ function updateMovingPlatforms() {
     if (!wall.moving) continue;
 
     const prevX = wall.x;
+    const prevY = wall.y;
+    const useVertical = typeof wall.startY === "number";
+    const startX = typeof wall.startX === "number" ? wall.startX : wall.x;
+    const startY = typeof wall.startY === "number" ? wall.startY : wall.y;
+    const range = typeof wall.range === "number" ? wall.range : 0;
 
-    wall.x += wall.dir * wall.speed;
-
-    // per-wall bounds (NO magic numbers)
-    if (
-      wall.x > wall.startX + wall.range ||
-      wall.x < wall.startX - wall.range
-    ) {
-      wall.dir *= -1;
+    if (useVertical) {
+      wall.y += wall.dir * wall.speed;
+      if (wall.y > startY + range || wall.y < startY - range) {
+        wall.dir *= -1;
+      }
+    } else {
+      wall.x += wall.dir * wall.speed;
+      if (wall.x > startX + range || wall.x < startX - range) {
+        wall.dir *= -1;
+      }
     }
 
     const deltaX = wall.x - prevX;
+    const deltaY = wall.y - prevY;
 
     // --- PLAYER RIDING PLATFORM ---
     const standingOn =
@@ -13606,6 +13754,7 @@ function updateMovingPlatforms() {
 
     if (standingOn && player.onGround) {
       player.x += deltaX;
+      player.y += deltaY;
     }
 
     // --- BOX RIDING PLATFORM ---
@@ -13618,6 +13767,7 @@ function updateMovingPlatforms() {
 
       if (boxOn) {
         box.x += deltaX;
+        box.y += deltaY;
       }
     }
   }
@@ -13745,6 +13895,7 @@ function drawIcicles() {
 
 function drawSnowmen() {
   for (let s of G.snowmen) {
+    if (!isEffectVisibleInWorld(s.x, s.y, s.width, s.height, 120)) continue;
         if (s.hitFlash > 0) {
       ctx.fillStyle = "#f00"; // red
     } else {
@@ -14226,6 +14377,7 @@ for (let i = 0; i < atmosphericParticles.fogLayers.length; i++) {
 }
 
   for (let s of seesaws) {
+  if (!isEffectVisibleInWorld(s.x, s.y, s.width, s.height, 120)) continue;
   ctx.save();
     // --- DRAW PIVOT ---
 const pivotX = s.x + s.width / 2;
@@ -14255,14 +14407,19 @@ ctx.fill();
    drawPotato();
   drawOven();
   for (let i = 0; i < atmosphericParticles.debris.length; i++) {
-    atmosphericParticles.debris[i].draw(ctx);
+    const d = atmosphericParticles.debris[i];
+    if (!isEffectVisibleInWorld(d.x, d.y, d.width, d.height, 120)) continue;
+    d.draw(ctx);
   }
   for (let i = 0; i < atmosphericParticles.dustMotes.length; i++) {
-    atmosphericParticles.dustMotes[i].draw(ctx);
+    const m = atmosphericParticles.dustMotes[i];
+    if (!isEffectVisibleInWorld(m.x, m.y, m.size * 2, m.size * 2, 120)) continue;
+    m.draw(ctx);
   }
   drawDroppedParts();
   // Draw walls
   for (let wall of walls) {
+  if (!isEffectVisibleInWorld(wall.x, wall.y, wall.width, wall.height, 96)) continue;
 
   if (isChristmasMap() && wall.ice) {
     // ICE BODY
@@ -14316,6 +14473,7 @@ drawSpikes();
   
 function drawSnails() {
     for (let snail of G.snails) {
+    if (!isEffectVisibleInWorld(snail.x, snail.y, snail.width, snail.height, 96)) continue;
         ctx.save();
         const img = snailFrames[snail.frame];
         
@@ -14341,6 +14499,7 @@ function drawSnails() {
 function drawShopkeepers() {
   for (const s of G.shopkeepers) {
     if (!s.active) continue;
+    if (!isEffectVisibleInWorld(s.x, s.y, s.width || 32, s.height || 64, 120)) continue;
     // interaction check (world-space)
     const dx = (s.x + (s.width||32)/2) - (player.x + player.width/2);
     const dy = (s.y + (s.height||64)/2) - (player.y + player.height/2);
@@ -14384,6 +14543,7 @@ function drawShopkeepers() {
 
   // Draw boxes
   for (let b of boxes) {
+  if (!isEffectVisibleInWorld(b.x, b.y, b.width, b.height, 96)) continue;
   drawBox(b);
 }
 
@@ -14450,6 +14610,7 @@ if (potatoMessageTimer > 0) {
 
 // Draw G.turrets
 for (let t of G.turrets) {
+  if (!isEffectVisibleInWorld(t.x, t.y, 32, 32, 120)) continue;
 
   // --- POTATO CHAOS TREMBLE ---
   let shakeX = 0;
@@ -14507,6 +14668,7 @@ ctx.fillRect(t.x + 14, t.y - 6, 4, 6);
 // Draw G.fireballs
 ctx.fillStyle = "#f33";
 for (let f of G.fireballs) {
+  if (!isEffectVisibleInWorld(f.x, f.y, f.size, f.size, 120)) continue;
     ctx.beginPath();
     ctx.arc(f.x + f.size/2, f.y + f.size/2, f.size/2, 0, Math.PI*2);
     ctx.fill();
@@ -14648,11 +14810,10 @@ if (player.dashCooldown > 0) {
 
   // FPS
 if (settings.showFPS) {
-  const fps = Math.round(1000 / (deltaTime || 16));
   const hudFont = settings.largeHUD ? "16px monospace" : "12px monospace";
   ctx.fillStyle = "#0f0";
   ctx.font = hudFont;
-  ctx.fillText("FPS: " + fps, canvas.width - 450, 10);
+  ctx.fillText("FPS: " + fpsDisplay, canvas.width - 450, 10);
 }
 
 // Coords
@@ -14675,6 +14836,15 @@ saveInitialState();
 // --- MAIN LOOP ---
 function gameLoop(currentTime) {
   if (!gameRunning) return;
+
+  if (!fpsSampleTime) fpsSampleTime = currentTime;
+  fpsFrameCount++;
+  const fpsElapsed = currentTime - fpsSampleTime;
+  if (fpsElapsed >= 500) {
+    fpsDisplay = Math.round((fpsFrameCount * 1000) / fpsElapsed);
+    fpsSampleTime = currentTime;
+    fpsFrameCount = 0;
+  }
 
   // Calculate time since last frame
   deltaTime = currentTime - lastFrameTime;
@@ -14723,6 +14893,7 @@ function gameLoop(currentTime) {
         updateExplosions();
         updatePlacedStructures();
         syncJoystickVisibility();
+        syncShopButtonVisibility();
         updateSpecialBoxes();
         updateWallSliding();
         applyAirFloat();
@@ -14749,7 +14920,7 @@ function gameLoop(currentTime) {
       updateSpeedChiliTrail();
       updateLights();
       spawnSnow();
-      updateAtmosphericParticles();
+      updateAtmosphericParticlesThrottled(deltaTime);
     updateDungeonLighting();
     updateEnhancedCamera();
       updateSnow();

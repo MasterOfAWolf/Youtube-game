@@ -19,11 +19,7 @@
   --c-mwall:   #9b59b6;
   --c-spike:   #e74c3c;
   --c-ladder:  #e8a020;
-  --c-snail:   #2ecc71;
-  --c-bat:     #bb8fce;
-  --c-snowman: #85c1e9;
-  --c-turret:  #e67e22;
-  --c-spawn:   #f1c40f;
+  --c-seesaw:  #f39c12;
 }
 
 html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'Courier New',monospace; }
@@ -157,6 +153,7 @@ body.cur-grabbing  #cv { cursor:grabbing; }
   <div class="hsep"></div>
   <div class="hinfo" style="margin-left:auto;gap:8px">
     Level: <input type="text" id="level-name" value="my_level">
+    <button class="btn"    onclick="previewLevel()">▶ Preview</button>
     <button class="btn ba" onclick="saveLevel()">💾 Save</button>
     <button class="btn"    onclick="loadPrompt()">📂 Load</button>
     <button class="btn bd" onclick="clearAll()">🗑 Clear</button>
@@ -173,15 +170,9 @@ body.cur-grabbing  #cv { cursor:grabbing; }
     <button class="tbtn active" id="t-wall"  onclick="setTool('wall')"  title="Wall  [W]">🟦<span class="tl">wall</span></button>
     <button class="tbtn" id="t-wall-moving"  onclick="setTool('wall-moving')" title="Moving Wall  [M]">🟪<span class="tl">moving</span></button>
     <div class="tsep"></div>
-    <button class="tbtn" id="t-spike"  onclick="setTool('spike')"  title="Spike  [S]">🔺<span class="tl">spike</span></button>
-    <button class="tbtn" id="t-ladder" onclick="setTool('ladder')" title="Ladder  [L]">🪜<span class="tl">ladder</span></button>
-    <div class="tsep"></div>
-    <button class="tbtn" id="t-snail"   onclick="setTool('snail')"   title="Snail  [1]">🐌<span class="tl">snail</span></button>
-    <button class="tbtn" id="t-bat"     onclick="setTool('bat')"     title="Bat  [2]">🦇<span class="tl">bat</span></button>
-    <button class="tbtn" id="t-snowman" onclick="setTool('snowman')" title="Snowman  [3]">⛄<span class="tl">snowman</span></button>
-    <button class="tbtn" id="t-turret"  onclick="setTool('turret')"  title="Turret  [4]">🔴<span class="tl">turret</span></button>
-    <div class="tsep"></div>
-    <button class="tbtn" id="t-spawn" onclick="setTool('spawn')" title="Player Spawn  [P]">🟡<span class="tl">spawn</span></button>
+    <button class="tbtn" id="t-spike"   onclick="setTool('spike')"   title="Spike  [S]">🔺<span class="tl">spike</span></button>
+    <button class="tbtn" id="t-ladder"  onclick="setTool('ladder')"  title="Ladder  [L]">🪜<span class="tl">ladder</span></button>
+    <button class="tbtn" id="t-seesaw"  onclick="setTool('seesaw')"  title="Seesaw  [E]">⚖️<span class="tl">seesaw</span></button>
   </div>
 
   <!-- CANVAS -->
@@ -236,15 +227,18 @@ const cw   = document.getElementById('cw');
 
 const WORLD_W = 2800, WORLD_H = 2100;
 
+const bgTile = new Image();
+bgTile.src = '../Assets/Tiles/Cobblestone BG.png';
+
 // View
 let vx = 0, vy = 0, zoom = 0.28;
 
 // State
 let tool     = 'wall';
 let objects  = [];
-let spawn    = { x: 100, y: 2000 };
 let selId    = null;
 let nextId   = 1;
+let clipObj  = null;
 
 // Draw drag
 let drawing = false, dsx = 0, dsy = 0, dcx = 0, dcy = 0;
@@ -268,26 +262,16 @@ const META = {
   'wall-moving':{ col:'#9b59b6', label:'Moving Wall', rect:true  },
   spike:       { col:'#e74c3c', label:'Spike',        rect:true  },
   ladder:      { col:'#e8a020', label:'Ladder',       rect:true  },
-  snail:       { col:'#2ecc71', label:'Snail',        rect:false },
-  bat:         { col:'#bb8fce', label:'Bat',          rect:false },
-  snowman:     { col:'#85c1e9', label:'Snowman',      rect:false },
-  turret:      { col:'#e67e22', label:'Turret',       rect:false },
-  spawn:       { col:'#f1c40f', label:'Player Spawn', rect:false },
+  seesaw:      { col:'#f39c12', label:'Seesaw',       rect:true  },
 };
 
-const DFLT_SIZE = {
-  snail:{ w:28,h:20 }, bat:{ w:28,h:20 }, snowman:{ w:26,h:38 }, turret:{ w:24,h:32 }, spawn:{ w:24,h:40 }
-};
+const DFLT_SIZE = {};
 
-const EMOJI = { snail:'🐌', bat:'🦇', snowman:'⛄', turret:'🔴' };
+const EMOJI = {};
 
 // ── Object factory ─────────────────────────────────────────
 function makeObj(type, x, y, w, h) {
   const o = { id: nextId++, type, x, y, width: w, height: h };
-  if (type==='snail')        Object.assign(o, { dir:1, speed:0.2, hp:2, maxHp:2 });
-  if (type==='bat')          Object.assign(o, { hp:2, maxHp:2 });
-  if (type==='snowman')      Object.assign(o, { speed:0.5, hp:3, maxHp:3 });
-  if (type==='turret')       Object.assign(o, { fireRate:140, hp:3, maxHp:3, armed:true });
   if (type==='wall-moving')  Object.assign(o, { speed:1.5, range:100, axis:'h' });
   return o;
 }
@@ -298,22 +282,22 @@ function snapV(v){ return snapOn ? Math.round(v/snap)*snap : Math.round(v); }
 
 // ── Undo ──────────────────────────────────────────────────
 function pushUndo(){
-  undoStack.push(JSON.stringify({objects,spawn,nextId}));
+  undoStack.push(JSON.stringify({objects,nextId}));
   if(undoStack.length>80) undoStack.shift();
   redoStack=[];
 }
 function undo(){
   if(!undoStack.length) return;
-  redoStack.push(JSON.stringify({objects,spawn,nextId}));
+  redoStack.push(JSON.stringify({objects,nextId}));
   restore(JSON.parse(undoStack.pop()));
 }
 function redo(){
   if(!redoStack.length) return;
-  undoStack.push(JSON.stringify({objects,spawn,nextId}));
+  undoStack.push(JSON.stringify({objects,nextId}));
   restore(JSON.parse(redoStack.pop()));
 }
 function restore(s){
-  objects=s.objects; spawn=s.spawn; nextId=s.nextId;
+  objects=s.objects; nextId=s.nextId;
   selId=null; refreshUI();
 }
 
@@ -321,13 +305,10 @@ function restore(s){
 function hit(wx,wy){
   for(let i=objects.length-1;i>=0;i--){
     const o=objects[i];
-    const w=o.width||DFLT_SIZE[o.type]?.w||20;
-    const h=o.height||DFLT_SIZE[o.type]?.h||20;
+    const w=o.width||20;
+    const h=o.height||20;
     if(wx>=o.x&&wx<=o.x+w&&wy>=o.y&&wy<=o.y+h) return o;
   }
-  const sw=DFLT_SIZE.spawn.w, sh=DFLT_SIZE.spawn.h;
-  if(wx>=spawn.x&&wx<=spawn.x+sw&&wy>=spawn.y&&wy<=spawn.y+sh)
-    return {id:'__spawn__',type:'spawn',...spawn,width:sw,height:sh};
   return null;
 }
 
@@ -374,15 +355,6 @@ cv.addEventListener('mousedown', e=>{
   if(META[tool]?.rect){
     drawing=true; dsx=wx; dsy=wy; dcx=wx; dcy=wy; return;
   }
-
-  // Click-place tools
-  pushUndo();
-  if(tool==='spawn'){ spawn={x:wx,y:wy}; refreshUI(); return; }
-  if(DFLT_SIZE[tool]){
-    const sz=DFLT_SIZE[tool];
-    const o=makeObj(tool,wx,wy,sz.w,sz.h);
-    objects.push(o); selId=o.id; refreshUI(); return;
-  }
 });
 
 cv.addEventListener('mousemove', e=>{
@@ -395,8 +367,7 @@ cv.addEventListener('mousemove', e=>{
   }
   if(moving&&selId!==null){
     const wx=snapV(raw.x-mOffX), wy=snapV(raw.y-mOffY);
-    if(selId==='__spawn__'){ spawn.x=wx; spawn.y=wy; }
-    else { const o=objects.find(o=>o.id===selId); if(o){o.x=wx;o.y=wy;} }
+    const o=objects.find(o=>o.id===selId); if(o){o.x=wx;o.y=wy;}
     refreshProps(); render(); return;
   }
   if(drawing){ dcx=snapV(raw.x); dcy=snapV(raw.y); render(); return; }
@@ -411,9 +382,11 @@ cv.addEventListener('mouseup', e=>{
   if(moving){ moving=false; refreshUI(); return; }
   if(drawing&&e.button===0){
     drawing=false;
-    const x1=Math.min(dsx,dcx), y1=Math.min(dsy,dcy);
-    const w=Math.max(Math.abs(dcx-dsx),snap||4);
-    const h=Math.max(Math.abs(dcy-dsy),snap||4);
+    let x1=Math.min(dsx,dcx), y1=Math.min(dsy,dcy);
+    let w=Math.max(Math.abs(dcx-dsx),snap||4);
+    let h=Math.max(Math.abs(dcy-dsy),snap||4);
+    // Spikes always use fixed dimensions
+    if(tool==='spike'){ w=40; h=26; }
     if(w>2&&h>2){
       pushUndo();
       const o=makeObj(tool,x1,y1,w,h);
@@ -446,7 +419,9 @@ window.addEventListener('keydown',e=>{
   if((e.key==='Delete'||e.key==='Backspace')&&selId) del(selId);
   if(e.ctrlKey&&e.key==='z'){ e.preventDefault(); undo(); }
   if(e.ctrlKey&&e.key==='y'){ e.preventDefault(); redo(); }
-  const map={v:'select',w:'wall',m:'wall-moving',s:'spike',l:'ladder','1':'snail','2':'bat','3':'snowman','4':'turret',p:'spawn'};
+  if(e.ctrlKey&&e.key.toLowerCase()==='c'){ e.preventDefault(); copySelected(); }
+  if(e.ctrlKey&&e.key.toLowerCase()==='v'){ e.preventDefault(); pasteSelected(); }
+  const map={v:'select',w:'wall',m:'wall-moving',s:'spike',l:'ladder',e:'seesaw'};
   if(!e.ctrlKey&&map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()]);
 });
 window.addEventListener('keyup',e=>{ if(e.key===' ') spaceDown=false; });
@@ -457,6 +432,29 @@ function del(id){
   objects=objects.filter(o=>o.id!==id); selId=null; refreshUI();
 }
 function deleteSelected(){ del(selId); }
+
+// ── Copy / Paste ─────────────────────────────────────────
+function copySelected(){
+  const o=getSelObj();
+  if(!o) return;
+  clipObj=JSON.parse(JSON.stringify(o));
+}
+
+function pasteSelected(){
+  if(!clipObj) return;
+  pushUndo();
+  const wx=snapV(mouseWX);
+  const wy=snapV(mouseWY);
+  const o=JSON.parse(JSON.stringify(clipObj));
+  o.id=nextId++;
+  // Place near cursor; fallback to offset if cursor is invalid
+  if(Number.isFinite(wx)&&Number.isFinite(wy)){
+    o.x=wx; o.y=wy;
+  } else {
+    o.x=(o.x||0)+snap; o.y=(o.y||0)+snap;
+  }
+  objects.push(o); selId=o.id; refreshUI();
+}
 
 // ── Render ────────────────────────────────────────────────
 function render(){
@@ -471,6 +469,15 @@ function render(){
 
   // World bg
   ctx.fillStyle='#0c0c1a'; ctx.fillRect(0,0,WORLD_W,WORLD_H);
+  if(!snapOn&&bgTile.complete){
+    const tw=bgTile.width||100, th=bgTile.height||100;
+    const cols=Math.ceil(WORLD_W/tw), rows=Math.ceil(WORLD_H/th);
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        ctx.drawImage(bgTile, x*tw, y*th, tw, th);
+      }
+    }
+  }
 
   // Grid
   if(snapOn&&zoom>0.06){
@@ -512,8 +519,8 @@ function render(){
   // Objects
   for(const o of objects) drawObj(o);
 
-  // Player spawn
-  drawSpawn();
+  // Top-left spawn indicator (fixed, non-interactive)
+  drawSpawnIndicator();
 
   // Ghost while drawing
   if(drawing){
@@ -547,68 +554,51 @@ function render(){
 
 function drawObj(o){
   const sel=o.id===selId;
-  const c=META[o.type]?.col||'#fff';
   const w=o.width||DFLT_SIZE[o.type]?.w||20;
   const h=o.height||DFLT_SIZE[o.type]?.h||20;
   ctx.save();
 
   if(o.type==='spike'){
-    ctx.fillStyle=c+'22'; ctx.fillRect(o.x,o.y,w,h);
-    ctx.fillStyle=c;
-    const cnt=Math.max(1,Math.floor(w/10));
-    const tw=w/cnt;
-    for(let i=0;i<cnt;i++){
-      ctx.beginPath();
-      ctx.moveTo(o.x+i*tw,o.y+h);
-      ctx.lineTo(o.x+(i+.5)*tw,o.y);
-      ctx.lineTo(o.x+(i+1)*tw,o.y+h);
-      ctx.closePath(); ctx.fill();
-    }
+    ctx.fillStyle='#d33';
+    ctx.beginPath();
+    ctx.moveTo(o.x, o.y + h);
+    ctx.lineTo(o.x + w / 2, o.y);
+    ctx.lineTo(o.x + w, o.y + h);
+    ctx.closePath(); ctx.fill();
 
   } else if(o.type==='ladder'){
-    ctx.fillStyle=c+'18'; ctx.fillRect(o.x,o.y,w,h);
-    ctx.strokeStyle=c; ctx.lineWidth=1.5/zoom;
-    ctx.beginPath();
-    ctx.moveTo(o.x+5,o.y); ctx.lineTo(o.x+5,o.y+h);
-    ctx.moveTo(o.x+w-5,o.y); ctx.lineTo(o.x+w-5,o.y+h);
-    ctx.stroke();
-    ctx.lineWidth=1/zoom;
-    for(let ry=o.y+10;ry<o.y+h;ry+=16){
-      ctx.beginPath(); ctx.moveTo(o.x+5,ry); ctx.lineTo(o.x+w-5,ry); ctx.stroke();
-    }
+    ctx.fillStyle='#b5651d';
+    ctx.fillRect(o.x,o.y,w,h);
 
   } else if(o.type==='wall'){
-    ctx.fillStyle=c+'2a'; ctx.fillRect(o.x,o.y,w,h);
-    ctx.fillStyle=c+'55'; ctx.fillRect(o.x,o.y,w,3);
-    ctx.strokeStyle=c+'99'; ctx.lineWidth=1/zoom; ctx.strokeRect(o.x,o.y,w,h);
+    ctx.fillStyle='#444';
+    ctx.fillRect(o.x,o.y,w,h);
 
   } else if(o.type==='wall-moving'){
-    ctx.fillStyle=c+'25'; ctx.fillRect(o.x,o.y,w,h);
-    ctx.strokeStyle=c; ctx.lineWidth=1.5/zoom;
+    ctx.fillStyle='#444';
+    ctx.fillRect(o.x,o.y,w,h);
+    ctx.strokeStyle='rgba(180,180,220,0.55)';
+    ctx.lineWidth=1.5/zoom;
     ctx.setLineDash([5/zoom,4/zoom]); ctx.strokeRect(o.x,o.y,w,h); ctx.setLineDash([]);
     // Arrow showing axis
     const ax=o.x+w/2, ay=o.y+h/2, ar=Math.min(w,h)*.28;
-    ctx.fillStyle=c+'cc'; ctx.strokeStyle=c+'cc'; ctx.lineWidth=1.5/zoom;
+    ctx.strokeStyle='rgba(180,180,220,0.7)'; ctx.lineWidth=1.5/zoom;
     if(o.axis==='h'){
       arrow(o.x+w/2-ar, ay, o.x+w/2+ar, ay);
     } else {
       arrow(ax, o.y+h/2-ar, ax, o.y+h/2+ar);
     }
 
-  } else {
-    // Point object
-    ctx.fillStyle=c+'2a'; ctx.strokeStyle=c; ctx.lineWidth=1.5/zoom;
-    ctx.beginPath();
-    if(ctx.roundRect) ctx.roundRect(o.x,o.y,w,h,3/zoom);
-    else ctx.rect(o.x,o.y,w,h);
-    ctx.fill(); ctx.stroke();
-    // Emoji
-    const em=EMOJI[o.type];
-    if(em&&zoom>0.12){
-      const fs=Math.min(h*.65,14)/zoom;
-      ctx.font=`${fs}px serif`; ctx.textAlign='center';
-      ctx.fillText(em, o.x+w/2, o.y+h/2+fs*.35);
-    }
+  } else if(o.type==='seesaw'){
+    // Pivot
+    const px=o.x+w/2, py=o.y;
+    ctx.fillStyle='#222';
+    ctx.beginPath(); ctx.arc(px, py, 5/zoom, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#888';
+    ctx.beginPath(); ctx.arc(px-1/zoom, py-1/zoom, 2/zoom, 0, Math.PI*2); ctx.fill();
+    // Plank
+    ctx.fillStyle='#950';
+    ctx.fillRect(o.x,o.y,w,h);
   }
 
   // Selection ring + handles
@@ -625,24 +615,18 @@ function drawObj(o){
   ctx.restore();
 }
 
-function drawSpawn(){
-  const x=spawn.x, y=spawn.y;
-  const w=DFLT_SIZE.spawn.w, h=DFLT_SIZE.spawn.h;
-  const sel=selId==='__spawn__';
+function drawSpawnIndicator(){
+  // Spawn is always top-left — show a non-interactive marker
   ctx.save();
   ctx.fillStyle='#f1c40f18';
   ctx.strokeStyle='#f1c40f'; ctx.lineWidth=1.5/zoom;
   ctx.setLineDash([5/zoom,4/zoom]);
-  ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
-  ctx.fillRect(x,y,w,h);
+  ctx.strokeRect(0,0,24,40); ctx.setLineDash([]);
+  ctx.fillRect(0,0,24,40);
   if(zoom>0.12){
-    const fs=10/zoom;
+    const fs=8/zoom;
     ctx.font=`${fs}px monospace`; ctx.textAlign='center'; ctx.fillStyle='#f1c40f';
-    ctx.fillText('SPAWN', x+w/2, y+h/2+fs*.35);
-  }
-  if(sel){
-    ctx.strokeStyle='#fff'; ctx.lineWidth=2/zoom; ctx.setLineDash([]);
-    ctx.strokeRect(x-3/zoom,y-3/zoom,w+6/zoom,h+6/zoom);
+    ctx.fillText('SPAWN', 12, 22+fs*.35);
   }
   ctx.restore();
 }
@@ -664,7 +648,6 @@ function refreshUI(){ refreshProps(); refreshList(); statusBar(); render(); }
 
 function getSelObj(){
   if(!selId) return null;
-  if(selId==='__spawn__') return {id:'__spawn__',type:'spawn',...spawn,width:DFLT_SIZE.spawn.w,height:DFLT_SIZE.spawn.h};
   return objects.find(o=>o.id===selId)||null;
 }
 
@@ -681,15 +664,22 @@ function refreshProps(){
 
   const row=(lbl,key,type,extra='')=>
     `<div class="prow"><label>${lbl}</label><input type="${type}" value="${o[key]??''}" data-key="${key}" onchange="setProp(this)" ${extra}></div>`;
-  const chk=(lbl,key)=>
-    `<div class="prow"><label>${lbl}</label><input type="checkbox" data-key="${key}" onchange="setProp(this)" ${o[key]?'checked':''}></div>`;
   const sel=(lbl,key,opts)=>
     `<div class="prow"><label>${lbl}</label><select data-key="${key}" onchange="setProp(this)">${opts}</select></div>`;
 
   h+=row('X','x','number');
   h+=row('Y','y','number');
 
-  if(META[o.type]?.rect){ h+=row('W','width','number'); h+=row('H','height','number'); }
+  if(META[o.type]?.rect){
+    // Spikes are always fixed size — show read-only dims
+    if(o.type==='spike'){
+      h+=`<div class="prow"><label>W</label><input type="number" value="40" data-key="width" onchange="setProp(this)" readonly style="opacity:.5;cursor:not-allowed"></div>`;
+      h+=`<div class="prow"><label>H</label><input type="number" value="26" data-key="height" onchange="setProp(this)" readonly style="opacity:.5;cursor:not-allowed"></div>`;
+    } else {
+      h+=row('W','width','number');
+      h+=row('H','height','number');
+    }
+  }
 
   if(o.type==='wall-moving'){
     h+=row('Speed','speed','number','step="0.5"');
@@ -698,20 +688,6 @@ function refreshProps(){
       `<option value="h" ${o.axis==='h'?'selected':''}>↔ Horizontal</option>
        <option value="v" ${o.axis==='v'?'selected':''}>↕ Vertical</option>`);
   }
-  if(o.type==='snail'){
-    h+=row('HP','hp','number');
-    h+=row('Speed','speed','number','step="0.1"');
-    h+=sel('Dir','dir',
-      `<option value="1"  ${o.dir===1? 'selected':''}>→ Right</option>
-       <option value="-1" ${o.dir===-1?'selected':''}>← Left</option>`);
-  }
-  if(o.type==='bat')     { h+=row('HP','hp','number'); }
-  if(o.type==='snowman') { h+=row('HP','hp','number'); h+=row('Speed','speed','number','step="0.1"'); }
-  if(o.type==='turret')  {
-    h+=row('HP','hp','number');
-    h+=row('FireRate','fireRate','number');
-    h+=chk('Armed','armed');
-  }
   h+=`</div>`;
   area.innerHTML=h;
 }
@@ -719,12 +695,12 @@ function refreshProps(){
 function setProp(el){
   const key=el.dataset.key;
   const o=getSelObj(); if(!o) return;
+  // Spikes always have fixed dimensions
+  if(o.type==='spike'&&(key==='width'||key==='height')) return;
   let val = el.type==='checkbox' ? el.checked
            : el.type==='number'  ? parseFloat(el.value)
            : el.value;
-  if(key==='dir'&&o.type==='snail') val=parseFloat(val);
-  if(o.id==='__spawn__'){ spawn[key]=val; }
-  else { const obj=objects.find(ob=>ob.id===o.id); if(obj) obj[key]=val; }
+  const obj=objects.find(ob=>ob.id===o.id); if(obj) obj[key]=val;
   render(); refreshList();
 }
 
@@ -746,11 +722,6 @@ function refreshList(){
         </span></div>`;
     }).join('');
   }
-  const ss=selId==='__spawn__';
-  html+=`<div class="oitem ${ss?'sel':''}" onclick="pickObj('__spawn__')">
-    <div class="odot" style="background:#f1c40f"></div>
-    <span>Player Spawn <span style="color:var(--dim);font-size:10px">${spawn.x},${spawn.y}</span></span>
-  </div>`;
   body.innerHTML=html||'<div class="no-sel">No objects yet.</div>';
 }
 
@@ -771,29 +742,58 @@ document.getElementById('snap-px').addEventListener('change',function(){ snap=Ma
 // ── Save / Load ───────────────────────────────────────────
 function saveLevel(){
   const name=document.getElementById('level-name').value.trim()||'my_level';
-  localStorage.setItem('yt_lvl_'+name, JSON.stringify({objects,spawn,nextId}));
+  const data=JSON.stringify({objects,nextId}, null, 2);
+  const blob=new Blob([data], {type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=name+'.lvl';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  
   // Visual feedback
   const btn=event.target; const orig=btn.textContent;
   btn.textContent='✅ Saved!'; setTimeout(()=>btn.textContent=orig,1500);
 }
 
 function loadPrompt(){
-  const keys=Object.keys(localStorage).filter(k=>k.startsWith('yt_lvl_')).map(k=>k.slice(7));
-  if(!keys.length){ alert('No saved levels found.'); return; }
-  const choice=prompt('Saved levels:\n\n'+keys.join('\n')+'\n\nType name to load:');
-  if(!choice) return;
-  const raw=localStorage.getItem('yt_lvl_'+choice.trim());
-  if(!raw){ alert('Level "'+choice+'" not found.'); return; }
-  const d=JSON.parse(raw);
-  objects=d.objects||[]; spawn=d.spawn||{x:100,y:2000}; nextId=d.nextId||1;
-  selId=null;
-  document.getElementById('level-name').value=choice.trim();
-  refreshUI();
+  const fileInput=document.createElement('input');
+  fileInput.type='file';
+  fileInput.accept='.lvl';
+  fileInput.onchange=function(e){
+    const file=e.target.files[0];
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=function(evt){
+      try {
+        const d=JSON.parse(evt.target.result);
+        objects=d.objects||[]; nextId=d.nextId||1;
+        selId=null;
+        // Extract filename without extension
+        const fname=file.name.replace(/\.lvl$/,'');
+        document.getElementById('level-name').value=fname;
+        refreshUI();
+      } catch(err){
+        alert('Error loading level: '+err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  fileInput.click();
 }
 
 function clearAll(){
   if(!confirm('Clear all objects? (Undo is available)')) return;
-  pushUndo(); objects=[]; spawn={x:100,y:2000}; selId=null; refreshUI();
+  pushUndo(); objects=[]; selId=null; refreshUI();
+}
+
+function previewLevel(){
+  const name=document.getElementById('level-name').value.trim()||'my_level';
+  const payload={ name, objects, nextId };
+  localStorage.setItem('yt_editor_preview', JSON.stringify(payload));
+  window.open('../index.html?editorPreview=1', '_blank');
 }
 
 // ── Export ────────────────────────────────────────────────
@@ -802,9 +802,6 @@ function genExport(){
   const L=[];
   L.push(`// ── Level: ${name} ── (generated by Level Editor)`);
   L.push(`// Paste inside your startLevel / wave function after clearing arrays`);
-  L.push(``);
-  L.push(`player.x = ${spawn.x};`);
-  L.push(`player.y = ${spawn.y};`);
   L.push(``);
 
   const byType={};
@@ -834,7 +831,7 @@ function genExport(){
     L.push(`spikes.push(`);
     byType.spike.forEach((o,i)=>{
       const c=i<byType.spike.length-1?',':'';
-      L.push(`  { x: ${o.x}, y: ${o.y}, width: ${o.width}, height: ${o.height} }${c}`);
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: 40, height: 26 }${c}`);
     });
     L.push(`);`); L.push(``);
   }
@@ -848,38 +845,11 @@ function genExport(){
     L.push(`);`); L.push(``);
   }
 
-  if(byType.snail?.length){
-    L.push(`snails.push(`);
-    byType.snail.forEach((o,i)=>{
-      const c=i<byType.snail.length-1?',':'';
-      L.push(`  { x: ${o.x}, y: ${o.y}, width: 28, height: 20, dx: 0, dy: 0, dir: ${o.dir??1}, speed: ${o.speed??0.2}, gravity: 0.6, chaseRange: 80, knockbackTimer: 0, knockbackDx: 0, knockbackDy: 0, hp: ${o.hp??2}, maxHp: ${o.hp??2}, hitFlash: 0, frame: 0, frameTimer: 0 }${c}`);
-    });
-    L.push(`);`); L.push(``);
-  }
-
-  if(byType.bat?.length){
-    L.push(`bats.push(`);
-    byType.bat.forEach((o,i)=>{
-      const c=i<byType.bat.length-1?',':'';
-      L.push(`  { x: ${o.x}, y: ${o.y}, width: 28, height: 20, dx: 0, dy: 0, hp: ${o.hp??2}, maxHp: ${o.hp??2}, hitFlash: 0 }${c}`);
-    });
-    L.push(`);`); L.push(``);
-  }
-
-  if(byType.snowman?.length){
-    L.push(`snowmen.push(`);
-    byType.snowman.forEach((o,i)=>{
-      const c=i<byType.snowman.length-1?',':'';
-      L.push(`  { x: ${o.x}, y: ${o.y}, width: 26, height: 38, speed: ${o.speed??0.5}, slowRadius: 140, slowAmount: 1, dx: 0, facing: 1, flurryParticles: [], hp: ${o.hp??3}, maxHp: ${o.hp??3}, hitFlash: 0 }${c}`);
-    });
-    L.push(`);`); L.push(``);
-  }
-
-  if(byType.turret?.length){
-    L.push(`turrets.push(`);
-    byType.turret.forEach((o,i)=>{
-      const c=i<byType.turret.length-1?',':'';
-      L.push(`  { x: ${o.x}, y: ${o.y}, cooldown: 0, fireRate: ${o.fireRate??140}, hp: ${o.hp??3}, maxHp: ${o.hp??3}, armed: ${o.armed??true} }${c}`);
+  if(byType.seesaw?.length){
+    L.push(`seesaws.push(`);
+    byType.seesaw.forEach((o,i)=>{
+      const c=i<byType.seesaw.length-1?',':'';
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: ${o.width}, height: ${o.height}, angle: 0, angularVelocity: 0 }${c}`);
     });
     L.push(`);`); L.push(``);
   }

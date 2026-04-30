@@ -47,6 +47,11 @@
     </button>
   </div>
 
+  <div class="utility-controls">
+    <button id="btnInventory" aria-label="inventory">🎒</button>
+    <button id="btnShop" aria-label="shop">🛒</button>
+  </div>
+
   <button id="btnPause">
     <img src="Assets/Sprites/pause.png" width="48" height="48" alt="pause">
   </button>
@@ -156,10 +161,18 @@
       <div class="settings-column">
         <div class="settings-section">
           <h3 class="settings-section-title">🎨 Graphics</h3>
+          <label class="setting-row slider-row">
+            <span>Graphics Quality</span>
+            <div class="slider-wrap">
+              <input type="range" id="settingGraphicsQuality" min="0" max="100" step="5" value="50">
+              <span class="slider-value" id="graphicsQualityLabel">50%</span>
+            </div>
+          </label>
           <label class="setting-row"><span>Lighting & Shadows</span><input type="checkbox" id="settingLighting" checked></label>
           <label class="setting-row"><span>CRT Effect</span><input type="checkbox" id="crtToggle"></label>
           <label class="setting-row"><span>Pixel Mode</span><input type="checkbox" id="pixelToggle"></label>
           <label class="setting-row"><span>Particle Effects</span><input type="checkbox" id="settingParticles" checked></label>
+          <label class="setting-row"><span>Decor Props</span><input type="checkbox" id="settingDecor" checked></label>
           <label class="setting-row"><span>Enemy Health Bars</span><input type="checkbox" id="settingHealthBars" checked></label>
           <label class="setting-row"><span>Screen Shake</span><input type="checkbox" id="settingScreenShake" checked></label>
           <label class="setting-row"><span>Off-Screen Indicators</span><input type="checkbox" id="settingIndicators" checked></label>

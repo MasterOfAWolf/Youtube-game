@@ -217,6 +217,15 @@ canvas {
   gap: 12px;
 }
 
+.utility-controls {
+  position: fixed;
+  right: 10px;
+  top: 70px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 #btnPause {
   position: fixed;
   top: 10px;

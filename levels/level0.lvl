@@ -1,0 +1,249 @@
+{
+  "includeBounds": true,
+  "objects": [
+    {
+      "type": "wall",
+      "x": 60,
+      "y": 530,
+      "width": 400,
+      "height": 20,
+      "id": 1
+    },
+    {
+      "type": "wall",
+      "x": 500,
+      "y": 530,
+      "width": 60,
+      "height": 20,
+      "id": 2
+    },
+    {
+      "type": "wall",
+      "x": 580,
+      "y": 440,
+      "width": 80,
+      "height": 20,
+      "id": 3
+    },
+    {
+      "type": "wall",
+      "x": 680,
+      "y": 360,
+      "width": 80,
+      "height": 20,
+      "id": 4
+    },
+    {
+      "type": "wall",
+      "x": 760,
+      "y": 530,
+      "width": 60,
+      "height": 20,
+      "id": 5
+    },
+    {
+      "type": "wall",
+      "x": 860,
+      "y": 530,
+      "width": 40,
+      "height": 20,
+      "id": 6
+    },
+    {
+      "type": "wall",
+      "x": 860,
+      "y": 170,
+      "width": 20,
+      "height": 340,
+      "id": 7
+    },
+    {
+      "type": "wall",
+      "x": 1040,
+      "y": 170,
+      "width": 20,
+      "height": 340,
+      "id": 8
+    },
+    {
+      "type": "wall",
+      "x": 860,
+      "y": 150,
+      "width": 220,
+      "height": 20,
+      "id": 9
+    },
+    {
+      "type": "wall",
+      "x": 1060,
+      "y": 530,
+      "width": 40,
+      "height": 20,
+      "id": 10
+    },
+    {
+      "type": "wall",
+      "x": 1140,
+      "y": 530,
+      "width": 100,
+      "height": 20,
+      "id": 11
+    },
+    {
+      "type": "wall",
+      "x": 1390,
+      "y": 530,
+      "width": 80,
+      "height": 20,
+      "id": 12
+    },
+    {
+      "type": "wall",
+      "x": 1490,
+      "y": 530,
+      "width": 230,
+      "height": 20,
+      "id": 13
+    },
+    {
+      "type": "wall",
+      "x": 1760,
+      "y": 530,
+      "width": 490,
+      "height": 20,
+      "id": 14
+    },
+    {
+      "type": "wall",
+      "x": 1785,
+      "y": 485,
+      "width": 50,
+      "height": 45,
+      "id": 15
+    },
+    {
+      "type": "wall",
+      "x": 1870,
+      "y": 485,
+      "width": 50,
+      "height": 45,
+      "id": 16
+    },
+    {
+      "type": "wall",
+      "x": 1960,
+      "y": 485,
+      "width": 50,
+      "height": 45,
+      "id": 17
+    },
+    {
+      "type": "wall",
+      "x": 2050,
+      "y": 485,
+      "width": 50,
+      "height": 45,
+      "id": 18
+    },
+    {
+      "type": "wall",
+      "x": 2140,
+      "y": 485,
+      "width": 50,
+      "height": 45,
+      "id": 19
+    },
+    {
+      "type": "wall",
+      "x": 2210,
+      "y": 485,
+      "width": 50,
+      "height": 45,
+      "id": 20
+    },
+    {
+      "type": "wall",
+      "x": 2000,
+      "y": 485,
+      "width": 50,
+      "height": 45,
+      "id": 21
+    },
+    {
+      "type": "wall",
+      "x": 2300,
+      "y": 485,
+      "width": 50,
+      "height": 45,
+      "id": 22
+    },
+    {
+      "type": "wall",
+      "x": 1760,
+      "y": 530,
+      "width": 640,
+      "height": 20,
+      "id": 23
+    },
+    {
+      "type": "wall",
+      "x": 2300,
+      "y": 530,
+      "width": 220,
+      "height": 20,
+      "id": 24
+    },
+    {
+      "type": "wall-moving",
+      "x": 2360,
+      "y": 430,
+      "width": 100,
+      "height": 14,
+      "speed": 1.5,
+      "range": 80,
+      "axis": "h",
+      "id": 25
+    },
+    {
+      "type": "wall",
+      "x": 2560,
+      "y": 530,
+      "width": 210,
+      "height": 20,
+      "id": 26
+    },
+    {
+      "type": "spike",
+      "x": 2365,
+      "y": 504,
+      "width": 40,
+      "height": 26,
+      "id": 27
+    },
+    {
+      "type": "spike",
+      "x": 2415,
+      "y": 504,
+      "width": 40,
+      "height": 26,
+      "id": 28
+    },
+    {
+      "type": "ladder",
+      "x": 872,
+      "y": 150,
+      "width": 24,
+      "height": 380,
+      "id": 29
+    },
+    {
+      "type": "ladder",
+      "x": 62,
+      "y": 530,
+      "width": 30,
+      "height": 1550,
+      "id": 30
+    }
+  ],
+  "nextId": 31
+}

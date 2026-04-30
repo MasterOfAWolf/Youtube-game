@@ -1,0 +1,165 @@
+{
+  "includeBounds": false,
+  "objects": [
+    {
+      "type": "wall",
+      "x": 0,
+      "y": 0,
+      "width": 2800,
+      "height": 30,
+      "ice": true,
+      "id": 1
+    },
+    {
+      "type": "wall",
+      "x": 0,
+      "y": 0,
+      "width": 30,
+      "height": 2100,
+      "ice": true,
+      "id": 2
+    },
+    {
+      "type": "wall",
+      "x": 0,
+      "y": 2070,
+      "width": 2800,
+      "height": 30,
+      "ice": true,
+      "id": 3
+    },
+    {
+      "type": "wall",
+      "x": 2770,
+      "y": 0,
+      "width": 30,
+      "height": 2100,
+      "ice": true,
+      "id": 4
+    },
+    {
+      "type": "wall",
+      "x": 200,
+      "y": 1350,
+      "width": 1800,
+      "height": 30,
+      "ice": true,
+      "id": 5
+    },
+    {
+      "type": "wall",
+      "x": 300,
+      "y": 1200,
+      "width": 200,
+      "height": 25,
+      "ice": true,
+      "id": 6
+    },
+    {
+      "type": "wall",
+      "x": 600,
+      "y": 1150,
+      "width": 200,
+      "height": 25,
+      "ice": true,
+      "id": 7
+    },
+    {
+      "type": "wall",
+      "x": 900,
+      "y": 1100,
+      "width": 200,
+      "height": 25,
+      "ice": true,
+      "id": 8
+    },
+    {
+      "type": "wall",
+      "x": 1200,
+      "y": 1050,
+      "width": 200,
+      "height": 25,
+      "ice": true,
+      "id": 9
+    },
+    {
+      "type": "wall",
+      "x": 1500,
+      "y": 1000,
+      "width": 200,
+      "height": 25,
+      "ice": true,
+      "id": 10
+    },
+    {
+      "type": "wall",
+      "x": 80,
+      "y": 1300,
+      "width": 120,
+      "height": 20,
+      "ice": true,
+      "id": 11
+    },
+    {
+      "type": "wall",
+      "x": 80,
+      "y": 1220,
+      "width": 120,
+      "height": 20,
+      "ice": true,
+      "id": 12
+    },
+    {
+      "type": "wall",
+      "x": 80,
+      "y": 1140,
+      "width": 120,
+      "height": 20,
+      "ice": true,
+      "id": 13
+    },
+    {
+      "type": "wall",
+      "x": 80,
+      "y": 1060,
+      "width": 120,
+      "height": 20,
+      "ice": true,
+      "id": 14
+    },
+    {
+      "type": "wall",
+      "x": 80,
+      "y": 980,
+      "width": 120,
+      "height": 20,
+      "ice": true,
+      "id": 15
+    },
+    {
+      "type": "seesaw",
+      "x": 450,
+      "y": 1550,
+      "width": 200,
+      "height": 12,
+      "id": 16
+    },
+    {
+      "type": "seesaw",
+      "x": 800,
+      "y": 1400,
+      "width": 200,
+      "height": 12,
+      "id": 17
+    },
+    {
+      "type": "seesaw",
+      "x": 1150,
+      "y": 1250,
+      "width": 200,
+      "height": 12,
+      "id": 18
+    }
+  ],
+  "nextId": 19
+}
