@@ -11934,8 +11934,8 @@ function updateTables() {
         // Hurt G.turrets
         for (let i = G.turrets.length - 1; i >= 0; i--) {
           if (isColliding(flipHit, G.turrets[i])) {
-            damageEnemy(G.batsturrets[i], 1, {x:0,y:0});
-            if (turrets[i].hp <= 0) { G.turrets.splice(i, 1); onEnemyKilled('turret'); }
+            damageEnemy(G.turrets[i], 1, {x:0,y:0});
+            if (G.turrets[i].hp <= 0) { G.turrets.splice(i, 1); onEnemyKilled('turret'); }
           }
         }
         // Hurt G.chairs
