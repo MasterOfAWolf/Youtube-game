@@ -902,7 +902,8 @@ body.high-contrast button {
   border: 2px solid #fff;
 }
 
-#settings {
+#settings,
+#keybindsMenu {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -919,7 +920,8 @@ body.high-contrast button {
   scrollbar-color: #3a2f5e #0d0d14;
 }
 
-#settings h2 {
+#settings h2,
+#keybindsMenu h2 {
   color: #f0d060;
   font-size: 22px;
   font-family: monospace;
@@ -927,6 +929,107 @@ body.high-contrast button {
   margin: 0 0 20px;
   letter-spacing: 2px;
   text-transform: uppercase;
+}
+
+#keybindsMenu {
+  width: min(620px, 92vw);
+}
+
+.settings-action-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #5a4878;
+  border-radius: 8px;
+  background: rgba(122, 86, 190, 0.14);
+  color: #fff;
+  font-family: monospace;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+.settings-action-btn:hover {
+  background: rgba(122, 86, 190, 0.24);
+  border-color: #9b5fe4;
+  transform: translateY(-1px);
+}
+
+.keybinds-help {
+  margin: -6px 0 16px;
+  color: #c8c0e8;
+  font-family: monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.keybind-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.keybind-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(90, 72, 120, 0.75);
+  background: rgba(26, 20, 40, 0.75);
+}
+
+.keybind-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.keybind-label {
+  color: #f0f0ff;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.keybind-hint {
+  color: #9e94c0;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.keybind-button {
+  min-width: 120px;
+  padding: 10px 12px;
+  border: 1px solid #5a4878;
+  border-radius: 8px;
+  background: #1a1428;
+  color: #f0d060;
+  font-family: monospace;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.keybind-button:hover {
+  background: #2a1f4a;
+  border-color: #9b5fe4;
+  transform: translateY(-1px);
+}
+
+.keybind-button.capturing {
+  background: #4d2c7a;
+  border-color: #f0d060;
+  color: #fff;
+}
+
+.keybinds-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 #settings h3 {
@@ -1023,7 +1126,8 @@ body.high-contrast button {
 }
 
 /* Back button */
-#settings .back-btn {
+#settings .back-btn,
+#keybindsMenu .back-btn {
   display: block;
   width: 100%;
   margin-top: 20px;
@@ -1038,7 +1142,8 @@ body.high-contrast button {
   transition: background 0.15s, color 0.15s;
 }
 
-#settings .back-btn:hover {
+#settings .back-btn:hover,
+#keybindsMenu .back-btn:hover {
   background: #5a4878;
   color: #fff;
 }
@@ -1417,7 +1522,7 @@ body::after {
 }
 
 /* Glow effect on menu panels for mystical feel */
-#menu, #levelSelect, #settings, #pauseMenu,
+#menu, #levelSelect, #settings, #keybindsMenu, #pauseMenu,
 #controls, #credits, #waveSelect, #freeSelect {
   box-shadow: 
     0 0 40px rgba(80, 60, 120, 0.3),

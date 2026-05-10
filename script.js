@@ -817,6 +817,111 @@ snailImg.src = "Assets/Sprites/snail-pixilart.png";
 const cannonImg = new Image();
 cannonImg.src = "Assets/Sprites/potatocannon.png";
 
+const clubImg = new Image();
+clubImg.src = "Assets/Sprites/Club.png";
+
+// --- SWORD ATTACK ANIMATION FRAMES ---
+const swordAttackSheet = new Image();
+swordAttackSheet.src = "Assets/Sprites/Sword Attack Sprite Sheet.png";
+
+const SWORD_FRAME_WIDTH = 34;
+const SWORD_FRAME_HEIGHT = 31;
+const SWORD_FRAME_COUNT = 7;
+const SWORD_ATTACK_EXTENSION_WIDTH = 42;
+const SWORD_ATTACK_DRAW_SCALE = 2;
+const SWORD_DOWN_BOUNCE_VELOCITY = -12;
+
+const CLUB_ATTACK_SWING_SPAN = Math.PI * 1.25;
+const CLUB_ATTACK_BASE_ANGLE = -Math.PI / 2;
+const CLUB_ATTACK_RADIUS = 60;
+const CLUB_ATTACK_BOX_WIDTH = 100;
+const CLUB_ATTACK_BOX_HEIGHT = 30;
+const CLUB_ATTACK_BOX_HALF_WIDTH = CLUB_ATTACK_BOX_WIDTH / 2;
+const CLUB_ATTACK_BOX_HALF_HEIGHT = CLUB_ATTACK_BOX_HEIGHT / 2;
+const CLUB_TURRET_STUN_DURATION = 50;
+const CLUB_ENEMY_KNOCKBACK_MULTIPLIER = 8;
+const CLUB_BOX_KNOCKBACK_MULTIPLIER = 3.5;
+const CLUB_HIT_SHAKE_INTENSITY = 4;
+const CLUB_DRAW_TIP_PADDING = 14;
+const CLUB_SPRITE_ROTATION_OFFSET = Math.PI / 4;
+const CLUB_FALLBACK_STROKE_BASE = 4;
+const CLUB_FALLBACK_STROKE_VARIATION = 5;
+
+const DEBUG_HITBOX_LINE_WIDTH = 1;
+const DEBUG_HITBOX_FILL_ALPHA = 0.14;
+const DEBUG_HITBOX_ENTITY_COLOR = "rgba(255,0,0,0.7)";
+const DEBUG_HITBOX_PLAYER_COLOR = "rgba(0,255,0,0.9)";
+const DEBUG_HITBOX_SWORD_COLOR = "rgba(120,200,255,0.95)";
+const DEBUG_HITBOX_CLUB_COLOR = "rgba(255,220,120,0.95)";
+const SWORD_DRAW_ALPHA = 0.95;
+const SWORD_DRAW_SHADOW_COLOR = "rgba(45, 121, 255, 0.5)";
+const SWORD_DRAW_SHADOW_BLUR = 12;
+
+// Sword attack animation canvases for rendering (right & left directions + extended reach)
+let swordAnimFrames = {
+  right: [],   // frames 0-6 (original right-facing sprites)
+  left: [],    // frames 0-6 (flipped left-facing sprites)
+  rightExtended: [], // frames 0-6 (right with extended reach pixels)
+  leftExtended: []   // frames 0-6 (left with extended reach pixels)
+};
+
+// Initialize sword animation frames from the sprite sheet
+function initSwordAnimFrames() {
+  swordAnimFrames.right.length = 0;
+  swordAnimFrames.left.length = 0;
+  swordAnimFrames.rightExtended.length = 0;
+  swordAnimFrames.leftExtended.length = 0;
+
+  if (!swordAttackSheet.complete || !swordAttackSheet.naturalWidth) return;
+
+  for (let frameIdx = 0; frameIdx < SWORD_FRAME_COUNT; frameIdx++) {
+    // Extract frame from sprite sheet
+    const sourceX = frameIdx * SWORD_FRAME_WIDTH;
+    const sourceY = 0;
+
+    // Create canvas for right-facing frame
+    const rightCanvas = document.createElement('canvas');
+    rightCanvas.width = SWORD_FRAME_WIDTH;
+    rightCanvas.height = SWORD_FRAME_HEIGHT;
+    const rightCtx = rightCanvas.getContext('2d');
+    rightCtx.drawImage(swordAttackSheet, sourceX, sourceY, SWORD_FRAME_WIDTH, SWORD_FRAME_HEIGHT, 0, 0, SWORD_FRAME_WIDTH, SWORD_FRAME_HEIGHT);
+    swordAnimFrames.right[frameIdx] = rightCanvas;
+
+    // Create canvas for left-facing frame (horizontally flipped)
+    const leftCanvas = document.createElement('canvas');
+    leftCanvas.width = SWORD_FRAME_WIDTH;
+    leftCanvas.height = SWORD_FRAME_HEIGHT;
+    const leftCtx = leftCanvas.getContext('2d');
+    leftCtx.scale(-1, 1);
+    leftCtx.drawImage(swordAttackSheet, sourceX, sourceY, SWORD_FRAME_WIDTH, SWORD_FRAME_HEIGHT, -SWORD_FRAME_WIDTH, 0, SWORD_FRAME_WIDTH, SWORD_FRAME_HEIGHT);
+    swordAnimFrames.left[frameIdx] = leftCanvas;
+
+    // Create extended reach frames (stretch sprite for reach extension)
+    
+    // Right extended - stretched
+    const rightExtCanvas = document.createElement('canvas');
+    rightExtCanvas.width = SWORD_FRAME_WIDTH + SWORD_ATTACK_EXTENSION_WIDTH;
+    rightExtCanvas.height = SWORD_FRAME_HEIGHT;
+    const rightExtCtx = rightExtCanvas.getContext('2d');
+    rightExtCtx.drawImage(swordAttackSheet, sourceX, sourceY, SWORD_FRAME_WIDTH, SWORD_FRAME_HEIGHT, 0, 0, SWORD_FRAME_WIDTH + SWORD_ATTACK_EXTENSION_WIDTH, SWORD_FRAME_HEIGHT);
+    swordAnimFrames.rightExtended[frameIdx] = rightExtCanvas;
+
+    // Left extended - stretched and mirrored
+    const leftExtCanvas = document.createElement('canvas');
+    leftExtCanvas.width = SWORD_FRAME_WIDTH + SWORD_ATTACK_EXTENSION_WIDTH;
+    leftExtCanvas.height = SWORD_FRAME_HEIGHT;
+    const leftExtCtx = leftExtCanvas.getContext('2d');
+    leftExtCtx.scale(-1, 1);
+    leftExtCtx.drawImage(swordAttackSheet, sourceX, sourceY, SWORD_FRAME_WIDTH, SWORD_FRAME_HEIGHT, -(SWORD_FRAME_WIDTH + SWORD_ATTACK_EXTENSION_WIDTH), 0, SWORD_FRAME_WIDTH + SWORD_ATTACK_EXTENSION_WIDTH, SWORD_FRAME_HEIGHT);
+    swordAnimFrames.leftExtended[frameIdx] = leftExtCanvas;
+  }
+}
+
+// Listen for sprite sheet load
+swordAttackSheet.addEventListener('load', initSwordAnimFrames);
+// Try to init if already loaded
+setTimeout(initSwordAnimFrames, 100);
+
 // --- PLAYER ANIMATION FRAMES ---
 const playerWalkSheet = new Image();
 playerWalkSheet.src = "Assets/Sprites/MACHO.png"; // your sheet
@@ -870,6 +975,7 @@ const settings = {
   // Audio
   sfxEnabled: true,
   musicVolume: 0.5,
+  sfxVolume: 0.5,
 
   // Gameplay
   invincible: false,
@@ -1655,14 +1761,6 @@ function updateSpeedChiliState() {
   }
 }
 
-function updateFeatherBootsState() {
-  if (player.featherBootsTimer <= 0) return;
-  player.featherBootsTimer--;
-  if (player.featherBootsTimer <= 0) {
-    player.featherBootsTimer = 0;
-  }
-}
-
 function updateDashBatteryState() {
   if (player.dashBatteryTimer > 0) {
     player.dashCooldownMultiplier = DASH_BATTERY_COOLDOWN_MULTIPLIER;
@@ -1869,6 +1967,23 @@ const potatoScreams = [
 const potatoImpactSFX    = new Audio("Assets/Sfx/splat.mp3");
 const explosionImpactSFX = new Audio("Assets/Sfx/boom.mp3");
 
+// Sword sounds — picked randomly and pitch-shifted
+const swordSounds = [
+  new Audio("Assets/Sfx/Sword 1.wav"),
+  new Audio("Assets/Sfx/Sword 2.wav"),
+  new Audio("Assets/Sfx/Sword 3.wav")
+];
+
+function playSwordSound() {
+  if (!settings.sfxEnabled) return;
+  const s = swordSounds[Math.floor(Math.random() * swordSounds.length)];
+  s.currentTime = 0;
+  s.volume = settings.sfxVolume;
+  // Random pitch variation between 0.8 and 1.2 (±20%)
+  s.playbackRate = 0.8 + Math.random() * 0.4;
+  s.play().catch(() => {});
+}
+
 function playPotatoScream() {
   if (!settings.sfxEnabled) return;
   const s = potatoScreams[Math.floor(Math.random() * potatoScreams.length)];
@@ -1888,6 +2003,7 @@ function playPotatoImpact(explosive = false) {
 
 function saveSettings() {
   localStorage.setItem("gameSettings", JSON.stringify(settings));
+  localStorage.setItem("keyBindings", JSON.stringify(keyBindings));
   // Also save the toggles that live outside the settings object
   localStorage.setItem("crtEnabled", document.getElementById("crtToggle").checked);
   localStorage.setItem("pixelEnabled", document.getElementById("pixelToggle").checked);
@@ -1915,6 +2031,7 @@ function loadSettings() {
   document.getElementById("graphicsQualityLabel").textContent = Math.round(settings.graphicsQuality) + "%";
   document.getElementById("settingSFX").checked          = settings.sfxEnabled;
   document.getElementById("settingMusicVolume").value    = settings.musicVolume;
+  document.getElementById("settingSFXVolume").value     = settings.sfxVolume;
   document.getElementById("musicVolumeLabel").textContent = Math.round(settings.musicVolume * 100) + "%";
   document.getElementById("settingHitboxes").checked     = settings.showHitboxes;
   document.getElementById("settingSwapJumpDash").checked = settings.swapJumpDash;
@@ -2618,6 +2735,21 @@ document.getElementById("settingMusicVolume").addEventListener("input", function
   document.getElementById("musicVolumeLabel").textContent = Math.round(this.value * 100) + "%";
   saveSettings();
 });
+document.getElementById("settingSFXVolume").addEventListener("input", function() {
+  settings.sfxVolume = parseFloat(this.value);
+  // Apply volume to all sword sounds
+  for (const sound of swordSounds) {
+    sound.volume = settings.sfxVolume;
+  }
+  // Apply volume to other SFX sounds
+  potatoImpactSFX.volume = settings.sfxVolume;
+  explosionImpactSFX.volume = settings.sfxVolume;
+  for (const scream of potatoScreams) {
+    scream.volume = settings.sfxVolume;
+  }
+  document.getElementById("sfxVolumeLabel").textContent = Math.round(this.value * 100) + "%";
+  saveSettings();
+});
 /*document.getElementById("settingInvincible").addEventListener("change", function() {
   settings.invincible = this.checked;
 });
@@ -2681,22 +2813,26 @@ document.getElementById("settingCommands").addEventListener("change", function()
   saveSettings();
 });
 
-// Map keys to buttons
-const keyMap = {
-  "ArrowLeft": "btnLeft",
-  "a": "btnLeft",
-  "ArrowRight": "btnRight",
-  "d": "btnRight",
-  "ArrowUp": "btnJump",
-  "w": "btnJump",
-  "s": "btnDown",
-  "ArrowDown": "btnDown",
-  "r": "btnRestart",
-  "Escape": "btnPause",
-  "f": "btnAttack"
-};
-
 document.addEventListener("keydown", e => {
+  const normalizedKey = normalizeInputKey(e.key);
+
+  if (keybindCaptureAction) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (normalizedKey === "backspace" || normalizedKey === "delete") {
+      bindActionToKey(keybindCaptureAction, "");
+    } else {
+      bindActionToKey(keybindCaptureAction, normalizedKey);
+    }
+    clearKeybindCapture();
+    return;
+  }
+
+  const keybindMenu = document.getElementById("keybindsMenu");
+  if (keybindMenu && !keybindMenu.classList.contains("hidden")) {
+    return;
+  }
+
   // --- CHAT INPUT INTERCEPT ---
   if (chat.open) {
     e.preventDefault();
@@ -2731,8 +2867,24 @@ document.addEventListener("keydown", e => {
     return;
   }
 
-  keys[e.key.toLowerCase()] = true;
-  const btnId = keyMap[e.key];
+  const action = getActionForKey(normalizedKey);
+  if (action === "inventory") {
+    e.preventDefault();
+    toggleInventory();
+    return;
+  }
+  if (action === "interact") {
+    e.preventDefault();
+    attemptShopInteract();
+    return;
+  }
+  if (action === "skipCountdown" && skipIntermissionToThreeSeconds()) {
+    e.preventDefault();
+    return;
+  }
+
+  setKeyState(normalizedKey, true);
+  const btnId = action ? ACTION_BUTTON_IDS[action] : null;
   if (btnId) {
     const btn = document.getElementById(btnId);
     btn.classList.add("pressed");
@@ -2740,9 +2892,16 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("keyup", e => {
+  if (keybindCaptureAction) return;
+  const keybindMenu = document.getElementById("keybindsMenu");
+  if (keybindMenu && !keybindMenu.classList.contains("hidden")) return;
+
   if (chat.open) return;
-  keys[e.key.toLowerCase()] = false;
-  const btnId = keyMap[e.key];
+
+  const normalizedKey = normalizeInputKey(e.key);
+  setKeyState(normalizedKey, false);
+  const action = getActionForKey(normalizedKey);
+  const btnId = action ? ACTION_BUTTON_IDS[action] : null;
   if (btnId) {
     const btn = document.getElementById(btnId);
     btn.classList.remove("pressed");
@@ -2810,39 +2969,39 @@ function rectsOverlap(a, b) {
   );
 }
 
-function bindTouch(buttonId, key) {
+function bindTouch(buttonId, action) {
   const btn = document.getElementById(buttonId);
   const TAP_WINDOW = 300; // ms between taps to count as double-tap
   let lastTap = 0;
 
   btn.addEventListener("touchstart", e => {
     e.preventDefault();
-    keys[key] = true;
+    setKeyState(getBindingForAction(action), true);
 
     // Double-tap dash for left/right buttons
-    if (key === "a" || key === "d") {
+    if (action === "left" || action === "right") {
       const now = performance.now();
       if (now - lastTap < TAP_WINDOW) {
-        player.facing = key === "d" ? 1 : -1;
+        player.facing = action === "right" ? 1 : -1;
         tryDash();
       }
       lastTap = now;
     }
   });
-  btn.addEventListener("touchend", e => { e.preventDefault(); keys[key] = false; });
+  btn.addEventListener("touchend", e => { e.preventDefault(); setKeyState(getBindingForAction(action), false); });
   btn.addEventListener("mousedown", () => {
-    keys[key] = true;
-    if (key === "a" || key === "d") {
+    setKeyState(getBindingForAction(action), true);
+    if (action === "left" || action === "right") {
       const now = performance.now();
       if (now - (btn._lastMouse || 0) < 300) {
-        player.facing = key === "d" ? 1 : -1;
+        player.facing = action === "right" ? 1 : -1;
         tryDash();
       }
       btn._lastMouse = now;
     }
   });
-  btn.addEventListener("mouseup", () => keys[key] = false);
-  btn.addEventListener("mouseleave", () => keys[key] = false);
+  btn.addEventListener("mouseup", () => setKeyState(getBindingForAction(action), false));
+  btn.addEventListener("mouseleave", () => setKeyState(getBindingForAction(action), false));
 }
 
 function pressAttack() {
@@ -2964,24 +3123,22 @@ attackBtn.addEventListener("mouseleave", releaseAttack);
 
 document.getElementById("btnRestart").addEventListener("touchstart", e => {
   e.preventDefault();
-  keys["r"] = true;
+  pulseAction("restart");
   hideCanvas();
   hideAllMenus();
   triggerGameOver();
-  setTimeout(() => keys["r"] = false, 60);
 });
 
 document.getElementById("btnRestart").addEventListener("mousedown", () => {
-  keys["r"] = true;
-  setTimeout(() => keys["r"] = false, 60);
+  pulseAction("restart");
 });
 
 
-bindTouch("btnLeft", "a");
-bindTouch("btnRight", "d");
-bindTouch("btnJump", "w");
-bindTouch("btnAttack", "f");
-bindTouch("btnDown", "s");
+bindTouch("btnLeft", "left");
+bindTouch("btnRight", "right");
+bindTouch("btnJump", "jump");
+bindTouch("btnAttack", "attack");
+bindTouch("btnDown", "down");
 
 document.getElementById("btnPause").addEventListener("click", () => {
   togglePause();
@@ -3246,25 +3403,12 @@ function updateGamepad() {
 
   
   if (gameOver && gp.buttons[1]?.pressed && !gp._menuBackHeld) {
-  keys["r"] = true;
+  pulseAction("restart");
   gp._menuBackHeld = true;
 }
-  // Attack (X button = index 2) — keep your existing charge logic, just also set the flag
-  const swordHeld = gp.buttons[2]?.pressed;
-  localInput._gpAttack = swordHeld;
-  if (swordHeld && !player.attackCharging && player.attackTimer <= 0 && player.attackCooldown <= 0) {
-    player.attackCharging = true;
-    player.attackChargeTime = 0;
-    localInput.attack = true;
-  }
-  if (!swordHeld && player.attackCharging) {
-    player.attackCharging = false;
-    player.attackTimer = player.attackDuration;
-    player.attackCooldown = 20;
-    player.attackKnockback = 5 + 5 * Math.min(player.attackChargeTime / player.maxChargeTime, 1);
-    player.attackHitObjects.clear();
-    localInput.attack = false;
-  }
+  // X = club hold/release, Y = directional sword
+  localInput._gpAttack = gp.buttons[2]?.pressed;
+  localInput._gpSword = gp.buttons[3]?.pressed;
 
   // Potato cannon — right stick aim + right trigger (index 7) to fire
 if (hasPotato) {
@@ -3298,7 +3442,7 @@ if (hasPotato) {
 
   // Restart on game over — Select (index 8)
   if (gameOver && gp.buttons[8]?.pressed) {
-    keys["r"] = true;
+    pulseAction("restart");
   }
 }
 
@@ -3427,7 +3571,7 @@ if (current) {
 const buttons = Array.from(document.querySelectorAll(
   '#menu:not(.hidden) button, #levelSelect:not(.hidden) button, ' +
   '#waveSelect:not(.hidden) button, #freeSelect:not(.hidden) button, ' +
-  '#settings:not(.hidden) button, #credits:not(.hidden) button, ' +
+  '#settings:not(.hidden) button, #keybindsMenu:not(.hidden) button, #credits:not(.hidden) button, ' +
   '#controls:not(.hidden) button, #pauseMenu:not(.hidden) button'
 ));
   if (!buttons.length) return;
@@ -4008,13 +4152,13 @@ function drawDungeonFloorTexture() {
   const tileStep = 80;
   ctx.strokeStyle = "rgba(20, 18, 24, 0.17)";
   ctx.lineWidth = 1;
-  for (let x = 0; x <= MAP_WIDTH; x += tileStep) {
+  for (let x = tileStep; x < MAP_WIDTH; x += tileStep) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, MAP_HEIGHT);
     ctx.stroke();
   }
-  for (let y = 0; y <= MAP_HEIGHT; y += tileStep) {
+  for (let y = tileStep; y < MAP_HEIGHT; y += tileStep) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(MAP_WIDTH, y);
@@ -5274,6 +5418,19 @@ function openSettings() {
   document.getElementById("settings").classList.remove("hidden");
 }
 
+function openKeybindsMenu() {
+  keybindCaptureAction = null;
+  hideAllMenus();
+  renderKeybindMenu();
+  document.getElementById("keybindsMenu").classList.remove("hidden");
+}
+
+function backToSettingsFromKeybinds() {
+  keybindCaptureAction = null;
+  hideAllMenus();
+  document.getElementById("settings").classList.remove("hidden");
+}
+
 function openLevelSelect() {
   hideAllMenus();
   document.getElementById("levelSelect").classList.remove("hidden");
@@ -5334,11 +5491,11 @@ function applyEditorObjects(objs, withBounds = true) {
 
   for (const o of objs) {
     if (o.type === 'wall') {
-      walls.push({ x: o.x, y: o.y, width: o.width, height: o.height });
+      walls.push({ x: o.x, y: o.y, width: o.width, height: o.height, ice: !!o.ice });
     } else if (o.type === 'wall-moving') {
       const axKey = o.axis === 'h' ? 'startX' : 'startY';
       const axVal = o.axis === 'h' ? o.x : o.y;
-      walls.push({ x: o.x, y: o.y, width: o.width, height: o.height, moving: true, dir: 1, speed: o.speed || 1.5, [axKey]: axVal, range: o.range || 100 });
+      walls.push({ x: o.x, y: o.y, width: o.width, height: o.height, moving: true, dir: 1, speed: o.speed || 1.5, ice: !!o.ice, [axKey]: axVal, range: o.range || 100 });
     } else if (o.type === 'spike') {
       spikes.push({ x: o.x, y: o.y, width: o.width || 40, height: o.height || 26 });
     } else if (o.type === 'ladder') {
@@ -5358,7 +5515,13 @@ async function loadMap_LevelFile(level) {
     const data = JSON.parse(raw);
     const objs = Array.isArray(data.objects) ? data.objects : (Array.isArray(data) ? data : []);
     if (!objs.length) return false;
-    applyEditorObjects(objs, true);
+    applyEditorObjects(objs, data.includeBounds !== false);
+
+    // Backward compatibility: older .lvl files did not include oven objects.
+    if (level === 1 && ovens.length === 0) {
+      ovens.push({ x: 200, y: 840, width: 40, height: 50, active: false, baked: false, glow: 0 });
+    }
+
     return true;
   } catch (err) {
     return false;
@@ -5420,16 +5583,16 @@ function startTutorial() {
 
 function addMapBounds() {
   // Floor
-  walls.push({ x: 0, y: MAP_HEIGHT - WALL_THICKNESS, width: MAP_WIDTH, height: 50 });
+  walls.push({ x: 0, y: MAP_HEIGHT - WALL_THICKNESS, width: MAP_WIDTH, height: 50, hidden: true });
 
   // Ceiling
-  walls.push({ x: 0, y: -20, width: MAP_WIDTH, height: 50 });
+  walls.push({ x: 0, y: -20, width: MAP_WIDTH, height: 50, hidden: true });
 
   // Left wall
-  walls.push({ x: -20, y: 0, width: 50, height: MAP_HEIGHT });
+  walls.push({ x: -20, y: 0, width: 50, height: MAP_HEIGHT, hidden: true });
 
   // Right wall
-  walls.push({ x: MAP_WIDTH - WALL_THICKNESS, y: 0, width: 50, height: MAP_HEIGHT });
+  walls.push({ x: MAP_WIDTH - WALL_THICKNESS, y: 0, width: 50, height: MAP_HEIGHT, hidden: true });
 }
 
 function loadMap_Tutorial() {
@@ -5564,7 +5727,7 @@ function loadMap_Tutorial() {
     hp: 2, maxHp: 2, hitFlash: 0, frame: 0, frameTimer: 0 });
   tutorialState.zoneSigns.push({
     wx: 120, wy: floorPlan[4].y - 150, title: '[ ZONE 5 ]  SWORD',
-    lines: ['Hold F to CHARGE.', 'Release F to SWING!', 'Practice on snails.'],
+    lines: ['Press G to attack!', 'Practice on snails.'],
     color: '#f06292', width: 255
   });
   tutorialState.zoneDividers.push({ wx: 320, wy: floorPlan[4].y - 260, height: 260, color: '#f06292' });
@@ -6252,20 +6415,40 @@ walls.push({ x: 80, y: 980, width: 120, height: 20, ice: true });
 async function startLevel(level) {
   hideAllMenus();
   document.getElementById("game").style.display = "block";
-
+  
+  // Show loading screen before any async operations
+  showLoadingScreen();
+  
   stopGameLoop();   // stop old loop
   resetGameState(); // reset player & flags
+  
+  updateLoadingProgress(0.1);
+  
   initAtmosphericParticles();
   initDungeonLighting();
+  
+  updateLoadingProgress(0.3);
+  
   await loadLevel(level); // THIS is now the only loader
+  
+  updateLoadingProgress(0.6);
+  
   initDungeonAesthetics();
   if (level === 0) tutorialActive = true;
   startMusic();
+  
+  updateLoadingProgress(0.9);
+  
+  // All async operations complete — NOW we start the game
   gameRunning = true;
   gamePaused = false;
   lastFrameTime = performance.now();
   lastTimestamp = performance.now();
-
+  
+  updateLoadingProgress(1);
+  
+  // Hide loading screen and start game loop
+  hideLoadingScreen();
   gameLoopId = requestAnimationFrame(gameLoop);
 }
 
@@ -6510,7 +6693,7 @@ function updateBuildMode() {
   for (const [type, data] of Object.entries(PART_TYPES)) {
     if (keys[data.key]) buildSelectedPart = type;
   }
-  if (keys["x"] || keys["X"]) buildDeleteMode = !keys["x"]; // hold X to delete
+  buildDeleteMode = isActionPressed("buildDelete");
 
  // Mouse cursor — only when no controller is connected
   if (gamepadIndex === null) {
@@ -8439,7 +8622,7 @@ function drawTutorialHUD() {
   ctx.fillRect(0, canvas.height - 22, canvas.width, 22);
   ctx.fillStyle = '#aaa'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
   ctx.fillText(
-    'MOVE: A/D   JUMP: W   DASH: Shift   SWORD: Hold F → Release   CANNON: Mouse + Click',
+    'MOVE: A/D   JUMP: W   DASH: Shift   CLUB: F   SWORD: G + Direction   CANNON: Mouse + Click',
     canvas.width / 2, canvas.height - 7
   );
   ctx.textAlign = 'left';
@@ -8552,6 +8735,12 @@ player.attackCooldown = 0;       // prevents spamming
 player.attackDuration = 20;      // frames the swing lasts
 player.attackKnockback = 2;      // scales with charge
 player.attackHitObjects = new Set(); // track hits per swing
+player.swordTimer = 0;
+player.swordDuration = 10;
+player.swordCooldown = 0;
+player.swordBaseCooldown = 12;
+player.swordDir = "right";
+player.swordHitObjects = new Set();
 player.featherBootsTimer = 0;
 player.dashBatteryTimer = 0;
 player.dashCooldownMultiplier = 1;
@@ -9353,7 +9542,7 @@ function generateRandomWave(config, waveNumber = 1) {
     };
     
     // Apply both config multiplier and wave scaling
-    const totalMultiplier = (config.hpMultiplier || 1) * waveScaling;
+    const totalMultiplier = (config.hpMultiplier - 0.2 || 1) * waveScaling;
     
     enemies.push({
       type: enemyType,
@@ -9961,29 +10150,250 @@ function drawWaveUI() {
 }
 
 // Start wave mode for a level
-function startWaveModeLevel(level) {
+async function startWaveModeLevel(level) {
   hideAllMenus();
   document.getElementById("game").style.display = "block";
   
+  // Show loading screen before any async operations
+  showLoadingScreen();
+  
   stopGameLoop();
   resetGameState();
+  
+  updateLoadingProgress(0.1);
+  
   initAtmosphericParticles();
   initDungeonLighting();
-  loadLevel(level);
+  
+  updateLoadingProgress(0.3);
+  
+  await loadLevel(level); // Make this properly awaited
+  
+  updateLoadingProgress(0.6);
+  
   initDungeonAesthetics();
   startMusic();
   startWaveMode(level);
   
+  updateLoadingProgress(0.9);
+  
+  // All async operations complete — NOW we start the game
   gameRunning = true;
   gamePaused = false;
   lastFrameTime = performance.now();
   lastTimestamp = performance.now();
   
+  updateLoadingProgress(1);
+  
+  // Hide loading screen and start game loop
+  hideLoadingScreen();
   gameLoopId = requestAnimationFrame(gameLoop);
 }
 
 
 const keys = {};
+
+const DEFAULT_KEY_BINDINGS = {
+  left: "arrowleft",
+  right: "arrowright",
+  jump: "arrowup",
+  down: "arrowdown",
+  dash: "shift",
+  attack: "f",
+  sword: "g",
+  pause: "escape",
+  restart: "r",
+  inventory: "i",
+  interact: "e",
+  skipCountdown: "n",
+  buildDelete: "x"
+};
+
+const ACTION_BUTTON_IDS = {
+  left: "btnLeft",
+  right: "btnRight",
+  jump: "btnJump",
+  down: "btnDown",
+  attack: "btnAttack"
+};
+
+const KEYBIND_ACTIONS = [
+  { action: "left", label: "Move Left" },
+  { action: "right", label: "Move Right" },
+  { action: "jump", label: "Jump" },
+  { action: "down", label: "Down / Crouch" },
+  { action: "dash", label: "Dash" },
+  { action: "attack", label: "Club Attack" },
+  { action: "sword", label: "Sword Attack" },
+  { action: "pause", label: "Pause" },
+  { action: "restart", label: "Restart" },
+  { action: "inventory", label: "Inventory" },
+  { action: "interact", label: "Interact / Shop" },
+  { action: "skipCountdown", label: "Skip Countdown" },
+  { action: "buildDelete", label: "Build Delete" }
+];
+
+let keyBindings = loadKeyBindings();
+let keybindCaptureAction = null;
+
+function normalizeInputKey(key) {
+  if (!key) return "";
+  if (key === " ") return "space";
+  return key.toLowerCase();
+}
+
+function getBindingForAction(action) {
+  return keyBindings[action] || "";
+}
+
+function isActionPressed(action) {
+  const binding = getBindingForAction(action);
+  return binding ? !!keys[binding] : false;
+}
+
+function getActionForKey(key) {
+  const normalizedKey = normalizeInputKey(key);
+  for (const [action, binding] of Object.entries(keyBindings)) {
+    if (binding === normalizedKey) return action;
+  }
+  return null;
+}
+
+function setKeyState(key, isPressed) {
+  const normalizedKey = normalizeInputKey(key);
+  if (!normalizedKey) return;
+  keys[normalizedKey] = isPressed;
+}
+
+function pulseAction(action, duration = 60) {
+  const binding = getBindingForAction(action);
+  if (!binding) return;
+  setKeyState(binding, true);
+  setTimeout(() => {
+    if (keys[binding]) {
+      setKeyState(binding, false);
+    }
+  }, duration);
+}
+
+function formatBindingLabel(binding) {
+  if (!binding) return "Unbound";
+  if (binding === "space") return "Space";
+  if (binding.length === 1) return binding.toUpperCase();
+  if (binding.startsWith("arrow")) {
+    return "Arrow " + binding.slice(5, 6).toUpperCase() + binding.slice(6);
+  }
+  return binding.charAt(0).toUpperCase() + binding.slice(1);
+}
+
+function loadKeyBindings() {
+  const saved = localStorage.getItem("keyBindings");
+  if (!saved) return { ...DEFAULT_KEY_BINDINGS };
+
+  try {
+    const parsed = JSON.parse(saved);
+    return { ...DEFAULT_KEY_BINDINGS, ...parsed };
+  } catch (error) {
+    return { ...DEFAULT_KEY_BINDINGS };
+  }
+}
+
+function saveKeyBindings() {
+  localStorage.setItem("keyBindings", JSON.stringify(keyBindings));
+}
+
+function resetKeyBindings() {
+  keyBindings = { ...DEFAULT_KEY_BINDINGS };
+  saveKeyBindings();
+  renderKeybindMenu();
+}
+
+function bindActionToKey(action, key) {
+  const normalizedKey = normalizeInputKey(key);
+  for (const otherAction of Object.keys(keyBindings)) {
+    if (otherAction !== action && keyBindings[otherAction] === normalizedKey) {
+      keyBindings[otherAction] = "";
+    }
+  }
+  keyBindings[action] = normalizedKey;
+  saveKeyBindings();
+  renderKeybindMenu();
+}
+
+function captureKeybind(action) {
+  keybindCaptureAction = action;
+  renderKeybindMenu();
+}
+
+function clearKeybindCapture() {
+  keybindCaptureAction = null;
+  renderKeybindMenu();
+}
+
+function renderKeybindMenu() {
+  const list = document.getElementById("keybindList");
+  if (!list) return;
+
+  list.innerHTML = "";
+  for (const entry of KEYBIND_ACTIONS) {
+    const row = document.createElement("div");
+    row.className = "keybind-row";
+
+    const info = document.createElement("div");
+    info.className = "keybind-info";
+
+    const label = document.createElement("span");
+    label.className = "keybind-label";
+    label.textContent = entry.label;
+
+    const hint = document.createElement("span");
+    hint.className = "keybind-hint";
+    hint.textContent = entry.action === keybindCaptureAction ? "Press a key..." : "Click to change";
+
+    info.appendChild(label);
+    info.appendChild(hint);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "keybind-button" + (entry.action === keybindCaptureAction ? " capturing" : "");
+    button.dataset.keybindAction = entry.action;
+    button.textContent = formatBindingLabel(getBindingForAction(entry.action));
+    button.addEventListener("click", () => captureKeybind(entry.action));
+
+    row.appendChild(info);
+    row.appendChild(button);
+    list.appendChild(row);
+  }
+}
+
+// --- LOADING SCREEN SYSTEM ---
+let isLoadingScreenVisible = false;
+
+function showLoadingScreen() {
+  isLoadingScreenVisible = true;
+  const loadingEl = document.getElementById("intro-screen");
+  if (loadingEl) {
+    loadingEl.classList.remove('hidden');
+    loadingEl.classList.remove('fadeout');
+    updateLoadingProgress(0);
+  }
+}
+
+function hideLoadingScreen() {
+  isLoadingScreenVisible = false;
+  const loadingEl = document.getElementById("intro-screen");
+  if (loadingEl) {
+    loadingEl.classList.add('fadeout');
+    setTimeout(() => loadingEl.classList.add('hidden'), 420);
+  }
+}
+
+function updateLoadingProgress(fraction) {
+  const fill = document.querySelector('.intro-progress-fill');
+  if (fill) {
+    fill.style.width = (Math.max(0, Math.min(1, fraction)) * 100) + '%';
+  }
+}
 
 const camera = {
   x: 0,
@@ -10007,6 +10417,7 @@ function hideAllMenus() {
   document.getElementById("credits").classList.add("hidden");
   document.getElementById("freeSelect").classList.add("hidden");
   document.getElementById("settings").classList.add("hidden");
+  document.getElementById("keybindsMenu").classList.add("hidden");
   document.getElementById("pauseMenu").classList.add("hidden");
   document.getElementById("controls").classList.add("hidden");
   document.getElementById("controllerControls").classList.add("hidden");
@@ -10117,7 +10528,7 @@ function getPlayerSnapshot() {
     facing:     player.facing,
     lives:      playerLives,
     attacking:  player.attacking,
-    charging:   player.attackCharging,
+    charging:   false,
     dashActive: player.dashActive,
     rollActive: player.rollActive,
     onGround:   player.onGround,
@@ -10452,6 +10863,13 @@ function updateYetis() {
     ensureEntityInBounds(y);
     if (!y.alive) continue;
 
+    if (y.stunTimer > 0) {
+      y.stunTimer--;
+      y.dx = 0;
+      if (y.throwCooldown > 0) y.throwCooldown--;
+      continue;
+    }
+
     const dx = player.x - y.x;
     const dy = player.y - y.y;
     const dist = Math.hypot(dx, dy);
@@ -10519,6 +10937,12 @@ function updateSnowballs() {
 function updateTurrets() {
   for (let turret of G.turrets) {
     ensureEntityInBounds(turret);
+        if (turret.stunTimer > 0) {
+            turret.stunTimer--;
+            if (turret.cooldown > 0) turret.cooldown--;
+            turret.armed = false;
+            continue;
+        }
         if (turret.cooldown > 0) {
             turret.cooldown--;
             continue;
@@ -11468,38 +11892,54 @@ document.addEventListener("keydown", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  keys[e.key] = true;
+  const normalizedKey = normalizeInputKey(e.key);
+  const keybindMenu = document.getElementById("keybindsMenu");
+  if (keybindCaptureAction || (keybindMenu && !keybindMenu.classList.contains("hidden"))) {
+    return;
+  }
+
+  setKeyState(normalizedKey, true);
+  const action = getActionForKey(normalizedKey);
 
   if (levelUpPending) {
-  if (e.key === "ArrowLeft" || e.key === "a") {
+  if (action === "left") {
     levelUpSelectedIndex = (levelUpSelectedIndex - 1 + levelUpCards.length) % levelUpCards.length;
   }
-  if (e.key === "ArrowRight" || e.key === "d") {
+  if (action === "right") {
     levelUpSelectedIndex = (levelUpSelectedIndex + 1) % levelUpCards.length;
   }
-  if (e.key === "Enter" || e.key === " ") {
+  if (action === "jump" || normalizedKey === "enter") {
     chooseLevelUpCard(levelUpSelectedIndex);
   }
-  if (e.key === "1") chooseLevelUpCard(0);
-  if (e.key === "2") chooseLevelUpCard(1);
-  if (e.key === "3") chooseLevelUpCard(2);
+  if (normalizedKey === "1") chooseLevelUpCard(0);
+  if (normalizedKey === "2") chooseLevelUpCard(1);
+  if (normalizedKey === "3") chooseLevelUpCard(2);
+  return;
 }
 
-  if ((e.key === "r" || e.key === "R") && gameOver) {
-  resetGame();
-  triggerGameOver();
-     document.getElementById("game").style.display = "none";
-}
+  if (action === "restart" && gameOver) {
+    resetGame();
+    triggerGameOver();
+    document.getElementById("game").style.display = "none";
+    return;
+  }
 
-  if (e.key === "Escape") togglePause();
+  if (action === "pause") togglePause();
 });
-document.addEventListener("keyup", (e) => keys[e.key] = false);
+document.addEventListener("keyup", (e) => {
+  const normalizedKey = normalizeInputKey(e.key);
+  const keybindMenu = document.getElementById("keybindsMenu");
+  if (keybindCaptureAction || (keybindMenu && !keybindMenu.classList.contains("hidden"))) {
+    return;
+  }
+  setKeyState(normalizedKey, false);
+});
 
 document.addEventListener("keydown", e => {
-    keys[e.key] = true;
+    const action = getActionForKey(normalizeInputKey(e.key));
 
     // Start charging if not attacking or on cooldown
-    if (e.key === "Shift") { e.preventDefault(); tryDash(); }
+    if (action === "dash") { e.preventDefault(); tryDash(); }
 });
 
 document.addEventListener("keydown", (e) => {
@@ -11509,7 +11949,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 document.addEventListener("keyup", e => {
-    keys[e.key] = false;
+  setKeyState(normalizeInputKey(e.key), false);
 });
 
 
@@ -11666,6 +12106,11 @@ function bakePotato(oven) {
 function updateSnowmen() {
   for (let s of G.snowmen) {
     ensureEntityInBounds(s);
+    if (s.stunTimer > 0) {
+      s.stunTimer--;
+      s.dx = 0;
+      continue;
+    }
     const dx = player.x - s.x;
     const dist = Math.abs(dx);
 
@@ -12442,12 +12887,13 @@ function drawChairs() {
 // filled from the network instead of from keys[]
 function getLocalInput() {
   return {
-    left:   !!(keys["arrowleft"] || keys["a"] || localInput._gpLeft),
-    right:  !!(keys["arrowright"] || keys["d"] || localInput._gpRight),
-    down:   !!(keys["arrowdown"] || keys["s"] || localInput._gpDown),
-    jump:   !!(keys["arrowup"] || keys["w"] || keys[" "] || localInput._gpJump),
-    dash:   !!(keys["Shift"] || localInput._gpDash),
-    attack: !!(keys["f"] || localInput._gpAttack),
+    left:   !!(isActionPressed("left") || localInput._gpLeft),
+    right:  !!(isActionPressed("right") || localInput._gpRight),
+    down:   !!(isActionPressed("down") || localInput._gpDown),
+    jump:   !!(isActionPressed("jump") || localInput._gpJump),
+    dash:   !!(isActionPressed("dash") || localInput._gpDash),
+    attack: !!(isActionPressed("attack") || localInput._gpAttack),
+    sword:  !!(isActionPressed("sword") || localInput._gpSword),
   };
 }
 
@@ -12461,7 +12907,7 @@ function updatePlayerAnimation() {
   const isOnGround = player.onGround;
   const isDashing  = player.dashActive;
   const isRolling  = player.rollActive;
-  const isAttacking = player.attackTimer > 0;
+  const isAttacking = player.attackTimer > 0 || player.swordTimer > 0;
   // Determine state
   // Crouch animation has priority when on ground
   if (player.crouching) {
@@ -12526,20 +12972,33 @@ localInput = getLocalInput();
 
 // Attack pressed this frame (keyboard/gamepad edge)
 if (localInput.attack && !prevInput.attack) {
-  if (player.attackTimer <= 0 && player.attackCooldown <= 0 && !player.attackCharging) {
-    player.attackCharging = true;
-    player.attackChargeTime = 0;
+  if (player.attackTimer <= 0 && player.attackCooldown <= 0) {
+    player.attackTimer = player.attackDuration;
+    player.attackCooldown = 20;
+    player.attackHitObjects.clear();
+  }
+}
+
+// Directional sword swings immediately on press
+if (localInput.sword && !prevInput.sword) {
+  if (player.swordTimer <= 0 && player.swordCooldown <= 0) {
+    const inAir = !player.onGround;
+    if (localInput.down && inAir) {
+      player.swordDir = "down";
+    } else if (localInput.jump) {
+      player.swordDir = "up";
+    } else {
+      player.swordDir = player.facing >= 0 ? "right" : "left";
+    }
+    player.swordTimer = player.swordDuration;
+    player.swordCooldown = player.swordBaseCooldown;
+    player.swordHitObjects.clear();
+    playSwordSound();
   }
 }
 // Attack released this frame (keyboard/gamepad edge)
 if (!localInput.attack && prevInput.attack) {
-  if (player.attackCharging) {
-    player.attackCharging = false;
-    player.attackTimer = player.attackDuration;
-    player.attackCooldown = 20;
-    player.attackKnockback = 5 + 5 * Math.min(player.attackChargeTime / player.maxChargeTime, 1);
-    player.attackHitObjects.clear();
-  }
+  // no-op: club is instant now
 }
 
 // Crouch handling: hold Down while on ground to crouch
@@ -12595,7 +13054,9 @@ const onIce = ground && ground.ice;
 let accel = onIce ? 0.6 : player.speed;
 let friction = onIce ? 0.99 : 0.0;
 
+const playerGravity = gravity - 0.05;
 const moveSpeed = speedChiliActive ? SPEED_CHILI_SPEED : player.speed * player.slowMultiplier;
+
 
 if (speedChiliActive) {
   if (localInput.left && !localInput.right) {
@@ -12661,13 +13122,9 @@ if ((localInput.jump) && player.onGround) {
 
 //Sword
 // Charging
-if (player.attackCharging) {
-    player.attackChargeTime++;
-    if (player.attackChargeTime > player.maxChargeTime) player.attackChargeTime = player.maxChargeTime;
-}
-
 // Decrease cooldown
 if (player.attackCooldown > 0) player.attackCooldown--;
+if (player.swordCooldown > 0) player.swordCooldown--;
 
   // Ladder physics: stick to ladder while climbing and avoid horizontal drift.
   if (player.isOnLadder) {
@@ -12688,7 +13145,7 @@ if (player.attackCooldown > 0) player.attackCooldown--;
         player.dy = FEATHER_BOOTS_MAX_FALL_SPEED;
       }
     } else {
-      player.dy += gravity;
+      player.dy += playerGravity;
     }
   }
 
@@ -12703,8 +13160,10 @@ if (player.attackCooldown > 0) player.attackCooldown--;
     if (Math.abs(player.wallJumpBoost) < 0.5) player.wallJumpBoost = 0;
   }
 
+  const fastfall = (isActionPressed("down"));
   // Apply velocity
-  if (player.dy > 14) player.dy = 14;  // cap BEFORE moving
+  if (!fastfall && player.dy > 12) player.dy = 12;  // cap BEFORE moving
+  if (player.dy > 16) player.dy = 16;
 
   // Dash override
   if (player.dashDuration > 0) {
@@ -12816,105 +13275,334 @@ if (player.attackCooldown > 0) player.attackCooldown--;
 }
 
 
-function drawPlayerSword() {
+function drawPlayerClub() {
   if (player.attackTimer <= 0) return;
   
   const t = 1 - player.attackTimer / player.attackDuration;
   
-  const swingSpan = Math.PI * 1.25; // wider than 180°
-  const baseAngle = -Math.PI / 2; // centered at the top
-  const startAngle = baseAngle - swingSpan / 2;
-  const angle = startAngle + t * swingSpan;
+  const startAngle = CLUB_ATTACK_BASE_ANGLE - CLUB_ATTACK_SWING_SPAN / 2;
+  const angle = startAngle + t * CLUB_ATTACK_SWING_SPAN;
   
   const pivotX = player.x + player.width / 2;
   const pivotY = player.y + player.height / 2;
-  const radius = 60 * (playerUpgrades.swordRangeMulti || 1);
+  const radius = CLUB_ATTACK_RADIUS * (playerUpgrades.swordRangeMulti || 1);
   
   const tipX = pivotX + Math.cos(angle) * radius;
   const tipY = pivotY + Math.sin(angle) * radius;
-  
-  // Dynamic thickness
-  const dynamicWidth = 3 + Math.sin(t * Math.PI) * 7;
-  
-  // Main sword gradient
-  const grad = ctx.createLinearGradient(pivotX, pivotY, tipX, tipY);
-  grad.addColorStop(0, "white");
-  grad.addColorStop(0.5, "cyan");
-  grad.addColorStop(1, "blue");
-  
-  ctx.strokeStyle = grad;
-  ctx.lineWidth = dynamicWidth;
-  ctx.beginPath();
-  ctx.moveTo(pivotX, pivotY);
-  ctx.lineTo(tipX, tipY);
-  ctx.stroke();
-  
-  // Arc trail afterimages
-  const trailAngles = [0.15, 0.30, 0.45];
-  
-  for (let i = 0; i < trailAngles.length; i++) {
-    let trailAngle;
-    
-    trailAngle = angle + trailAngles[i];
-    
-    const trailX = pivotX + Math.cos(trailAngle) * radius;
-    const trailY = pivotY + Math.sin(trailAngle) * radius;
-    
-    const alpha = 0.35 - i * 0.1;
-    
-    ctx.strokeStyle = `rgba(100,180,255,${alpha})`;
-    ctx.lineWidth = dynamicWidth - (i + 1);
+
+  if (clubImg.complete && clubImg.naturalWidth > 0) {
+    const sourceW = clubImg.naturalWidth;
+    const sourceH = clubImg.naturalHeight;
+    const sourceLen = Math.hypot(sourceW, sourceH) || 1;
+    const desiredLen = radius + CLUB_DRAW_TIP_PADDING;
+    const scale = desiredLen / sourceLen;
+    const drawW = sourceW * scale;
+    const drawH = sourceH * scale;
+
+    // Sprite points from bottom-left (handle) to top-right (head), so rotate by +45deg.
+    const spriteAngle = angle + CLUB_SPRITE_ROTATION_OFFSET;
+
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate(spriteAngle - 0.2);
+    ctx.drawImage(clubImg, 0, -drawH, drawW, drawH);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate(spriteAngle - 0.38);
+    ctx.drawImage(clubImg, 0, -drawH, drawW, drawH);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate(spriteAngle);
+    ctx.drawImage(clubImg, 0, -drawH, drawW, drawH);
+    ctx.restore();
+  } else {
+    // Fallback while the club image is loading.
+    const dynamicWidth = CLUB_FALLBACK_STROKE_BASE + Math.sin(t * Math.PI) * CLUB_FALLBACK_STROKE_VARIATION;
+    const grad = ctx.createLinearGradient(pivotX, pivotY, tipX, tipY);
+    grad.addColorStop(0, "#8d6e63");
+    grad.addColorStop(0.7, "#a1887f");
+    grad.addColorStop(1, "#5d4037");
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = dynamicWidth;
     ctx.beginPath();
     ctx.moveTo(pivotX, pivotY);
-    ctx.lineTo(trailX, trailY);
+    ctx.lineTo(tipX, tipY);
     ctx.stroke();
   }
 }
 
-function updatePlayerSwordAttack() {
-  if (player.attackTimer <= 0) return;
+function drawSword() {
+  if (player.swordTimer <= 0) return;
+
+  // Calculate animation progress (0 = start, 1 = end)
+  const animProgress = 1 - player.swordTimer / player.swordDuration;
   
-  const t = 1 - player.attackTimer / player.attackDuration;
-  
-  const swingSpan = Math.PI * 1.25; // wider than 180°
-  const baseAngle = -Math.PI / 2; // centered at the top
-  const startAngle = baseAngle - swingSpan / 2;
-  const angle = startAngle + t * swingSpan;
-  
+  // Map animation progress to frame index (0-6)
+  const frameIndex = Math.floor(animProgress * SWORD_FRAME_COUNT);
+  const clampedFrame = Math.min(frameIndex, SWORD_FRAME_COUNT - 1);
+
+  const SWORD_SCALE = SWORD_ATTACK_DRAW_SCALE;
+
+  // Determine which frame set to use based on direction
+  let frameSet = swordAnimFrames.right;
+  let drawOffsetX = 0;
+  let drawOffsetY = 0;
+
+  if (player.swordDir === "right") {
+    frameSet = swordAnimFrames.rightExtended;
+    drawOffsetX = player.x + player.width / 2;
+    drawOffsetY = player.y + player.height / 2 - (SWORD_FRAME_HEIGHT * SWORD_SCALE) / 2;
+  } else if (player.swordDir === "left") {
+    frameSet = swordAnimFrames.leftExtended;
+    // Offset to center the extended frame
+    drawOffsetX = player.x + player.width / 2 - ((SWORD_FRAME_WIDTH + SWORD_ATTACK_EXTENSION_WIDTH) * SWORD_SCALE);
+    drawOffsetY = player.y + player.height / 2 - (SWORD_FRAME_HEIGHT * SWORD_SCALE) / 2;
+  } else if (player.swordDir === "up") {
+    // Up swing - use right frame rotated, starts at top of player
+    frameSet = swordAnimFrames.right;
+    drawOffsetX = player.x + player.width / 2 - (SWORD_FRAME_WIDTH * SWORD_SCALE) / 2;
+    drawOffsetY = player.y - (SWORD_FRAME_HEIGHT * SWORD_SCALE);
+  } else if (player.swordDir === "down") {
+    // Down swing - use right frame rotated, starts at bottom of player
+    frameSet = swordAnimFrames.right;
+    drawOffsetX = player.x + player.width / 2 - (SWORD_FRAME_WIDTH * SWORD_SCALE) / 2;
+    drawOffsetY = player.y + player.height;
+  }
+
+  // Draw the sprite frame
+  const frame = frameSet[clampedFrame];
+  if (frame) {
+    ctx.save();
+    ctx.globalAlpha = SWORD_DRAW_ALPHA;
+    ctx.shadowColor = SWORD_DRAW_SHADOW_COLOR;
+    ctx.shadowBlur = SWORD_DRAW_SHADOW_BLUR;
+    
+    if (player.swordDir === "up") {
+      ctx.translate(drawOffsetX + (SWORD_FRAME_WIDTH * SWORD_SCALE) / 2, drawOffsetY + (SWORD_FRAME_HEIGHT * SWORD_SCALE) / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(frame, -(SWORD_FRAME_HEIGHT * SWORD_SCALE) / 2, -(SWORD_FRAME_WIDTH * SWORD_SCALE) / 2, SWORD_FRAME_HEIGHT * SWORD_SCALE, SWORD_FRAME_WIDTH * SWORD_SCALE);
+    } else if (player.swordDir === "down") {
+      ctx.translate(drawOffsetX + (SWORD_FRAME_WIDTH * SWORD_SCALE) / 2, drawOffsetY + (SWORD_FRAME_HEIGHT * SWORD_SCALE) / 2);
+      ctx.rotate(Math.PI / 2);
+      ctx.drawImage(frame, -(SWORD_FRAME_HEIGHT * SWORD_SCALE) / 2, -(SWORD_FRAME_WIDTH * SWORD_SCALE) / 2, SWORD_FRAME_HEIGHT * SWORD_SCALE, SWORD_FRAME_WIDTH * SWORD_SCALE);
+    } else {
+      ctx.drawImage(frame, drawOffsetX, drawOffsetY, (SWORD_FRAME_WIDTH + (player.swordDir === "right" ? SWORD_ATTACK_EXTENSION_WIDTH : player.swordDir === "left" ? SWORD_ATTACK_EXTENSION_WIDTH : 0)) * SWORD_SCALE, SWORD_FRAME_HEIGHT * SWORD_SCALE);
+    }
+    
+    ctx.restore();
+  }
+}
+
+function applyClubStun(enemy, duration = 36) {
+  if (!enemy) return;
+  enemy.stunTimer = Math.max(enemy.stunTimer || 0, duration);
+  enemy.hitFlash = Math.max(enemy.hitFlash || 0, 4);
+  enemy.knockbackTimer = Math.max(enemy.knockbackTimer || 0, duration);
+  enemy.knockbackDx = 0;
+  enemy.knockbackDy = 0;
+}
+
+function getDirectionalSwordHitbox() {
+  const baseX = player.x + player.width / 2;
+  const baseY = player.y + player.height / 2;
+  const range = (SWORD_FRAME_WIDTH + SWORD_ATTACK_EXTENSION_WIDTH) * (playerUpgrades.swordRangeMulti || 1);
+  const width = SWORD_FRAME_HEIGHT;
+
+  if (player.swordDir === "up") {
+    return { x: baseX - width / 2, y: baseY - range, width, height: range };
+  }
+  if (player.swordDir === "down") {
+    return { x: baseX - width / 2, y: baseY, width, height: range };
+  }
+  if (player.swordDir === "left") {
+    return { x: baseX - range, y: baseY - width / 2, width: range, height: width };
+  }
+  // Right
+  return { x: baseX, y: baseY - width / 2, width: range, height: width };
+}
+
+function getClubAttackHitbox() {
+  if (player.attackTimer <= 0 || player.attackDuration <= 0) return null;
+
+  const progress = 1 - player.attackTimer / player.attackDuration;
+  const swingStartAngle = CLUB_ATTACK_BASE_ANGLE - CLUB_ATTACK_SWING_SPAN / 2;
+  const angle = swingStartAngle + progress * CLUB_ATTACK_SWING_SPAN;
   const pivotX = player.x + player.width / 2;
   const pivotY = player.y + player.height / 2;
-  const radius = 60 * (playerUpgrades.swordRangeMulti || 1);
-  
+  const radius = CLUB_ATTACK_RADIUS * (playerUpgrades.swordRangeMulti || 1);
   const tipX = pivotX + Math.cos(angle) * radius;
   const tipY = pivotY + Math.sin(angle) * radius;
-  
-  const attackBox = {
-    x: tipX - 50,
-    y: tipY - 15,
-    width: 100,
-    height: 30
+
+  return {
+    x: tipX - CLUB_ATTACK_BOX_HALF_WIDTH,
+    y: tipY - CLUB_ATTACK_BOX_HALF_HEIGHT,
+    width: CLUB_ATTACK_BOX_WIDTH,
+    height: CLUB_ATTACK_BOX_HEIGHT
   };
+}
+
+function getClubKnockback(targetX, targetY, multiplier = CLUB_ENEMY_KNOCKBACK_MULTIPLIER) {
+  const pivotX = player.x + player.width / 2;
+  const pivotY = player.y + player.height / 2;
+  const dx = targetX - pivotX;
+  const dy = targetY - pivotY;
+  const length = Math.hypot(dx, dy) || 1;
+  return {
+    x: (dx / length) * multiplier,
+    y: (dy / length) * multiplier - 2
+  };
+}
+
+function drawDebugHitbox(hitbox, color) {
+  if (!hitbox) return;
+  ctx.save();
+  ctx.lineWidth = DEBUG_HITBOX_LINE_WIDTH;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.globalAlpha = DEBUG_HITBOX_FILL_ALPHA;
+  ctx.fillRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
+  ctx.globalAlpha = 1;
+  ctx.strokeRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
+  ctx.restore();
+}
+
+function getSwordKnockback(ex, ey) {
+  const px = player.x + player.width / 2;
+  const py = player.y + player.height / 2;
+  const dx = ex - px;
+  const dy = ey - py;
+  const len = Math.hypot(dx, dy) || 1;
+  return { x: (dx / len) * 11, y: (dy / len) * 11 - 4 };
+}
+
+function hitSwordTargets(attackBox) {
+  const damage = 1;
+  let shouldBounce = player.swordDir === "down";
+
+  for (let i = G.snails.length - 1; i >= 0; i--) {
+    const s = G.snails[i];
+    if (!isColliding(attackBox, s) || player.swordHitObjects.has(s)) continue;
+    const died = damageEnemy(s, damage, getSwordKnockback(s.x, s.y));
+    if (died) { G.snails.splice(i, 1); onEnemyKilled("snail"); }
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    player.swordHitObjects.add(s);
+  }
+
+  for (let i = G.SuperSnails.length - 1; i >= 0; i--) {
+    const s = G.SuperSnails[i];
+    if (!isColliding(attackBox, s) || player.swordHitObjects.has(s)) continue;
+    const died = damageEnemy(s, damage, getSwordKnockback(s.x, s.y));
+    if (died) { G.SuperSnails.splice(i, 1); onEnemyKilled("superSnail"); }
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    player.swordHitObjects.add(s);
+  }
+
+  for (let i = G.bats.length - 1; i >= 0; i--) {
+    const b = G.bats[i];
+    if (!isColliding(attackBox, b) || player.swordHitObjects.has(b)) continue;
+    const died = damageEnemy(b, damage, getSwordKnockback(b.x, b.y));
+    if (died) { G.bats.splice(i, 1); onEnemyKilled("bat"); }
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    player.swordHitObjects.add(b);
+  }
+
+  for (let i = G.snowmen.length - 1; i >= 0; i--) {
+    const s = G.snowmen[i];
+    if (!isColliding(attackBox, s) || player.swordHitObjects.has(s)) continue;
+    const died = damageEnemy(s, damage, getSwordKnockback(s.x, s.y));
+    if (died) { G.snowmen.splice(i, 1); onEnemyKilled("snowman"); }
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    player.swordHitObjects.add(s);
+  }
+
+  for (const y of G.yetis) {
+    if (!y.alive || !isColliding(attackBox, y) || player.swordHitObjects.has(y)) continue;
+    const died = damageEnemy(y, damage, getSwordKnockback(y.x, y.y));
+    if (died) { y.alive = false; onEnemyKilled("yeti"); }
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    player.swordHitObjects.add(y);
+  }
+
+  for (let i = G.turrets.length - 1; i >= 0; i--) {
+    const t = G.turrets[i];
+    if (!isColliding(attackBox, t) || player.swordHitObjects.has(t)) continue;
+    const died = damageEnemy(t, damage, { x: 0, y: 0 });
+    if (died) { G.turrets.splice(i, 1); onEnemyKilled("turret"); }
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    player.swordHitObjects.add(t);
+  }
+
+  for (let i = G.chairs.length - 1; i >= 0; i--) {
+    const c = G.chairs[i];
+    if (!isColliding(attackBox, c) || player.swordHitObjects.has(c)) continue;
+    const died = damageEnemy(c, damage, getSwordKnockback(c.x, c.y));
+    if (died) { G.chairs.splice(i, 1); onEnemyKilled("chair"); }
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    player.swordHitObjects.add(c);
+  }
+
+  for (let i = G.tables.length - 1; i >= 0; i--) {
+    const t = G.tables[i];
+    if (!isColliding(attackBox, t) || player.swordHitObjects.has(t)) continue;
+    const died = damageEnemy(t, damage, getSwordKnockback(t.x, t.y));
+    if (!t.flipping) triggerTableFlip(t, player.facing * 5);
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    if (died) { G.tables.splice(i, 1); onEnemyKilled("table"); }
+    player.swordHitObjects.add(t);
+  }
+
+  for (const box of boxes) {
+    if (!isColliding(attackBox, box) || player.swordHitObjects.has(box)) continue;
+    damageBox(box, 1);
+    const kb = getSwordKnockback(box.x, box.y);
+    box.dx += kb.x * 3.5;
+    box.dy += kb.y * 3.5;
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    player.swordHitObjects.add(box);
+  }
+
+  // Hit spikes with down attack
+  if (shouldBounce) {
+    for (const spike of spikes) {
+      if (!isColliding(attackBox, spike)) continue;
+      player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+      break; // Only bounce once per frame even if hitting multiple spikes
+    }
+  }
+
+  damageCheeseCheck(attackBox, damage, { x: player.facing * 7, y: -4 });
+}
+
+function updateDirectionalSwordAttack() {
+  if (player.swordTimer <= 0) return;
+  const attackBox = getDirectionalSwordHitbox();
+  hitSwordTargets(attackBox);
+  player.swordTimer--;
+}
+
+function updatePlayerClubAttack() {
+  if (player.attackTimer <= 0) return;
+  const attackBox = getClubAttackHitbox();
+  if (!attackBox) return;
+
+  let hitEnemyThisFrame = false;
   
   // Hit G.snails
   for (let i = G.snails.length - 1; i >= 0; i--) {
     let s = G.snails[i];
     
     if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
-      const died = damageEnemy(s, 1, {
-        x: player.attackKnockback * 2 * Math.sign(s.x - player.x),  // ✅ FIXED
-        y: -player.attackKnockback * 1.3
-      });
-      
-      if (died) {
-        setTimeout(() => {
-          let index = G.snails.indexOf(s);
-          if (index > -1) {
-            G.snails.splice(index, 1);
-            onEnemyKilled('snail');
-          }
-        }, 300);
-      }
-      
+      applyClubStun(s);
+      const knockback = getClubKnockback(s.x + (s.width || 0) / 2, s.y + (s.height || 0) / 2);
+      s.knockbackDx = knockback.x;
+      s.knockbackDy = knockback.y;
+      hitEnemyThisFrame = true;
       player.attackHitObjects.add(s);
     }
   }
@@ -12924,21 +13612,11 @@ function updatePlayerSwordAttack() {
     let s = G.SuperSnails[i];
     
     if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
-      const died = damageEnemy(s, 1, {
-        x: player.attackKnockback * 2 * Math.sign(s.x - player.x),  // ✅ FIXED
-        y: -player.attackKnockback * 1.3
-      });
-      
-      if (died) {
-        setTimeout(() => {
-          let index = G.SuperSnails.indexOf(s);
-          if (index > -1) {
-            G.SuperSnails.splice(index, 1);
-            onEnemyKilled('superSnail');
-          }
-        }, 300);
-      }
-      
+      applyClubStun(s);
+      const knockback = getClubKnockback(s.x + (s.width || 0) / 2, s.y + (s.height || 0) / 2);
+      s.knockbackDx = knockback.x;
+      s.knockbackDy = knockback.y;
+      hitEnemyThisFrame = true;
       player.attackHitObjects.add(s);
     }
   }
@@ -12948,21 +13626,11 @@ function updatePlayerSwordAttack() {
     let bat = G.bats[i];
     
     if (isColliding(attackBox, bat) && !player.attackHitObjects.has(bat)) {
-      const died = damageEnemy(bat, 1, {
-        x: player.attackKnockback * 2 * Math.sign(bat.x - player.x),  // ✅ FIXED
-        y: -player.attackKnockback * 1.3
-      });
-      
-      if (died) {
-        setTimeout(() => {
-          let index = G.bats.indexOf(bat);
-          if (index > -1) {
-            G.bats.splice(index, 1);
-            onEnemyKilled('bat');
-          }
-        }, 300);
-      }
-      
+      applyClubStun(bat);
+      const knockback = getClubKnockback(bat.x + (bat.width || 0) / 2, bat.y + (bat.height || 0) / 2);
+      bat.knockbackDx = knockback.x;
+      bat.knockbackDy = knockback.y;
+      hitEnemyThisFrame = true;
       player.attackHitObjects.add(bat);
     }
   }
@@ -12972,16 +13640,11 @@ function updatePlayerSwordAttack() {
     if (!y.alive) continue;
     
     if (isColliding(attackBox, y) && !player.attackHitObjects.has(y)) {
-      const died = damageEnemy(y, 1, {
-        x: player.attackKnockback * 2 * Math.sign(y.x - player.x),  // ✅ FIXED
-        y: -player.attackKnockback * 1.3
-      });
-      
-      if (died) {
-        y.alive = false;
-        onEnemyKilled('yeti');
-      }
-      
+      applyClubStun(y);
+      const knockback = getClubKnockback(y.x + (y.width || 0) / 2, y.y + (y.height || 0) / 2);
+      y.knockbackDx = knockback.x;
+      y.knockbackDy = knockback.y;
+      hitEnemyThisFrame = true;
       player.attackHitObjects.add(y);
     }
   }
@@ -12991,101 +13654,64 @@ function updatePlayerSwordAttack() {
     let s = G.snowmen[i];
     
     if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
-      const died = damageEnemy(s, 1, {
-        x: player.attackKnockback * 2 * Math.sign(s.x - player.x),  // ✅ FIXED
-        y: -player.attackKnockback * 1.3
-      });
-      
-      if (died) {
-        setTimeout(() => {
-          let index = G.snowmen.indexOf(s);
-          if (index > -1) {
-            G.snowmen.splice(index, 1);
-            onEnemyKilled('snowman');
-          }
-        }, 300);
-      }
-      
+      applyClubStun(s);
+      const knockback = getClubKnockback(s.x + (s.width || 0) / 2, s.y + (s.height || 0) / 2);
+      s.knockbackDx = knockback.x;
+      s.knockbackDy = knockback.y;
+      hitEnemyThisFrame = true;
       player.attackHitObjects.add(s);
     }
   }
-  // Hit cheeses — sword
-  damageCheeseCheck(
-    attackBox,
-    1,
-    { x: player.attackKnockback * 2 * player.facing, y: -player.attackKnockback * 1.5 }
-  );
   // Hit G.turrets
   for (let i = G.turrets.length - 1; i >= 0; i--) {
     let t = G.turrets[i];
     
     if (isColliding(attackBox, t) && !player.attackHitObjects.has(t)) {
-      const died = damageEnemy(t, 1, { x: 0, y: 0 });  // G.turrets don't move
-      
-      if (died) {
-        G.turrets.splice(i, 1);
-        onEnemyKilled('turret');
-      }
-      
+      applyClubStun(t, CLUB_TURRET_STUN_DURATION);
+      const knockback = getClubKnockback(t.x + (t.width || 0) / 2, t.y + (t.height || 0) / 2);
+      t.knockbackDx = knockback.x;
+      t.knockbackDy = knockback.y;
+      hitEnemyThisFrame = true;
       player.attackHitObjects.add(t);
     }
   }
-  
-  // Hit boxes (breakable ones take damage)
-  for (let box of boxes) {
-    if (isColliding(attackBox, box) && !player.attackHitObjects.has(box)) {
-      damageBox(box, 1);
-      
-      // Knockback for all boxes - away from player
-      box.dx += player.attackKnockback * 2 * Math.sign(box.x - player.x);  // ✅ FIXED
-      box.dy -= player.attackKnockback * 2;
-      
-      player.attackHitObjects.add(box);
-    }
-  }
+
     // Hit G.chairs
   for (let i = G.chairs.length - 1; i >= 0; i--) {
     let c = G.chairs[i];
     if (isColliding(attackBox, c) && !player.attackHitObjects.has(c)) {
-      const died = damageEnemy(c, 1, {
-        x: player.attackKnockback * 2 * Math.sign(c.x - player.x),
-        y: -player.attackKnockback * 1.5
-      });
-      if (died) {
-        G.chairs.splice(i, 1);
-        onEnemyKilled('chair');
-      }
+      applyClubStun(c);
+      const knockback = getClubKnockback(c.x + (c.width || 0) / 2, c.y + (c.height || 0) / 2);
+      c.knockbackDx = knockback.x;
+      c.knockbackDy = knockback.y;
+      hitEnemyThisFrame = true;
       player.attackHitObjects.add(c);
     }
   }
-  // Hit G.tables — sword triggers a flip!
+  // Hit G.tables — club only stuns, no damage or flip
   for (let i = G.tables.length - 1; i >= 0; i--) {
     let t = G.tables[i];
     if (isColliding(attackBox, t) && !player.attackHitObjects.has(t)) {
-      const died = damageEnemy(t, 1, {
-        x: player.attackKnockback * 2 * Math.sign(t.x - player.x),
-        y: -player.attackKnockback * 1.5
-      });
-      // Always flip the table on sword hit regardless of HP
-      if (!t.flipping) triggerTableFlip(t, player.attackKnockback * player.facing);
-      if (died) {
-        G.tables.splice(i, 1);
-        onEnemyKilled('table');
-      }
-      if (hasPotato) {
-        potatoMessage = "🥔 respect the table flip";
-        potatoMessageTimer = 80;
-      }
+      applyClubStun(t);
+      const knockback = getClubKnockback(t.x + (t.width || 0) / 2, t.y + (t.height || 0) / 2, CLUB_BOX_KNOCKBACK_MULTIPLIER);
+      t.knockbackDx = knockback.x;
+      t.knockbackDy = knockback.y;
+      hitEnemyThisFrame = true;
       player.attackHitObjects.add(t);
     }
   }
-  // After onEnemyKilled() calls in the sword section, add:
-if (playerUpgrades.swordVampEnabled && !playerUpgrades.swordVampUsed && playerLives < maxLives) {
-  playerLives++;
-  playerUpgrades.swordVampUsed = true;
-  potatoMessage = "🩸 soul absorbed";
-  potatoMessageTimer = 90;
- }
+
+  for (const box of boxes) {
+    if (!isColliding(attackBox, box) || player.attackHitObjects.has(box)) continue;
+    const knockback = getClubKnockback(box.x + box.width / 2, box.y + box.height / 2, CLUB_BOX_KNOCKBACK_MULTIPLIER);
+    box.dx += knockback.x;
+    box.dy += knockback.y;
+    player.attackHitObjects.add(box);
+  }
+
+  if (hitEnemyThisFrame) {
+    triggerScreenShake(CLUB_HIT_SHAKE_INTENSITY);
+  }
 }
 
 function resetWorld() {
@@ -14674,18 +15300,13 @@ for (let f of G.fireballs) {
     ctx.fill();
 }
 
-// Charge bar
-if (player.attackCharging) {
-    ctx.fillStyle = "yellow";
-    const barWidth = (player.attackChargeTime / player.maxChargeTime) * player.width;
-    ctx.fillRect(player.x, player.y - 10, barWidth, 5);
-}
   drawBats();
   drawCheeses();
   drawSpecialBoxes();
   drawPlacedStructures()
   drawExplosions();
-  drawPlayerSword();
+  drawPlayerClub();
+  drawSword();
   drawOrbiters();
   // Dash afterimage trail
 if (player.dashActive || player.dashDuration > 0) {
@@ -14711,14 +15332,17 @@ if (player.dashActive || player.dashDuration > 0) {
   // Hitboxes
 if (settings.showHitboxes) {
   ctx.save();
-  ctx.strokeStyle = "rgba(255,0,0,0.7)";
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = DEBUG_HITBOX_ENTITY_COLOR;
+  ctx.lineWidth = DEBUG_HITBOX_LINE_WIDTH;
   const allObjs = [...G.snails, ...G.SuperSnails, ...G.bats, ...G.turrets,
                    ...G.snowmen, ...G.yetis, ...G.chairs, ...G.tables, ...boxes, ...spikes];
   for (const o of allObjs) ctx.strokeRect(o.x, o.y, o.width || 32, o.height || 32);
   // player
-  ctx.strokeStyle = "rgba(0,255,0,0.9)";
+  ctx.strokeStyle = DEBUG_HITBOX_PLAYER_COLOR;
   ctx.strokeRect(player.x, player.y, player.width, player.height);
+
+  drawDebugHitbox(getDirectionalSwordHitbox(), DEBUG_HITBOX_SWORD_COLOR);
+  drawDebugHitbox(getClubAttackHitbox(), DEBUG_HITBOX_CLUB_COLOR);
   ctx.restore();
 }
 
@@ -14757,7 +15381,7 @@ if (player.dashCooldown > 0) {
 } else if (player.onGround || !player.dashUsedInAir) {
   ctx.fillStyle = "#00eeff";
   ctx.font = `${hudFontSize - 3}px monospace`;
-  ctx.fillText("DASH ready [Shift]", 10, 40);
+  ctx.fillText(`DASH ready [${formatBindingLabel(getBindingForAction("dash"))}]`, 10, 40);
 } else {
   ctx.fillStyle = "#555";
   ctx.font = `${hudFontSize - 3}px monospace`;
@@ -14780,7 +15404,7 @@ if (player.dashCooldown > 0) {
     ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
 
     ctx.font = "20px Arial";
-    ctx.fillText("Press R to Restart", canvas.width / 2, canvas.height / 2 + 30);
+    ctx.fillText(`Press ${formatBindingLabel(getBindingForAction("restart"))} to Restart`, canvas.width / 2, canvas.height / 2 + 30);
     ctx.textAlign = "left";
   }
 
@@ -14869,7 +15493,7 @@ function gameLoop(currentTime) {
       }
 
       updateSpeedChiliState();
-      updateFeatherBootsState();
+      //updateFeatherBootsState();
       updateDashBatteryState();
     
       if (!buildMode) {
@@ -14887,7 +15511,8 @@ function gameLoop(currentTime) {
           updateIcicles();
         }
         updatePlayer();
-        updatePlayerSwordAttack();
+        updatePlayerClubAttack();
+        updateDirectionalSwordAttack();
         updateCannonAim();
         updateCannonProjectiles();
         updateExplosions();

@@ -188,6 +188,12 @@
               <input type="range" id="settingMusicVolume" min="0" max="1" step="0.05" value="0.5">
               <span class="slider-value" id="musicVolumeLabel">50%</span>
             </div>
+          </label>          <label class="setting-row slider-row">
+            <span>SFX Volume</span>
+            <div class="slider-wrap">
+              <input type="range" id="settingSFXVolume" min="0" max="1" step="0.05" value="0.5">
+              <span class="slider-value" id="sfxVolumeLabel">50%</span>
+            </div>
           </label>
         </div>
 
@@ -213,6 +219,7 @@
               <span class="slider-value" id="deadzoneLabel">0.20</span>
             </div>
           </label>
+          <button type="button" class="settings-action-btn" onclick="openKeybindsMenu()">Customize Keybinds</button>
         </div>
 
         <div class="settings-section">
@@ -232,6 +239,17 @@
     </div>
 
     <button class="back-btn settings-back" onclick="backToMenuOrPause()">← Back</button>
+  </div>
+</div>
+<div id="keybindsMenu" class="hidden">
+  <div class="settings-container keybinds-container">
+    <h2 class="settings-title">⌨️ KEYBINDS</h2>
+    <p class="keybinds-help">Click a binding, then press a key. Backspace or Delete clears it.</p>
+    <div class="keybind-list" id="keybindList"></div>
+    <div class="keybinds-actions">
+      <button type="button" class="settings-action-btn" onclick="resetKeyBindings()">Reset Defaults</button>
+      <button type="button" class="back-btn" onclick="backToSettingsFromKeybinds()">← Back</button>
+    </div>
   </div>
 </div>
 <!-- Comment -->
