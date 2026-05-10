@@ -842,6 +842,7 @@ const CLUB_TURRET_STUN_DURATION = 50;
 const CLUB_ENEMY_KNOCKBACK_MULTIPLIER = 8;
 const CLUB_BOX_KNOCKBACK_MULTIPLIER = 3.5;
 const CLUB_HIT_SHAKE_INTENSITY = 4;
+const CLUB_PLAYER_KNOCKBACK = 4; // Player recoil when hitting enemies/boxes
 const CLUB_DRAW_TIP_PADDING = 14;
 const CLUB_SPRITE_ROTATION_OFFSET = Math.PI / 4;
 const CLUB_FALLBACK_STROKE_BASE = 4;
@@ -13492,6 +13493,7 @@ function hitSwordTargets(attackBox) {
     if (died) { G.snails.splice(i, 1); onEnemyKilled("snail"); }
     if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
     player.swordHitObjects.add(s);
+    triggerScreenShake(3);
   }
 
   for (let i = G.SuperSnails.length - 1; i >= 0; i--) {
@@ -13501,6 +13503,7 @@ function hitSwordTargets(attackBox) {
     if (died) { G.SuperSnails.splice(i, 1); onEnemyKilled("superSnail"); }
     if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
     player.swordHitObjects.add(s);
+    triggerScreenShake(5);
   }
 
   for (let i = G.bats.length - 1; i >= 0; i--) {
@@ -13510,6 +13513,7 @@ function hitSwordTargets(attackBox) {
     if (died) { G.bats.splice(i, 1); onEnemyKilled("bat"); }
     if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
     player.swordHitObjects.add(b);
+    triggerScreenShake(2);
   }
 
   for (let i = G.snowmen.length - 1; i >= 0; i--) {
@@ -13519,6 +13523,7 @@ function hitSwordTargets(attackBox) {
     if (died) { G.snowmen.splice(i, 1); onEnemyKilled("snowman"); }
     if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
     player.swordHitObjects.add(s);
+    triggerScreenShake(2);
   }
 
   for (const y of G.yetis) {
@@ -13527,6 +13532,7 @@ function hitSwordTargets(attackBox) {
     if (died) { y.alive = false; onEnemyKilled("yeti"); }
     if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
     player.swordHitObjects.add(y);
+    triggerScreenShake(5);
   }
 
   for (let i = G.turrets.length - 1; i >= 0; i--) {
@@ -13536,6 +13542,7 @@ function hitSwordTargets(attackBox) {
     if (died) { G.turrets.splice(i, 1); onEnemyKilled("turret"); }
     if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
     player.swordHitObjects.add(t);
+    triggerScreenShake(4);
   }
 
   for (let i = G.chairs.length - 1; i >= 0; i--) {
@@ -13545,6 +13552,7 @@ function hitSwordTargets(attackBox) {
     if (died) { G.chairs.splice(i, 1); onEnemyKilled("chair"); }
     if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
     player.swordHitObjects.add(c);
+    triggerScreenShake(3);
   }
 
   for (let i = G.tables.length - 1; i >= 0; i--) {
@@ -13555,6 +13563,7 @@ function hitSwordTargets(attackBox) {
     if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
     if (died) { G.tables.splice(i, 1); onEnemyKilled("table"); }
     player.swordHitObjects.add(t);
+    triggerScreenShake(4);
   }
 
   for (const box of boxes) {
@@ -13565,6 +13574,7 @@ function hitSwordTargets(attackBox) {
     box.dy += kb.y * 3.5;
     if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
     player.swordHitObjects.add(box);
+    triggerScreenShake(1);
   }
 
   // Hit spikes with down attack
@@ -13572,6 +13582,7 @@ function hitSwordTargets(attackBox) {
     for (const spike of spikes) {
       if (!isColliding(attackBox, spike)) continue;
       player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+      triggerScreenShake(1);
       break; // Only bounce once per frame even if hitting multiple spikes
     }
   }
@@ -13602,6 +13613,8 @@ function updatePlayerClubAttack() {
       const knockback = getClubKnockback(s.x + (s.width || 0) / 2, s.y + (s.height || 0) / 2);
       s.knockbackDx = knockback.x;
       s.knockbackDy = knockback.y;
+      player.dx -= knockback.x * 0.4; // Player recoil in opposite direction
+      player.dy -= knockback.y * 0.4; // Upwards force from knockback
       hitEnemyThisFrame = true;
       player.attackHitObjects.add(s);
     }
@@ -13616,6 +13629,8 @@ function updatePlayerClubAttack() {
       const knockback = getClubKnockback(s.x + (s.width || 0) / 2, s.y + (s.height || 0) / 2);
       s.knockbackDx = knockback.x;
       s.knockbackDy = knockback.y;
+      player.dx -= knockback.x * 0.4; // Player recoil in opposite direction
+      player.dy -= knockback.y * 0.4; // Upwards force from knockback
       hitEnemyThisFrame = true;
       player.attackHitObjects.add(s);
     }
@@ -13630,6 +13645,8 @@ function updatePlayerClubAttack() {
       const knockback = getClubKnockback(bat.x + (bat.width || 0) / 2, bat.y + (bat.height || 0) / 2);
       bat.knockbackDx = knockback.x;
       bat.knockbackDy = knockback.y;
+      player.dx -= knockback.x * 0.4; // Player recoil in opposite direction
+      player.dy -= knockback.y * 0.4; // Upwards force from knockback
       hitEnemyThisFrame = true;
       player.attackHitObjects.add(bat);
     }
@@ -13644,6 +13661,8 @@ function updatePlayerClubAttack() {
       const knockback = getClubKnockback(y.x + (y.width || 0) / 2, y.y + (y.height || 0) / 2);
       y.knockbackDx = knockback.x;
       y.knockbackDy = knockback.y;
+      player.dx -= knockback.x * 0.4; // Player recoil in opposite direction
+      player.dy -= knockback.y * 0.4; // Upwards force from knockback
       hitEnemyThisFrame = true;
       player.attackHitObjects.add(y);
     }
@@ -13658,6 +13677,8 @@ function updatePlayerClubAttack() {
       const knockback = getClubKnockback(s.x + (s.width || 0) / 2, s.y + (s.height || 0) / 2);
       s.knockbackDx = knockback.x;
       s.knockbackDy = knockback.y;
+      player.dx -= knockback.x * 0.4; // Player recoil in opposite direction
+      player.dy -= knockback.y * 0.4; // Upwards force from knockback
       hitEnemyThisFrame = true;
       player.attackHitObjects.add(s);
     }
@@ -13671,6 +13692,8 @@ function updatePlayerClubAttack() {
       const knockback = getClubKnockback(t.x + (t.width || 0) / 2, t.y + (t.height || 0) / 2);
       t.knockbackDx = knockback.x;
       t.knockbackDy = knockback.y;
+      player.dx -= knockback.x * 0.4; // Player recoil in opposite direction
+      player.dy -= knockback.y * 0.4; // Upwards force from knockback
       hitEnemyThisFrame = true;
       player.attackHitObjects.add(t);
     }
@@ -13684,6 +13707,8 @@ function updatePlayerClubAttack() {
       const knockback = getClubKnockback(c.x + (c.width || 0) / 2, c.y + (c.height || 0) / 2);
       c.knockbackDx = knockback.x;
       c.knockbackDy = knockback.y;
+      player.dx -= knockback.x * 0.4; // Player recoil in opposite direction
+      player.dy -= knockback.y * 0.4; // Upwards force from knockback
       hitEnemyThisFrame = true;
       player.attackHitObjects.add(c);
     }
@@ -13696,6 +13721,8 @@ function updatePlayerClubAttack() {
       const knockback = getClubKnockback(t.x + (t.width || 0) / 2, t.y + (t.height || 0) / 2, CLUB_BOX_KNOCKBACK_MULTIPLIER);
       t.knockbackDx = knockback.x;
       t.knockbackDy = knockback.y;
+      player.dx -= knockback.x * 0.4; // Player recoil in opposite direction
+      player.dy -= knockback.y * 0.4; // Upwards force from knockback
       hitEnemyThisFrame = true;
       player.attackHitObjects.add(t);
     }
@@ -13706,6 +13733,9 @@ function updatePlayerClubAttack() {
     const knockback = getClubKnockback(box.x + box.width / 2, box.y + box.height / 2, CLUB_BOX_KNOCKBACK_MULTIPLIER);
     box.dx += knockback.x;
     box.dy += knockback.y;
+    player.dx -= knockback.x * 0.4; // Player recoil in opposite direction
+    player.dy -= knockback.y * 0.4; // Upwards force from knockback
+    hitEnemyThisFrame = true;
     player.attackHitObjects.add(box);
   }
 
