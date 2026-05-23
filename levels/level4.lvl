@@ -1,0 +1,251 @@
+{
+  "objects": [
+    {
+      "id": 27,
+      "type": "wall",
+      "x": 312,
+      "y": 928,
+      "width": 832,
+      "height": 20
+    },
+    {
+      "id": 28,
+      "type": "wall-moving",
+      "x": 976,
+      "y": 848,
+      "width": 50,
+      "height": 12,
+      "speed": 2,
+      "range": 600,
+      "axis": "h"
+    },
+    {
+      "id": 30,
+      "type": "spike",
+      "x": 544,
+      "y": 904,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 32,
+      "type": "spike",
+      "x": 736,
+      "y": 904,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 34,
+      "type": "ladder",
+      "x": 440,
+      "y": 392,
+      "width": 32,
+      "height": 544
+    },
+    {
+      "id": 40,
+      "type": "seesaw",
+      "x": 488,
+      "y": 824,
+      "width": 232,
+      "height": 12
+    },
+    {
+      "id": 42,
+      "type": "wall",
+      "x": 760,
+      "y": 848,
+      "width": 104,
+      "height": 12
+    },
+    {
+      "id": 43,
+      "type": "wall",
+      "x": 920,
+      "y": 592,
+      "width": 184,
+      "height": 20
+    },
+    {
+      "id": 46,
+      "type": "ladder",
+      "x": 1168,
+      "y": 120,
+      "width": 32,
+      "height": 792
+    },
+    {
+      "id": 51,
+      "type": "wall",
+      "x": 1320,
+      "y": 928,
+      "width": 344,
+      "height": 20
+    },
+    {
+      "id": 53,
+      "type": "ladder",
+      "x": 104,
+      "y": 200,
+      "width": 32,
+      "height": 1900
+    },
+    {
+      "id": 54,
+      "type": "spike",
+      "x": 1016,
+      "y": 568,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 56,
+      "type": "wall-moving",
+      "x": 1880,
+      "y": 552,
+      "width": 328,
+      "height": 20,
+      "speed": 3,
+      "range": 700,
+      "axis": "h"
+    },
+    {
+      "id": 58,
+      "type": "spike",
+      "x": 1512,
+      "y": 904,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 60,
+      "type": "seesaw",
+      "x": 1456,
+      "y": 496,
+      "width": 500,
+      "height": 12
+    },
+    {
+      "id": 61,
+      "type": "wall",
+      "x": 1624,
+      "y": 632,
+      "width": 8,
+      "height": 240
+    },
+    {
+      "id": 62,
+      "type": "wall",
+      "x": 2056,
+      "y": 1064,
+      "width": 688,
+      "height": 20
+    },
+    {
+      "id": 101,
+      "type": "spike",
+      "x": 1640,
+      "y": 1496,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 102,
+      "type": "spike",
+      "x": 2200,
+      "y": 1352,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 103,
+      "type": "spike",
+      "x": 2112,
+      "y": 1400,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 104,
+      "type": "spike",
+      "x": 1656,
+      "y": 1296,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 105,
+      "type": "spike",
+      "x": 1904,
+      "y": 1160,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 106,
+      "type": "wall",
+      "x": -552,
+      "y": -16,
+      "width": 8,
+      "height": 8
+    },
+    {
+      "id": 107,
+      "type": "wall",
+      "x": 1840,
+      "y": 1184,
+      "width": 304,
+      "height": 20
+    },
+    {
+      "id": 108,
+      "type": "wall",
+      "x": 1576,
+      "y": 1320,
+      "width": 504,
+      "height": 20
+    },
+    {
+      "id": 109,
+      "type": "wall",
+      "x": 1912,
+      "y": 1424,
+      "width": 296,
+      "height": 20
+    },
+    {
+      "id": 110,
+      "type": "wall",
+      "x": 2200,
+      "y": 1376,
+      "width": 280,
+      "height": 20
+    },
+    {
+      "id": 111,
+      "type": "wall",
+      "x": 1384,
+      "y": 1520,
+      "width": 584,
+      "height": 20
+    },
+    {
+      "id": 112,
+      "type": "spike",
+      "x": 1912,
+      "y": 1296,
+      "width": 40,
+      "height": 26
+    },
+    {
+      "id": 113,
+      "type": "ladder",
+      "x": 1968,
+      "y": 1520,
+      "width": 32,
+      "height": 576
+    }
+  ],
+  "nextId": 114
+}

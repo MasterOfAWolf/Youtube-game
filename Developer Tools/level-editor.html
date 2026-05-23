@@ -97,6 +97,45 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
 .oitem.sel { background:rgba(91,140,255,.1); border-left-color:var(--accent); }
 .odot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
 
+/* right panel tabs */
+#rtabs { display:flex; border-bottom:1px solid var(--border); background:var(--panel2); }
+.rtab {
+  flex:1; padding:6px 8px; font-size:11px; color:var(--dim); background:transparent;
+  border:none; border-right:1px solid var(--border); cursor:pointer; text-transform:uppercase; letter-spacing:1px;
+}
+.rtab:last-child { border-right:none; }
+.rtab.active { color:var(--text); background:rgba(91,140,255,.12); border-bottom:2px solid var(--accent); }
+.rpanel-body { flex:1; display:none; flex-direction:column; overflow:hidden; }
+.rpanel-body.active { display:flex; }
+
+/* waves editor */
+.wave-palette {
+  display:flex; flex-wrap:wrap; gap:6px; padding:6px;
+  border:1px dashed var(--border); background:#07070f; border-radius:4px;
+}
+.enemy-chip {
+  font-size:10px; padding:4px 6px; border-radius:4px;
+  background:#101018; border:1px solid var(--border); cursor:grab; user-select:none;
+}
+.waves-list { padding:6px; border:1px solid var(--border); background:#07070f; border-radius:4px; max-height:200px; overflow:auto; }
+.wave-item { border:1px solid #161622; background:#0b0b14; border-radius:6px; padding:6px; margin-bottom:6px; }
+.wave-head { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.wave-handle { cursor:grab; padding:2px 4px; border:1px solid var(--border); border-radius:3px; font-size:10px; }
+.wave-label { font-size:10px; color:var(--dim); min-width:44px; }
+.wave-input { background:#0a0a14; border:1px solid var(--border); color:var(--text); font-size:10px; padding:3px 5px; border-radius:3px; }
+.wave-drop { border:1px dashed #2a2a40; padding:6px; border-radius:4px; min-height:34px; }
+.wave-empty { color:var(--dim); font-size:10px; }
+.wave-enemy { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+.enemy-pill { font-size:10px; padding:2px 6px; border-radius:4px; background:#16161f; border:1px solid #26263a; color:#bfe; }
+.enemy-input { width:46px; background:#0a0a14; border:1px solid var(--border); color:var(--text); font-size:10px; padding:2px 4px; border-radius:3px; }
+.wave-drop-target { outline:1px dashed #5b8cff; }
+.wave-section-label { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
+.waves-panel { flex:1; display:flex; flex-direction:column; gap:6px; overflow:hidden; }
+.waves-scroll { flex:1; overflow:auto; display:flex; flex-direction:column; gap:6px; }
+.waves-list { flex:1; max-height:none; }
+.wave-enemy-header { display:flex; align-items:center; gap:6px; margin-bottom:4px; color:var(--dim); font-size:9px; }
+.wave-enemy-header .enemy-pill { background:transparent; border-color:transparent; color:var(--dim); padding:0; }
+
 /* export */
 #export-wrap { flex:1; display:flex; flex-direction:column; overflow:hidden; }
 #export-inner { flex:1; display:flex; flex-direction:column; padding:8px; gap:6px; min-height:0; }
@@ -154,7 +193,8 @@ body.cur-grabbing  #cv { cursor:grabbing; }
   <div class="hinfo" style="margin-left:auto;gap:8px">
     Level: <input type="text" id="level-name" value="my_level">
     <button class="btn"    onclick="previewLevel()">▶ Preview</button>
-    <button class="btn ba" onclick="saveLevel()">💾 Save</button>
+    <button class="btn ba" onclick="saveLevelLocal()">💾 Save Local</button>
+    <button class="btn ba" onclick="downloadLevel()">⬇ Download</button>
     <button class="btn"    onclick="loadPrompt()">📂 Load</button>
     <button class="btn bd" onclick="clearAll()">🗑 Clear</button>
   </div>
@@ -173,6 +213,10 @@ body.cur-grabbing  #cv { cursor:grabbing; }
     <button class="tbtn" id="t-spike"   onclick="setTool('spike')"   title="Spike  [S]">🔺<span class="tl">spike</span></button>
     <button class="tbtn" id="t-ladder"  onclick="setTool('ladder')"  title="Ladder  [L]">🪜<span class="tl">ladder</span></button>
     <button class="tbtn" id="t-seesaw"  onclick="setTool('seesaw')"  title="Seesaw  [E]">⚖️<span class="tl">seesaw</span></button>
+      <div class="tsep"></div>
+      <button class="tbtn" id="t-light" onclick="setTool('light')" title="Light  [O]">🔆<span class="tl">light</span></button>
+      <button class="tbtn" id="t-spawn" onclick="setTool('spawn')" title="Spawn Zone  [P]">📍<span class="tl">spawn</span></button>
+      <button class="tbtn" id="t-oven" onclick="setTool('oven')" title="Oven  [U]">🔥<span class="tl">oven</span></button>
   </div>
 
   <!-- CANVAS -->
@@ -181,27 +225,57 @@ body.cur-grabbing  #cv { cursor:grabbing; }
   <!-- RIGHT PANEL -->
   <div id="rpanel">
 
-    <div style="border-bottom:1px solid var(--border)">
-      <div class="rhead">Properties</div>
-      <div id="props-area"><div class="no-sel">Nothing selected.<br>Click an object to edit.</div></div>
-      <div id="del-row" style="display:none;padding:6px 12px">
-        <button class="btn bd" style="width:100%" onclick="deleteSelected()">🗑 Delete Object</button>
-      </div>
+    <div id="rtabs">
+      <button class="rtab active" data-tab="layout" onclick="setPanel('layout')">Layout</button>
+      <button class="rtab" data-tab="waves" onclick="setPanel('waves')">Waves</button>
     </div>
 
-    <div style="border-bottom:1px solid var(--border);display:flex;flex-direction:column;max-height:220px">
-      <div class="rhead">Objects &nbsp;<span id="obj-cnt" style="color:var(--text)">0</span></div>
-      <div id="obj-list"></div>
-    </div>
+    <div id="panel-layout" class="rpanel-body active">
 
-    <div id="export-wrap">
-      <div class="rhead">Export JS</div>
-      <div id="export-inner">
-        <div class="brow">
-          <button class="btn ba" style="flex:1" onclick="genExport()">⚙ Generate</button>
-          <button class="btn"    onclick="copyExport()">📋 Copy</button>
+      <div style="border-bottom:1px solid var(--border)">
+        <div class="rhead">Properties</div>
+        <div id="props-area"><div class="no-sel">Nothing selected.<br>Click an object to edit.</div></div>
+        <div id="del-row" style="display:none;padding:6px 12px">
+          <button class="btn bd" style="width:100%" onclick="deleteSelected()">🗑 Delete Object</button>
         </div>
-        <textarea id="export-code" readonly placeholder="Click Generate..."></textarea>
+      </div>
+
+      <div style="border-bottom:1px solid var(--border);display:flex;flex-direction:column;max-height:220px">
+        <div class="rhead">Objects &nbsp;<span id="obj-cnt" style="color:var(--text)">0</span></div>
+        <div id="obj-list"></div>
+      </div>
+
+      <div id="export-wrap">
+        <div class="rhead">Export JS</div>
+        <div id="export-inner">
+          <div class="brow">
+            <button class="btn ba" style="flex:1" onclick="genExport()">⚙ Generate</button>
+            <button class="btn"    onclick="copyExport()">📋 Copy</button>
+          </div>
+          <textarea id="export-code" readonly placeholder="Click Generate..."></textarea>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="panel-waves" class="rpanel-body">
+      <div class="rhead">Waves</div>
+      <div class="waves-panel" style="padding:8px;">
+        <div class="wave-section-label">Enemy Palette</div>
+        <div class="wave-palette" id="enemy-palette"></div>
+
+        <div class="wave-section-label">Waves List</div>
+        <div class="waves-scroll">
+          <div class="waves-list" id="waves-list"></div>
+        </div>
+
+        <div class="wave-section-label">Raw JSON (optional)</div>
+        <textarea id="waves-json" style="width:100%;height:120px;background:#07070f;border:1px solid var(--border);color:#bfe;" placeholder='[ { "name": "Wave 1", "enemies": [ { "type":"snail", "count":3 } ], "spawnDelay":60 } ]'></textarea>
+        <div style="display:flex;gap:6px">
+          <button class="btn" onclick="addWave()">+ Add Wave</button>
+          <button class="btn" onclick="applyWavesFromTextarea()">Apply</button>
+          <button class="btn" onclick="clearWaves()">Clear</button>
+        </div>
       </div>
     </div>
 
@@ -263,9 +337,12 @@ const META = {
   spike:       { col:'#e74c3c', label:'Spike',        rect:true  },
   ladder:      { col:'#e8a020', label:'Ladder',       rect:true  },
   seesaw:      { col:'#f39c12', label:'Seesaw',       rect:true  },
+  light:       { col:'#ffcc66', label:'Light',        rect:true  },
+  spawn:       { col:'#f1c40f', label:'Spawn Zone',   rect:true  },
+  oven:        { col:'#ff6f3c', label:'Oven',         rect:true  },
 };
 
-const DFLT_SIZE = {};
+const DFLT_SIZE = { light: {w:120, h:120}, spawn: {w:80, h:40}, oven: {w:40, h:50}, spike: {w:40, h:26} };
 
 const EMOJI = {};
 
@@ -273,6 +350,9 @@ const EMOJI = {};
 function makeObj(type, x, y, w, h) {
   const o = { id: nextId++, type, x, y, width: w, height: h };
   if (type==='wall-moving')  Object.assign(o, { speed:1.5, range:100, axis:'h' });
+  if (type==='light') Object.assign(o, { radius: Math.max(w,h) || 200, intensity: 1, color: '#ffdbaa', particleSpawnRate: 0.02 });
+  if (type==='spawn') Object.assign(o, {  });
+  if (type==='oven') Object.assign(o, { active: false, baked: false, glow: 0 });
   return o;
 }
 
@@ -385,8 +465,7 @@ cv.addEventListener('mouseup', e=>{
     let x1=Math.min(dsx,dcx), y1=Math.min(dsy,dcy);
     let w=Math.max(Math.abs(dcx-dsx),snap||4);
     let h=Math.max(Math.abs(dcy-dsy),snap||4);
-    // Spikes always use fixed dimensions
-    if(tool==='spike'){ w=40; h=26; }
+    // allow spikes to use drawn dimensions (editable)
     if(w>2&&h>2){
       pushUndo();
       const o=makeObj(tool,x1,y1,w,h);
@@ -601,6 +680,32 @@ function drawObj(o){
     ctx.fillRect(o.x,o.y,w,h);
   }
 
+  else if(o.type==='light'){
+    // Soft glowing circle
+    const cx = o.x + w/2, cy = o.y + h/2;
+    const rad = o.radius || Math.max(w,h)/2 || 100;
+    const g = ctx.createRadialGradient(cx,cy,rad*0.1,cx,cy,rad);
+    g.addColorStop(0, (o.color||'#ffdbaa'));
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI*2); ctx.fill();
+    // Center marker
+    ctx.fillStyle = (META.light.col||'#ffcc66'); ctx.beginPath(); ctx.arc(cx,cy,6/zoom,0,Math.PI*2); ctx.fill();
+
+  } else if(o.type==='spawn'){
+    // Spawn zone rectangle with label
+    ctx.fillStyle='#f1c40f20'; ctx.strokeStyle='#f1c40f'; ctx.lineWidth=1.5/zoom;
+    ctx.fillRect(o.x,o.y,w,h); ctx.strokeRect(o.x,o.y,w,h);
+    if(zoom>0.12){ ctx.fillStyle='#f1c40f'; ctx.font=`${8/zoom}px monospace`; ctx.textAlign='center'; ctx.fillText('SPAWN', o.x+w/2, o.y+h/2 + 3/zoom); }
+  }
+
+  else if(o.type==='oven'){
+    // Simple oven icon
+    ctx.fillStyle='#2b2b2b'; ctx.fillRect(o.x,o.y,w,h);
+    ctx.strokeStyle='#ff8a3c'; ctx.lineWidth=1.2/zoom; ctx.strokeRect(o.x,o.y,w,h);
+    if(zoom>0.12){ ctx.fillStyle='#ff8a3c'; ctx.font=`${10/zoom}px monospace`; ctx.textAlign='center'; ctx.fillText('OVEN', o.x+w/2, o.y+h/2 + 4/zoom); }
+  }
+
   // Selection ring + handles
   if(sel){
     ctx.strokeStyle='#ffffff'; ctx.lineWidth=2/zoom; ctx.setLineDash([]);
@@ -646,6 +751,15 @@ function arrow(x1,y1,x2,y2){
 // ── UI refresh ────────────────────────────────────────────
 function refreshUI(){ refreshProps(); refreshList(); statusBar(); render(); }
 
+function setPanel(panel){
+  document.querySelectorAll('.rtab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.rpanel-body').forEach(p=>p.classList.remove('active'));
+  const btn = document.querySelector(`.rtab[data-tab="${panel}"]`);
+  if (btn) btn.classList.add('active');
+  const body = document.getElementById('panel-' + panel);
+  if (body) body.classList.add('active');
+}
+
 function getSelObj(){
   if(!selId) return null;
   return objects.find(o=>o.id===selId)||null;
@@ -671,14 +785,9 @@ function refreshProps(){
   h+=row('Y','y','number');
 
   if(META[o.type]?.rect){
-    // Spikes are always fixed size — show read-only dims
-    if(o.type==='spike'){
-      h+=`<div class="prow"><label>W</label><input type="number" value="40" data-key="width" onchange="setProp(this)" readonly style="opacity:.5;cursor:not-allowed"></div>`;
-      h+=`<div class="prow"><label>H</label><input type="number" value="26" data-key="height" onchange="setProp(this)" readonly style="opacity:.5;cursor:not-allowed"></div>`;
-    } else {
-      h+=row('W','width','number');
-      h+=row('H','height','number');
-    }
+    // Allow width/height for all rect types, including spikes
+    h+=row('W','width','number');
+    h+=row('H','height','number');
   }
 
   if(o.type==='wall-moving'){
@@ -688,6 +797,22 @@ function refreshProps(){
       `<option value="h" ${o.axis==='h'?'selected':''}>↔ Horizontal</option>
        <option value="v" ${o.axis==='v'?'selected':''}>↕ Vertical</option>`);
   }
+  if(o.type==='light'){
+    h+=row('Radius','radius','number');
+    h+=row('Intensity','intensity','number','step="0.1"');
+    h+=row('Color','color','text');
+    h+=row('Particle rate','particleSpawnRate','number','step="0.01"');
+  }
+  if(o.type==='spawn'){
+    h+=row('W','width','number');
+    h+=row('H','height','number');
+    
+  }
+  if(o.type==='oven'){
+    h+=`<div class="prow"><label>Active</label><input type="checkbox" data-key="active" ${o.active?'checked':''} onchange="setProp(this)"></div>`;
+    h+=row('Glow','glow','number');
+    h+=`<div class="prow"><label>Baked</label><input type="checkbox" data-key="baked" ${o.baked?'checked':''} onchange="setProp(this)"></div>`;
+  }
   h+=`</div>`;
   area.innerHTML=h;
 }
@@ -695,8 +820,6 @@ function refreshProps(){
 function setProp(el){
   const key=el.dataset.key;
   const o=getSelObj(); if(!o) return;
-  // Spikes always have fixed dimensions
-  if(o.type==='spike'&&(key==='width'||key==='height')) return;
   let val = el.type==='checkbox' ? el.checked
            : el.type==='number'  ? parseFloat(el.value)
            : el.value;
@@ -740,9 +863,18 @@ document.getElementById('snap-on').addEventListener('change',function(){ snapOn=
 document.getElementById('snap-px').addEventListener('change',function(){ snap=Math.max(1,parseInt(this.value)||20); render(); });
 
 // ── Save / Load ───────────────────────────────────────────
-function saveLevel(){
+function getLevelPayload(){
   const name=document.getElementById('level-name').value.trim()||'my_level';
-  const data=JSON.stringify({objects,nextId}, null, 2);
+  // ensure textarea mirrors current list
+  syncTextareaFromList();
+  const wavesText = document.getElementById('waves-json')?.value || '[]';
+  let waves = [];
+  try { waves = JSON.parse(wavesText); } catch(e) { waves = []; }
+  return { name, data: JSON.stringify({objects,nextId,waves}, null, 2) };
+}
+
+function downloadLevel(){
+  const { name, data } = getLevelPayload();
   const blob=new Blob([data], {type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
@@ -752,7 +884,22 @@ function saveLevel(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  
+}
+
+function saveLevelLocal(){
+  const { name, data } = getLevelPayload();
+
+  // Also save into localStorage as a custom level for quick in-game loading
+  try {
+    const key = 'yt_custom_levels';
+    const storeRaw = localStorage.getItem(key) || '{}';
+    const store = JSON.parse(storeRaw || '{}');
+    store[name] = JSON.parse(data);
+    localStorage.setItem(key, JSON.stringify(store));
+  } catch (e) {
+    console.warn('Failed to save custom level to localStorage', e);
+  }
+
   // Visual feedback
   const btn=event.target; const orig=btn.textContent;
   btn.textContent='✅ Saved!'; setTimeout(()=>btn.textContent=orig,1500);
@@ -774,6 +921,11 @@ function loadPrompt(){
         // Extract filename without extension
         const fname=file.name.replace(/\.lvl$/,'');
         document.getElementById('level-name').value=fname;
+        // Load waves into waves editor if present
+        if(document.getElementById('waves-json')){
+          try{ document.getElementById('waves-json').value = JSON.stringify(d.waves||[], null, 2); } catch(e){ document.getElementById('waves-json').value = '[]'; }
+          try{ syncWavesFromTextarea(); } catch(e){}
+        }
         refreshUI();
       } catch(err){
         alert('Error loading level: '+err.message);
@@ -791,7 +943,10 @@ function clearAll(){
 
 function previewLevel(){
   const name=document.getElementById('level-name').value.trim()||'my_level';
-  const payload={ name, objects, nextId };
+  const wavesText = document.getElementById('waves-json')?.value || '[]';
+  let waves = [];
+  try { waves = JSON.parse(wavesText); } catch(e) { waves = []; }
+  const payload={ name, objects, nextId, waves };
   localStorage.setItem('yt_editor_preview', JSON.stringify(payload));
   window.open('../index.html?editorPreview=1', '_blank');
 }
@@ -831,7 +986,32 @@ function genExport(){
     L.push(`spikes.push(`);
     byType.spike.forEach((o,i)=>{
       const c=i<byType.spike.length-1?',':'';
-      L.push(`  { x: ${o.x}, y: ${o.y}, width: 40, height: 26 }${c}`);
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: ${o.width||40}, height: ${o.height||26} }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  if(byType.lights||byType.light){
+    const list = byType.light || byType.lights || [];
+    L.push(`lights.push(`);
+    list.forEach((o,i)=>{
+      const c=i<list.length-1?',':'';
+      L.push(`  { x: ${o.x + (o.width||0)/2}, y: ${o.y + (o.height||0)/2}, radius: ${o.radius || Math.max(o.width,o.height)||200}, intensity: ${o.intensity||1}, color: '${o.color||'#ffdbaa'}' }${c}`);
+    });
+    L.push(`);`); L.push(``);
+  }
+
+  if(byType.spawn?.length){
+    L.push(`// spawn zones (editor)
+    // stored as objects in level file; no automatic runtime push here`);
+    L.push(``);
+  }
+
+  if(byType.oven?.length){
+    L.push(`ovens.push(`);
+    byType.oven.forEach((o,i)=>{
+      const c=i<byType.oven.length-1?',':'';
+      L.push(`  { x: ${o.x}, y: ${o.y}, width: ${o.width||40}, height: ${o.height||50}, active: ${o.active||false}, baked: ${o.baked||false}, glow: ${o.glow||0} }${c}`);
     });
     L.push(`);`); L.push(``);
   }
@@ -854,6 +1034,15 @@ function genExport(){
     L.push(`);`); L.push(``);
   }
 
+  // Include waves JSON (if present) as a comment block for manual import
+  const wavesText = document.getElementById('waves-json')?.value || '';
+  if (wavesText.trim()) {
+    L.push(`// --- Waves (JSON) ---`);
+    const wLines = wavesText.split('\n');
+    for (const ln of wLines) L.push(`// ${ln}`);
+    L.push(``);
+  }
+
   document.getElementById('export-code').value=L.join('\n');
 }
 
@@ -865,6 +1054,186 @@ function copyExport(){
     btn.textContent='✅ Copied!'; setTimeout(()=>btn.textContent=orig,1600);
   });
 }
+
+// Waves editing helpers
+let wavesArr = [];
+
+const ENEMY_DEFAULTS = {
+  snail: { label: 'Snail', hp: 1 },
+  superSnail: { label: 'Super Snail', hp: 3 },
+  bat: { label: 'Bat', hp: 2 },
+  turret: { label: 'Turret', hp: 2 },
+  table: { label: 'Table', hp: 4 },
+  yeti: { label: 'Yeti', hp: 5 },
+  snowman: { label: 'Snowman', hp: 4 }
+};
+
+function getEnemyDefaultHP(type){ return ENEMY_DEFAULTS[type]?.hp ?? 1; }
+
+function normalizeWaves(raw){
+  if (!Array.isArray(raw)) return [];
+  return raw.map((w,i)=>{
+    const enemies = Array.isArray(w.enemies) ? w.enemies.map(e=>{
+      let min = 1, max = 1;
+      if (typeof e.count === 'number') { min = max = e.count; }
+      else if (e.count && typeof e.count === 'object') { min = e.count.min ?? 1; max = e.count.max ?? min; }
+      else if (typeof e.min === 'number' || typeof e.max === 'number') { min = e.min ?? 1; max = e.max ?? min; }
+      const type = e.type || 'snail';
+      return { type, min, max, hp: typeof e.hp === 'number' ? e.hp : getEnemyDefaultHP(type) };
+    }) : [];
+    return {
+      name: w.name || `Wave ${i+1}`,
+      spawnDelay: Number.isFinite(w.spawnDelay) ? w.spawnDelay : 60,
+      message: w.message || '',
+      enemies
+    };
+  });
+}
+
+function serializeWaves(){
+  return wavesArr.map(w=>({
+    name: w.name,
+    spawnDelay: w.spawnDelay,
+    message: w.message,
+    enemies: (w.enemies||[]).map(e=>({
+      type: e.type,
+      count: e.min === e.max ? e.min : { min: e.min, max: e.max },
+      hp: e.hp
+    }))
+  }));
+}
+
+function syncWavesFromTextarea(){
+  const ta = document.getElementById('waves-json');
+  let parsed = [];
+  try { parsed = JSON.parse(ta.value||'[]'); } catch(e){ parsed = []; }
+  wavesArr = normalizeWaves(parsed);
+  renderWaveList();
+}
+
+function syncTextareaFromList(){
+  const ta = document.getElementById('waves-json');
+  ta.value = JSON.stringify(serializeWaves(), null, 2);
+}
+
+function renderEnemyPalette(){
+  const wrap = document.getElementById('enemy-palette');
+  wrap.innerHTML = '';
+  Object.keys(ENEMY_DEFAULTS).forEach(type=>{
+    const chip = document.createElement('div');
+    chip.className = 'enemy-chip';
+    chip.textContent = ENEMY_DEFAULTS[type].label;
+    chip.draggable = true;
+    chip.addEventListener('dragstart', (ev)=>{ ev.dataTransfer.setData('enemyType', type); });
+    wrap.appendChild(chip);
+  });
+}
+
+function renderWaveList(){
+  const wrap = document.getElementById('waves-list');
+  wrap.innerHTML = '';
+  wavesArr.forEach((w,i)=>{
+    const item = document.createElement('div');
+    item.className = 'wave-item';
+    item.dataset.index = i;
+
+    const head = document.createElement('div');
+    head.className = 'wave-head';
+
+    const handle = document.createElement('div');
+    handle.className = 'wave-handle'; handle.textContent = '↕';
+    handle.draggable = true;
+    handle.addEventListener('dragstart', (ev)=>{ ev.dataTransfer.setData('waveIndex', i.toString()); });
+
+    const label = document.createElement('div'); label.className='wave-label'; label.textContent = `Wave ${i+1}`;
+    const nameInput = document.createElement('input'); nameInput.className='wave-input'; nameInput.placeholder='Name'; nameInput.value = w.name || `Wave ${i+1}`;
+    nameInput.addEventListener('input', ()=>{ w.name = nameInput.value; syncTextareaFromList(); });
+
+    const delayInput = document.createElement('input'); delayInput.className='wave-input'; delayInput.type='number'; delayInput.value = w.spawnDelay || 60; delayInput.style.width='60px';
+    delayInput.addEventListener('input', ()=>{ w.spawnDelay = parseInt(delayInput.value,10)||0; syncTextareaFromList(); });
+
+    const msgInput = document.createElement('input'); msgInput.className='wave-input'; msgInput.placeholder='Message'; msgInput.value = w.message || '';
+    msgInput.addEventListener('input', ()=>{ w.message = msgInput.value; syncTextareaFromList(); });
+
+    const del = document.createElement('button'); del.className='btn bd'; del.textContent='Del'; del.onclick = ()=>{ wavesArr.splice(i,1); syncTextareaFromList(); renderWaveList(); };
+
+    head.appendChild(handle); head.appendChild(label); head.appendChild(nameInput); head.appendChild(delayInput); head.appendChild(msgInput); head.appendChild(del);
+
+    const drop = document.createElement('div');
+    drop.className = 'wave-drop';
+    drop.addEventListener('dragover', (ev)=>{ ev.preventDefault(); });
+    drop.addEventListener('drop', (ev)=>{
+      ev.preventDefault(); ev.stopPropagation();
+      const type = ev.dataTransfer.getData('enemyType');
+      if (!type) return;
+      w.enemies = w.enemies || [];
+      w.enemies.push({ type, min: 1, max: 3, hp: getEnemyDefaultHP(type) });
+      syncTextareaFromList(); renderWaveList();
+    });
+
+    if (!w.enemies || !w.enemies.length) {
+      const empty = document.createElement('div'); empty.className='wave-empty'; empty.textContent='Drag enemies here';
+      drop.appendChild(empty);
+    } else {
+      const header = document.createElement('div'); header.className='wave-enemy-header';
+      header.innerHTML = `<div class="enemy-pill">Enemy</div><div class="enemy-pill">Min</div><div class="enemy-pill">Max</div><div class="enemy-pill">HP</div>`;
+      drop.appendChild(header);
+      w.enemies.forEach((e,ei)=>{
+        const row = document.createElement('div'); row.className='wave-enemy';
+        const pill = document.createElement('div'); pill.className='enemy-pill'; pill.textContent = ENEMY_DEFAULTS[e.type]?.label || e.type;
+        const minInput = document.createElement('input'); minInput.className='enemy-input'; minInput.type='number'; minInput.value = e.min ?? 1;
+        const maxInput = document.createElement('input'); maxInput.className='enemy-input'; maxInput.type='number'; maxInput.value = e.max ?? 1;
+        const hpInput = document.createElement('input'); hpInput.className='enemy-input'; hpInput.type='number'; hpInput.value = e.hp ?? getEnemyDefaultHP(e.type);
+        const delEnemy = document.createElement('button'); delEnemy.className='btn bd'; delEnemy.textContent='X';
+
+        minInput.addEventListener('input', ()=>{
+          e.min = parseInt(minInput.value,10) || 0;
+          if (e.max < e.min) { e.max = e.min; maxInput.value = e.min; }
+          syncTextareaFromList();
+        });
+        maxInput.addEventListener('input', ()=>{ e.max = parseInt(maxInput.value,10) || 0; if (e.max < e.min) { e.max = e.min; maxInput.value = e.min; } syncTextareaFromList(); });
+        hpInput.addEventListener('input', ()=>{ e.hp = parseInt(hpInput.value,10) || 1; syncTextareaFromList(); });
+        delEnemy.addEventListener('click', ()=>{ w.enemies.splice(ei,1); syncTextareaFromList(); renderWaveList(); });
+
+        row.appendChild(pill);
+        row.appendChild(minInput);
+        row.appendChild(maxInput);
+        row.appendChild(hpInput);
+        row.appendChild(delEnemy);
+        drop.appendChild(row);
+      });
+    }
+
+    item.addEventListener('dragover', (ev)=>{ if (ev.dataTransfer.getData('waveIndex')) { ev.preventDefault(); item.classList.add('wave-drop-target'); } });
+    item.addEventListener('dragleave', ()=>{ item.classList.remove('wave-drop-target'); });
+    item.addEventListener('drop', (ev)=>{
+      const from = parseInt(ev.dataTransfer.getData('waveIndex'),10);
+      const to = parseInt(item.dataset.index,10);
+      if (!Number.isNaN(from) && !Number.isNaN(to) && from !== to) {
+        const it = wavesArr.splice(from,1)[0];
+        wavesArr.splice(to,0,it);
+        syncTextareaFromList(); renderWaveList();
+      }
+      item.classList.remove('wave-drop-target');
+    });
+
+    item.appendChild(head);
+    item.appendChild(drop);
+    wrap.appendChild(item);
+  });
+}
+
+function addWave(){
+  const idx = wavesArr.length + 1;
+  wavesArr.push({ name: `Wave ${idx}`, enemies: [], spawnDelay: 60, message: '' });
+  syncTextareaFromList(); renderWaveList();
+}
+
+function applyWavesFromTextarea(){
+  syncWavesFromTextarea(); alert('Waves parsed and applied to editor. Save to persist.');
+}
+
+function clearWaves(){ wavesArr = []; syncTextareaFromList(); renderWaveList(); }
 
 // ── Canvas resize ─────────────────────────────────────────
 function resize(){
@@ -878,6 +1247,26 @@ vx=(cw.clientWidth - WORLD_W*zoom)/2;
 vy=(cw.clientHeight- WORLD_H*zoom)/2;
 
 refreshUI();
+// Initialize waves list from textarea on load
+renderEnemyPalette();
+syncWavesFromTextarea();
+
+// Listen for load requests from parent page (open for edit)
+window.addEventListener('message', (ev)=>{
+  try{
+    const msg = ev.data || {};
+    if (msg && msg.type === 'load-custom-level' && msg.name) {
+      const raw = localStorage.getItem('yt_custom_levels') || '{}';
+      const store = JSON.parse(raw || '{}');
+      const data = store[msg.name];
+      if (!data) return;
+      objects = JSON.parse(JSON.stringify(data.objects || []));
+      nextId = data.nextId || (objects.reduce((m,o)=>Math.max(m,o.id||0),0)+1);
+      try{ wavesArr = normalizeWaves(data.waves || []); syncTextareaFromList(); renderWaveList(); } catch(e){}
+      selId = null; refreshUI();
+    }
+  }catch(err){ console.warn('message handling failed', err); }
+});
 </script>
 </body>
 </html>

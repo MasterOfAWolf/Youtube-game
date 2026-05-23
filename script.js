@@ -828,7 +828,7 @@ const SWORD_FRAME_WIDTH = 34;
 const SWORD_FRAME_HEIGHT = 31;
 const SWORD_FRAME_COUNT = 7;
 const SWORD_ATTACK_EXTENSION_WIDTH = 42;
-const SWORD_ATTACK_DRAW_SCALE = 2;
+const SWORD_ATTACK_DRAW_SCALE = 1.5;
 const SWORD_DOWN_BOUNCE_VELOCITY = -12;
 
 const CLUB_ATTACK_SWING_SPAN = Math.PI * 1.25;
@@ -1380,22 +1380,7 @@ function attemptShopInteract() {
   }
 }
 
-// Quick keybinding: I toggles inventory
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'i' || e.key === 'I') {
-    e.preventDefault(); 
-    toggleInventory();
-  }
-  if (e.key === 'e' || e.key === 'E') {
-    e.preventDefault();
-    attemptShopInteract();
-  }
-  if (e.key === 'n' || e.key === 'N') {
-    if (skipIntermissionToThreeSeconds()) {
-      e.preventDefault();
-    }
-  }
-});
+// (Removed quick single-key handlers in favor of unified keybinding system)
 
 // ── NETWORK ──
 const Network = {
@@ -1616,6 +1601,16 @@ fireballs:   [],
 snowballs:   [],
 icicles:     [],
 explosions:  [],
+droppedCookies: [],
+  cookie: {
+  x: 400,
+  y: 200,
+  radius: 45,
+  bobOffset: 0,
+  bobSpeed: 0.08,
+  clickCooldown: 0,
+  clickCount: 0
+},
 wavesystem: {
   enabled: false,
   currentWave: 0,
@@ -1685,6 +1680,9 @@ function showSpawnHUD(text, frames = 180) {
 }
 let potatoHUDLine = "";
 let ambientLight = .67;
+
+// Level-defined spawn zones (populated from .lvl files)
+let levelSpawnZones = [];
 
 let vehicles = [];
 let playerVehicle = null;    // vehicle the player is currently in
@@ -3031,6 +3029,12 @@ if (inventoryBtn) {
   inventoryBtn.addEventListener("mousedown", () => {
     toggleInventory();
   });
+  inventoryBtn.addEventListener("click", () => {
+    toggleInventory();
+  });
+  inventoryBtn.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== 'touch') toggleInventory();
+  });
 }
 
 if (shopBtn) {
@@ -3246,8 +3250,26 @@ const my = (e.clientY - rect.top)  * scaleY;
     return;
   }
 }
-  if (!hasPotato || !gameRunning || gamePaused || gameOver) return;
-  if (e.button === 0) firePotatoCannon();
+
+// Check for cookie click always available (before hasPotato check)
+if (gameRunning && !gamePaused && !gameOver) {
+  const rect   = canvas.getBoundingClientRect();
+  const scaleX = canvas.width  / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top)  * scaleY;
+  
+  // Convert screen coords to world coords
+  const worldX = mx + camera.x;
+  const worldY = my + camera.y;
+  
+  if (clickCookie(worldX, worldY)) {
+    return; // Clicked on cookie, don't fire cannon
+  }
+}
+
+if (!hasPotato || !gameRunning || gamePaused || gameOver) return;
+if (e.button === 0) firePotatoCannon();
 });
 
 // --- Inject mobile joystick into touchControls div ---
@@ -5464,9 +5486,85 @@ function openControllerControls() {
 }
 
 function openControls() {
-    document.getElementById("menu").classList.add("hidden");
+    hideAllMenus();
     document.getElementById("controls").classList.remove("hidden");
 }
+
+// --- Custom levels integration ---
+function openLevelEditorOverlay(){
+  hideAllMenus();
+  const ov = document.getElementById('levelEditorOverlay');
+  if (ov) ov.classList.remove('hidden');
+}
+function closeLevelEditorOverlay(){
+  const ov = document.getElementById('levelEditorOverlay');
+  if (ov) ov.classList.add('hidden');
+  document.getElementById('menu').classList.remove('hidden');
+  try { populateCustomLevelsList(); } catch(e){}
+}
+
+function openCustomLevels(){
+  hideAllMenus();
+  const el = document.getElementById('customLevels');
+  if (el) el.classList.remove('hidden');
+  populateCustomLevelsList();
+}
+
+function populateCustomLevelsList(){
+  const wrap = document.getElementById('custom-levels-list');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  try{
+    const raw = localStorage.getItem('yt_custom_levels') || '{}';
+    const store = JSON.parse(raw || '{}');
+    const names = Object.keys(store);
+    if (!names.length) { wrap.innerHTML = '<div style="color:#bbb">No custom levels saved yet. Open the Level Editor to save one.</div>'; return; }
+    names.forEach(n=>{
+      const row = document.createElement('div');
+      row.style.display='flex'; row.style.alignItems='center'; row.style.justifyContent='space-between'; row.style.marginBottom='8px';
+      const title = document.createElement('div'); title.textContent = n; title.style.color='#e8e0f8';
+      const actions = document.createElement('div');
+      const loadBtn = document.createElement('button'); loadBtn.textContent='Play'; loadBtn.className='btn'; loadBtn.onclick = ()=>{ startCustomLevel(n); };
+      const editBtn = document.createElement('button'); editBtn.textContent='Edit'; editBtn.className='btn'; editBtn.onclick = ()=>{ openLevelEditorOverlay(); setTimeout(()=>{ const f = document.getElementById('levelEditorFrame'); if(f && f.contentWindow){ f.contentWindow.postMessage({ type:'load-custom-level', name: n }, '*'); } }, 400); };
+      const delBtn = document.createElement('button'); delBtn.textContent='Delete'; delBtn.className='btn bd'; delBtn.onclick = ()=>{ if(confirm('Delete custom level '+n+'?')){ deleteCustomLevel(n); populateCustomLevelsList(); } };
+      actions.appendChild(loadBtn); actions.appendChild(editBtn); actions.appendChild(delBtn);
+      row.appendChild(title); row.appendChild(actions); wrap.appendChild(row);
+    });
+  }catch(e){ wrap.innerHTML = '<div style="color:#f66">Error reading custom levels</div>'; }
+}
+
+function deleteCustomLevel(name){
+  try{
+    const raw = localStorage.getItem('yt_custom_levels') || '{}';
+    const store = JSON.parse(raw || '{}');
+    delete store[name];
+    localStorage.setItem('yt_custom_levels', JSON.stringify(store));
+  }catch(e){ console.warn('deleteCustomLevel failed', e); }
+}
+
+function startCustomLevel(name){
+  try{
+    const raw = localStorage.getItem('yt_custom_levels') || '{}';
+    const store = JSON.parse(raw || '{}');
+    const data = store[name];
+    if (!data) { alert('Custom level not found'); return; }
+    stopGameLoop();
+    resetGameState();
+    hideAllMenus();
+    document.getElementById('game').style.display = 'block';
+    resetWorld();
+    try{ applyEditorObjects(data.objects || [], true); } catch(e){ console.warn('applyEditorObjects failed', e); }
+    if (Array.isArray(data.waves)) { G.wavesystem.currentMapWaves = data.waves; G.wavesystem.enabled = true; G.wavesystem.currentWave = 0; G.wavesystem.waveActive = false; G.wavesystem.spawnQueue = []; }
+    initializeLevelLights();
+    saveInitialState();
+    startMusic();
+    gameRunning = true; gamePaused = false; lastFrameTime = performance.now(); lastTimestamp = performance.now();
+    gameLoopId = requestAnimationFrame(gameLoop);
+  }catch(e){ alert('Failed to load custom level: '+e.message); }
+}
+
+// Editor <-> page messaging (placeholder)
+window.addEventListener('message', (ev)=>{});
 
 function resetLevelGeometry() {
   walls = [];
@@ -5484,6 +5582,9 @@ function resetLevelGeometry() {
   G.yetis = [];
   G.snowmen = [];
   G.icicles = [];
+  // Clear level-defined lighting and spawn zones
+  lights = [];
+  levelSpawnZones = [];
 }
 
 function applyEditorObjects(objs, withBounds = true) {
@@ -5503,6 +5604,21 @@ function applyEditorObjects(objs, withBounds = true) {
       ladders.push({ x: o.x, y: o.y, width: o.width, height: o.height });
     } else if (o.type === 'seesaw') {
       seesaws.push({ x: o.x, y: o.y, width: o.width, height: o.height, angle: 0, angularVelocity: 0 });
+    } else if (o.type === 'light') {
+      // Light objects from editor: { x, y, radius, intensity, color, particleSpawnRate }
+      lights.push({
+        x: o.x + (o.width || 0) / 2,
+        y: o.y + (o.height || 0) / 2,
+        radius: o.radius || Math.max(o.width, o.height) || 200,
+        intensity: typeof o.intensity === 'number' ? o.intensity : 1,
+        color: o.color || '#ffdbaa',
+        particleSpawnRate: o.particleSpawnRate || 0.02
+      });
+    } else if (o.type === 'spawn') {
+      // Spawn zone: store rectangles for getSpawnPosition to use
+      levelSpawnZones.push({ x: o.x, y: o.y, width: o.width || 40, height: o.height || 40 });
+    } else if (o.type === 'oven') {
+      ovens.push({ x: o.x, y: o.y, width: o.width || 40, height: o.height || 50, active: !!o.active, baked: !!o.baked, glow: o.glow || 0 });
     }
   }
 }
@@ -5517,6 +5633,15 @@ async function loadMap_LevelFile(level) {
     const objs = Array.isArray(data.objects) ? data.objects : (Array.isArray(data) ? data : []);
     if (!objs.length) return false;
     applyEditorObjects(objs, data.includeBounds !== false);
+
+    // If the level file includes a waves array, use it for this map
+    if (Array.isArray(data.waves)) {
+      G.wavesystem.currentMapWaves = data.waves;
+      G.wavesystem.enabled = true;
+      G.wavesystem.currentWave = 0;
+      G.wavesystem.waveActive = false;
+      G.wavesystem.spawnQueue = [];
+    }
 
     // Backward compatibility: older .lvl files did not include oven objects.
     if (level === 1 && ovens.length === 0) {
@@ -5565,6 +5690,16 @@ function loadMap_EditorPreview() {
 
   const objs = Array.isArray(data.objects) ? data.objects : [];
   applyEditorObjects(objs, true);
+  // If preview payload contains waves, apply them
+  if (Array.isArray(data.waves)) {
+    G.wavesystem.currentMapWaves = data.waves;
+    G.wavesystem.enabled = true;
+    G.wavesystem.currentWave = 0;
+    G.wavesystem.waveActive = false;
+    G.wavesystem.spawnQueue = [];
+    // populate waves editor UI if present (editor only)
+    try { if (window.parent && window.parent.document) { /* noop */ } } catch(e){}
+  }
 }
 
 function startTutorial() {
@@ -8629,7 +8764,144 @@ function drawTutorialHUD() {
   ctx.textAlign = 'left';
   ctx.restore();
 }
+
+// ──────────────────────────────────────── GIANT COOKIE SYSTEM ────────────────────────────────────────
+
+function updateCookie() {
+  const cookie = G.cookie;
   
+  // Update bobbing animation
+  cookie.bobOffset += cookie.bobSpeed;
+  
+  // Update click cooldown
+  if (cookie.clickCooldown > 0) {
+    cookie.clickCooldown--;
+  }
+  
+  // Update dropped cookies
+  for (let i = G.droppedCookies.length - 1; i >= 0; i--) {
+    const c = G.droppedCookies[i];
+    c.vy += 0.3; // gravity
+    c.y += c.vy;
+    c.x += c.vx;
+    c.rotation += c.rotationSpeed;
+    c.life--;
+    
+    // Remove if off screen or expired
+    if (c.life <= 0 || c.y > MAP_HEIGHT + 100) {
+      G.droppedCookies.splice(i, 1);
+    }
+  }
+}
+
+function drawCookie() {
+  const cookie = G.cookie;
+  
+  // Calculate bobbing position
+  const bobY = cookie.y + Math.sin(cookie.bobOffset) * 8;
+  
+  // Main cookie circle (HUGE!)
+  ctx.fillStyle = "#d4a574"; // golden brown
+  ctx.beginPath();
+  ctx.arc(cookie.x, bobY, cookie.radius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Cookie shine/highlight
+  ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+  ctx.beginPath();
+  ctx.arc(cookie.x - 15, bobY - 20, cookie.radius * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Cookie chocolate chips
+  const chipPositions = [
+    {x: -15, y: -10}, {x: 10, y: -15}, {x: -8, y: 8},
+    {x: 20, y: 5}, {x: -20, y: 15}, {x: 12, y: 18},
+    {x: 0, y: 0}, {x: 15, y: -8}
+  ];
+  
+  ctx.fillStyle = "#6b4423"; // dark brown chips
+  for (const chip of chipPositions) {
+    ctx.beginPath();
+    ctx.arc(cookie.x + chip.x, bobY + chip.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Shadow/outline
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.2)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cookie.x, bobY, cookie.radius, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Draw dropped cookies falling
+  for (const c of G.droppedCookies) {
+    if (!isEffectVisibleInWorld(c.x, c.y, 16, 16, 50)) continue;
+    
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(c.rotation);
+    
+    // Main cookie
+    ctx.fillStyle = "#d4a574";
+    ctx.beginPath();
+    ctx.arc(0, 0, c.size, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Chip
+    ctx.fillStyle = "#6b4423";
+    ctx.beginPath();
+    ctx.arc(-4, -2, 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+  }
+
+  // Click counter label near cookie
+  ctx.save();
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "14px monospace";
+  ctx.textAlign = "left";
+  const clicks = cookie.clickCount || 0;
+  ctx.fillText("Cookies: " + clicks, cookie.x + cookie.radius + 8, bobY - cookie.radius + 18);
+  ctx.restore();
+}
+
+function clickCookie(worldX, worldY) {
+  const cookie = G.cookie;
+  const bobY = cookie.y + Math.sin(cookie.bobOffset) * 8;
+  
+  // Check if click is on cookie
+  const dx = worldX - cookie.x;
+  const dy = worldY - bobY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  if (dist < cookie.radius && cookie.clickCooldown <= 0) {
+    // increment click counter
+    cookie.clickCount = (cookie.clickCount || 0) + 1;
+    // Create 5-8 dropped cookies
+    const numCookies = Math.floor(Math.random() * 4) + 5;
+    for (let i = 0; i < numCookies; i++) {
+      const angle = (Math.PI * 2 * i) / numCookies + (Math.random() - 0.5) * 0.5;
+      const speed = Math.random() * 4 + 3;
+      
+      G.droppedCookies.push({
+        x: cookie.x,
+        y: bobY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 6,
+        size: Math.random() * 3 + 5,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 0.15,
+        life: 120
+      });
+    }
+    
+    cookie.clickCooldown = 20; // Prevent spam clicking
+    return true;
+  }
+  return false;
+}
+
 function drawBats() {
   for (let bat of G.bats) {
     if (!isEffectVisibleInWorld(bat.x, bat.y, bat.width, bat.height, 120)) continue;
@@ -9668,9 +9940,17 @@ function startNextWave() {
 // Spawn positions for different enemy types
 function getSpawnPosition(type) {
   // Get valid spawn zones based on current level
+  // Prefer level-defined spawn zones if present
   let spawnZones = [];
-  
-  if (currentLevel === 1) {
+  if (levelSpawnZones && levelSpawnZones.length) {
+    // Convert rectangular zones into candidate points
+    for (const z of levelSpawnZones) {
+      spawnZones.push({ x: z.x + (z.width||0)/2, y: z.y + (z.height||0)/2 });
+    }
+  }
+
+  if (!spawnZones.length) {
+    if (currentLevel === 1) {
     spawnZones = [
       { x: 100, y: 650 },
       { x: 800, y: 400 },
@@ -9706,7 +9986,7 @@ function getSpawnPosition(type) {
     y: zone.y
   };
 }
-
+}
 // Spawn an enemy with custom HP
 function spawnEnemy(type, hp) {
   let pos = getSpawnPosition(type);
@@ -10422,6 +10702,7 @@ function hideAllMenus() {
   document.getElementById("pauseMenu").classList.add("hidden");
   document.getElementById("controls").classList.add("hidden");
   document.getElementById("controllerControls").classList.add("hidden");
+  document.getElementById("customLevels").classList.add("hidden");
 }
 
 // AABB collision
@@ -12010,6 +12291,7 @@ function backToMenu() {
   document.getElementById("menu").classList.remove("hidden");
   document.getElementById("controls").classList.add("hidden");
   document.getElementById("controllerControls").classList.add("hidden");
+  document.getElementById("customLevels").classList.add("hidden");
   // Hide canvas to be safe
   document.getElementById("game").style.display = "none";
 }
@@ -14426,6 +14708,20 @@ function updateMovingPlatforms() {
         box.y += deltaY;
       }
     }
+
+    // --- SPIKE RIDING PLATFORM ---
+    for (let spike of spikes) {
+      const spikeOn =
+        spike.y + spike.height <= wall.y + 5 &&
+        spike.y + spike.height >= wall.y - 10 &&
+        spike.x + spike.width > wall.x &&
+        spike.x < wall.x + wall.width;
+
+      if (spikeOn) {
+        spike.x += deltaX;
+        spike.y += deltaY;
+      }
+    }
   }
 }
 
@@ -15061,6 +15357,7 @@ ctx.fill();
   drawLadders();
   drawSnowmen();
    drawPotato();
+  drawCookie();
   drawOven();
   for (let i = 0; i < atmosphericParticles.debris.length; i++) {
     const d = atmosphericParticles.debris[i];
@@ -15541,6 +15838,7 @@ function gameLoop(currentTime) {
           updateIcicles();
         }
         updatePlayer();
+        updateCookie();
         updatePlayerClubAttack();
         updateDirectionalSwordAttack();
         updateCannonAim();

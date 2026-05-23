@@ -93,10 +93,29 @@
 
   <!-- <button onclick="openMultiplayer()">🌐 Multiplayer</button> -->
   <button onclick="openLevelSelect()">Start Game</button>
+  <button onclick="openCustomLevels()">Custom Levels</button>
+  <button onclick="openLevelEditorOverlay()">Level Editor</button>
   <button onclick="openControls()">Controls</button>
   <button onclick="openSettings()">Settings</button>
   <button onclick="openCredits()">Credits</button>
 </div>
+
+  <!-- Level Editor Overlay (iframe) -->
+  <div id="levelEditorOverlay" class="hidden" style="position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9999">
+    <div class="editor-wrap">
+      <div class="editor-header">
+        <button class="btn" onclick="closeLevelEditorOverlay()">Close</button>
+        <div style="color:#bfe; font-weight:700">Level Editor</div>
+      </div>
+      <iframe id="levelEditorFrame" src="Developer Tools/level-editor.html"></iframe>
+    </div>
+  </div>
+
+  <div id="customLevels" class="hidden">
+    <h2>Custom Levels</h2>
+    <div id="custom-levels-list" style="max-height:420px; overflow:auto; text-align:left; padding:10px;"></div>
+    <button class="back-btn" onclick="backToMenu()">Back</button>
+  </div>
 
 <div id="levelSelect" class="hidden">
   <h2>Select Level</h2>
@@ -121,6 +140,7 @@
   <h2>Wave Mode</h2>
   <button onclick="startWaveModeLevel(1)"> Level 1 - Wave Mode</button>
   <button onclick="startWaveModeLevel(2)"> Level 2 - Wave Mode</button>
+  <button onclick="startWaveModeLevel(4)"> Level 3 - Wave Mode</button>
 <button onclick="startWaveModeLevel(3)"> X-mas Special - Wave Mode</button>
   <!-- This is a single-line comment 
 <button onclick="startWaveModeLevel(4)"> Box Chaos - Wave Mode</button> This is a single-line comment -->

@@ -1,5 +1,4 @@
 {
-  "includeBounds": false,
   "objects": [
     {
       "type": "wall",
@@ -159,7 +158,18 @@
       "width": 200,
       "height": 12,
       "id": 18
+    },
+    {
+      "id": 20,
+      "type": "wall-moving",
+      "x": 1740,
+      "y": 500,
+      "width": 240,
+      "height": 20,
+      "speed": 1.5,
+      "range": 350,
+      "axis": "v"
     }
   ],
-  "nextId": 19
+  "nextId": 21
 }
