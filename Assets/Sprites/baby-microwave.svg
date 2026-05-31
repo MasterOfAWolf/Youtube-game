@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Cute baby microwave">
+  <defs>
+    <linearGradient id="shell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f9d9e8"/>
+      <stop offset="100%" stop-color="#e8b8d1"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f9fbff"/>
+      <stop offset="100%" stop-color="#bfd0f3"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="32" cy="55" rx="18" ry="4.5" fill="rgba(0,0,0,0.18)"/>
+  <rect x="11" y="17" width="42" height="30" rx="10" fill="url(#shell)" stroke="#b96c97" stroke-width="2.5"/>
+  <rect x="16" y="22" width="24" height="18" rx="6" fill="#ffdce8" stroke="#d88ab0" stroke-width="2"/>
+  <rect x="43" y="23" width="6" height="14" rx="3" fill="#f4a7c4" stroke="#d88ab0" stroke-width="1.5"/>
+  <rect x="20" y="27" width="12" height="8" rx="4" fill="url(#glass)" stroke="#8aa3cf" stroke-width="1.25"/>
+  <circle cx="24" cy="31" r="1.8" fill="#2b2230"/>
+  <circle cx="30" cy="31" r="1.8" fill="#2b2230"/>
+  <circle cx="35" cy="29" r="1.2" fill="#fff" opacity="0.8"/>
+  <ellipse cx="23" cy="39" rx="3.8" ry="2.2" fill="#ff98b6" opacity="0.55"/>
+  <ellipse cx="33" cy="39" rx="3.8" ry="2.2" fill="#ff98b6" opacity="0.55"/>
+  <path d="M18 16c0-4 3-7 7-7 2.2 0 4.1 1 5.3 2.6 1.2-1.6 3.1-2.6 5.3-2.6 4 0 7 3 7 7" fill="none" stroke="#b96c97" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M29 9l1.8-3 1.8 3" fill="none" stroke="#b96c97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="31" cy="10" r="1.5" fill="#ffe8f1" stroke="#b96c97" stroke-width="1"/>
+  <rect x="15" y="45" width="7" height="4" rx="2" fill="#b96c97"/>
+  <rect x="42" y="45" width="7" height="4" rx="2" fill="#b96c97"/>
+  <path d="M22 23h10" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity="0.55"/>
+</svg>

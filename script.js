@@ -814,6 +814,9 @@ bgTile.src = "Assets/Tiles/Cobblestone BG.png";
 const snailImg = new Image();
 snailImg.src = "Assets/Sprites/snail-pixilart.png";
 
+const babyMicrowaveImg = new Image();
+babyMicrowaveImg.src = "Assets/Sprites/baby-microwave.svg";
+
 const cannonImg = new Image();
 cannonImg.src = "Assets/Sprites/potatocannon.png";
 
@@ -847,6 +850,7 @@ const CLUB_DRAW_TIP_PADDING = 14;
 const CLUB_SPRITE_ROTATION_OFFSET = Math.PI / 4;
 const CLUB_FALLBACK_STROKE_BASE = 4;
 const CLUB_FALLBACK_STROKE_VARIATION = 5;
+const CLUB_DAMAGE = 0.5;
 
 const DEBUG_HITBOX_LINE_WIDTH = 1;
 const DEBUG_HITBOX_FILL_ALPHA = 0.14;
@@ -1593,6 +1597,7 @@ snails: [],
 bats: [],
 yetis: [],
 snowmen:     [],
+babyMicrowaves: [],
 turrets:     [],
 chairs:      [],
 tables:      [],
@@ -1933,6 +1938,7 @@ let potatoState = "none";
 let initialBoxes = [];
 let initialSnails = [];
 let initialSuperSnails = [];
+let initialBabyMicrowaves = [];
 let initialWalls = [];
 let initialSpikes = [];
 let initialLadders = [];
@@ -3866,7 +3872,7 @@ function drawMinimap() {
 
   // Enemies
   ctx.fillStyle = "#f44";
-  for (const e of [...G.snails, ...G.SuperSnails, ...G.bats, ...G.turrets, ...G.snowmen, ...G.tables, ...G.yetis, ...G.chairs]) {
+  for (const e of [...G.snails, ...G.SuperSnails, ...G.bats, ...G.turrets, ...G.snowmen, ...G.tables, ...G.yetis, ...G.chairs, ...G.babyMicrowaves]) {
     ctx.fillRect(MX + e.x * scaleX - 1, MY + e.y * scaleY - 1, 3, 3);
   }
 
@@ -4942,6 +4948,7 @@ if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
       { list: G.SuperSnails,key: 'superSnail' },
       { list: G.bats,       key: 'bat' },
       { list: G.snowmen,    key: 'snowman' },
+      { list: G.babyMicrowaves, key: 'babyMicrowave' },
     ];
 
 for (const { list, key } of enemyChecks) {
@@ -4949,8 +4956,18 @@ for (const { list, key } of enemyChecks) {
   for (let j = list.length - 1; j >= 0; j--) {
     const e = list[j];
     if (isColliding(hitBox, e)) {
-      damageEnemy(e, dmg, kb);
-      if (e.hp <= 0) { list.splice(j, 1); onEnemyKilled(key); }
+      if (key === 'babyMicrowave') {
+        e.hp = Math.min(e.maxHp || 1, (e.hp || 0) + Math.max(1, dmg));
+        e.maxHp = e.maxHp || e.hp;
+        e.hitFlash = 6;
+        e.openTimer = Math.max(e.openTimer || 0, 10);
+        e.dingTimer = 14;
+        potatoMessage = '🍼 baby microwave healed';
+        potatoMessageTimer = 60;
+      } else {
+        damageEnemy(e, dmg, kb);
+        if (e.hp <= 0) { list.splice(j, 1); onEnemyKilled(key); }
+      }
       hit = true;
       break;
     }
@@ -5029,12 +5046,26 @@ if (!hit) {
     }
   }
 
-// --- Explosion (baked potato only) ---
-function createExplosion(x, y) {
-  G.explosions.push({ x, y, radius: 0, maxRadius: 85, timer: 28, maxTimer: 28 });
+// --- Explosion effects ---
+function createExplosion(x, y, options = {}) {
+  const type = options.type || 'potato';
+  const maxRadius = options.maxRadius || (type === 'microwave' ? 64 : 85);
+  const timer = options.timer || (type === 'microwave' ? 24 : 28);
+  const dmg = options.damage || (type === 'microwave' ? 2 : 3);
 
-  const R   = 85;
-  const dmg = 3;
+  G.explosions.push({
+    x,
+    y,
+    radius: 0,
+    maxRadius,
+    timer,
+    maxTimer: timer,
+    type,
+    damage: dmg,
+    playerHit: false,
+  });
+
+  const R   = maxRadius;
   const kb  = (ex, ey) => ({ x: (ex - x) * 0.12, y: -5 });
 
   for (let j = G.snails.length - 1; j >= 0; j--) {
@@ -5063,6 +5094,23 @@ function createExplosion(x, y) {
     if (Math.hypot((s.x + s.width/2) - x, (s.y + s.height/2) - y) < R) {
       damageEnemy(s, dmg, kb(s.x, s.y));
       if (s.hp <= 0) { G.snowmen.splice(j, 1); onEnemyKilled('snowman'); }
+    }
+  }
+  for (let j = G.babyMicrowaves.length - 1; j >= 0; j--) {
+    const m = G.babyMicrowaves[j];
+    if (Math.hypot((m.x + m.width/2) - x, (m.y + m.height/2) - y) < R) {
+      if (type === 'microwave') {
+        damageEnemy(m, dmg, kb(m.x, m.y));
+        if (m.hp <= 0) triggerBabyMicrowaveExplosion(m);
+      } else {
+        m.hp = Math.min(m.maxHp || 1, (m.hp || 0) + dmg);
+        m.maxHp = m.maxHp || m.hp;
+        m.hitFlash = 6;
+        m.openTimer = Math.max(m.openTimer || 0, 10);
+        m.dingTimer = 14;
+        potatoMessage = '🍼 baby microwave healed';
+        potatoMessageTimer = 60;
+      }
     }
   }
   for (const b of boxes) {
@@ -5121,6 +5169,18 @@ function updateExplosions() {
     const e = G.explosions[i];
     e.timer--;
     e.radius = e.maxRadius * (1 - e.timer / e.maxTimer);
+
+    if (e.type === 'microwave' && !e.playerHit) {
+      const playerDistance = Math.hypot(
+        (player.x + player.width / 2) - e.x,
+        (player.y + player.height / 2) - e.y
+      );
+      if (playerDistance <= e.radius * 0.86) {
+        damagePlayer('Baby Microwave Explosion');
+        e.playerHit = true;
+      }
+    }
+
     if (e.timer <= 0) G.explosions.splice(i, 1);
   }
 }
@@ -5218,6 +5278,37 @@ function drawExplosions() {
   for (const e of G.explosions) {
     const frac = 1 - e.timer / e.maxTimer;
     const alpha = 1 - frac;
+    if (e.type === 'microwave') {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.75;
+      ctx.strokeStyle = '#ff9ec7';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.globalAlpha = alpha * 0.95;
+      const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.radius * 0.7);
+      grad.addColorStop(0, '#fff8fb');
+      grad.addColorStop(0.35, '#ffd1e2');
+      grad.addColorStop(0.7, '#ff8fb8');
+      grad.addColorStop(1, 'rgba(255,143,184,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 2;
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 3) {
+        ctx.beginPath();
+        ctx.moveTo(e.x + Math.cos(a) * (e.radius * 0.2), e.y + Math.sin(a) * (e.radius * 0.2));
+        ctx.lineTo(e.x + Math.cos(a) * (e.radius * 0.92), e.y + Math.sin(a) * (e.radius * 0.92));
+        ctx.stroke();
+      }
+      ctx.restore();
+      continue;
+    }
 
     // outer shockwave ring
     ctx.save();
@@ -5581,6 +5672,7 @@ function resetLevelGeometry() {
   G.bats = [];
   G.yetis = [];
   G.snowmen = [];
+  G.babyMicrowaves = [];
   G.icicles = [];
   // Clear level-defined lighting and spawn zones
   lights = [];
@@ -6289,6 +6381,7 @@ function loadMap_Level2() {
   ladders = [];
   G.chairs = [];
   G.tables = [];
+  G.babyMicrowaves = [];
   addMapBounds();
 
   // ── Level: Spikes and Moving ── (generated by Level Editor)
@@ -6413,6 +6506,7 @@ function loadMap_Level3() {
   spikes = [];
   G.icicles = [];
   G.tables = [];
+  G.babyMicrowaves = [];
 
 walls.push({ x: 0, y: 0, width: 2800, height: 30, ice: true },
 { x: 0, y: 0, width: 30, height: 2100, ice: true },
@@ -6626,6 +6720,7 @@ const ENEMY_COLORS = {
   bat: "#6b4c8a",     // purple
   yeti: "#eef",       // white
   snowman: "#fff",    // white
+  babyMicrowave: "#ff9ec7",
   turret: "#f44",     // red
   table: "#c8922a"    // oak brown
 };
@@ -7686,7 +7781,7 @@ function drawVehicles() {
 function checkEnemyVehicleDamage() {
   for (const v of vehicles) {
     const bounds = getVehicleBounds(v);
-    const allEnemies = [...G.snails, ...G.SuperSnails, ...G.bats];
+    const allEnemies = [...G.snails, ...G.SuperSnails, ...G.bats, ...G.babyMicrowaves];
 
     for (const e of allEnemies) {
       if (!rectsOverlap(bounds, e)) continue;
@@ -7868,7 +7963,7 @@ if (
 }
 
     // --- BOX COLLISIONS WITH G.snails ---
-    for (let s of [...G.snails, ...G.SuperSnails]) {
+    for (let s of [...G.snails, ...G.SuperSnails, ...G.babyMicrowaves]) {
       if (isColliding(box, s)) resolveBoxCollision(box, s);
     }
 
@@ -9053,6 +9148,11 @@ function addEnemyHealth() {
     if (!s.hp) s.hp = 3;
     if (!s.maxHp) s.maxHp = s.hp;
   }
+
+  for (let m of G.babyMicrowaves) {
+    if (!m.hp) m.hp = 2;
+    if (!m.maxHp) m.maxHp = m.hp;
+  }
   
   // G.yetis already have HP in your code (5)
   for (let y of G.yetis) {
@@ -9182,6 +9282,26 @@ function drawEnemyHealthBars() {
     ctx.lineWidth = 1;
     ctx.strokeRect(x, y, barWidth, barHeight);
   }
+
+  for (let m of G.babyMicrowaves) {
+    if (!m.hp || m.hp <= 0) continue;
+
+    const barWidth = 24;
+    const barHeight = 4;
+    const x = m.x + (m.width - barWidth) / 2;
+    const y = m.y - 8;
+
+    ctx.fillStyle = "#300";
+    ctx.fillRect(x, y, barWidth, barHeight);
+
+    const healthPercent = m.hp / m.maxHp;
+    ctx.fillStyle = healthPercent > 0.5 ? "#0f0" : healthPercent > 0.25 ? "#ff0" : "#f00";
+    ctx.fillRect(x, y, barWidth * healthPercent, barHeight);
+
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, barWidth, barHeight);
+  }
   
   // G.yetis
   for (let y of G.yetis) {
@@ -9251,7 +9371,7 @@ function drawEnemyHealthBars() {
 
 // Update hit flash effect
 function updateEnemyHitFlashes() {
-  for (let s of [...G.snails, ...G.SuperSnails, ...G.snowmen, ...G.tables]) {
+  for (let s of [...G.snails, ...G.SuperSnails, ...G.snowmen, ...G.tables, ...G.babyMicrowaves]) {
     if (s.hitFlash > 0) s.hitFlash--;
   }
   
@@ -9303,6 +9423,7 @@ const XP_TABLE = {
   bat:        12,
   yeti:       25,
   snowman:    18,
+  babyMicrowave: 14,
   turret:     15,
   chair:      10,
   table:      18,
@@ -9315,6 +9436,7 @@ const GOLD_TABLE = {
   bat:        3,
   yeti:       10,
   snowman:    5,
+  babyMicrowave: 4,
   turret:     4,
   chair:      2,
   table:      5,
@@ -9648,6 +9770,7 @@ const waveConfigurations = {
         { type: "superSnail", count: 3, hp: 4 },
         { type: "turret", count: 2, hp: 3 },
         { type: "bat", count: 2, hp: 2 },
+        { type: "babyMicrowave", count: { min: 2, max: 3 }, hp: 3 },
         { type: "table", count: 2, hp: 5 }
       ],
       spawnDelay: 35,
@@ -9658,7 +9781,7 @@ const waveConfigurations = {
       name: "Random Wave",
       random: true,
       randomConfig: {
-        enemyPool: ["snail", "superSnail", "turret", "bat", "table"],
+        enemyPool: ["snail", "superSnail", "turret","babyMicrowave", "bat", "table"],
         totalEnemies: { min: 10, max: 20},
         hpMultiplier: 1.2
       },
@@ -9697,7 +9820,7 @@ const waveConfigurations = {
       name: "Random Chaos",
       random: true,
       randomConfig: {
-        enemyPool: ["snail", "superSnail", "turret"],
+        enemyPool: ["snail", "superSnail", "turret", "babyMicrowave"],
         totalEnemies: { min: 10, max: 15 },
         hpMultiplier: 1.3
       },
@@ -9775,10 +9898,20 @@ const waveConfigurations = {
       message: "📦 CHAOS BEGINS"
     },
     {
+      name: "Snack Time",
+      enemies: [
+        { type: "snail", count: 4, hp: 1 },
+        { type: "babyMicrowave", count: { min: 2, max: 3 }, hp: 3 },
+        { type: "turret", count: 1, hp: 2 }
+      ],
+      spawnDelay: 30,
+      message: "🍼 BABY MICROWAVE PARADE"
+    },
+    {
       name: "Everything",
       random: true,
       randomConfig: {
-        enemyPool: ["snail", "superSnail", "turret"],
+        enemyPool: ["snail", "superSnail", "turret", "babyMicrowave"],
         totalEnemies: { min: 20, max: 30},
         hpMultiplier: 1.5
       },
@@ -9811,7 +9944,8 @@ function generateRandomWave(config, waveNumber = 1) {
       turret: 2,
       yeti: 5,
       snowman: 4,
-      table: 4
+      table: 4,
+      babyMicrowave: 2
     };
     
     // Apply both config multiplier and wave scaling
@@ -9852,6 +9986,7 @@ function startWaveMode(levelNumber) {
   G.SuperSnails = [];
   G.yetis = [];
   G.snowmen = [];
+  G.babyMicrowaves = [];
   G.turrets = [];
   G.bats = [];
   G.tables = [];
@@ -10112,6 +10247,10 @@ case 'table': {
           hitFlash: 0
         });
       }
+      break;
+
+    case 'babyMicrowave':
+      G.babyMicrowaves.push(createBabyMicrowave(pos.x, pos.y, hp || 2));
       break;
       
   }
@@ -10407,6 +10546,7 @@ function drawWaveUI() {
     aliveCount += G.SuperSnails.filter(s => s.hp > 0).length;
     aliveCount += G.yetis.filter(y => y.alive && y.hp > 0).length;
     aliveCount += G.snowmen.filter(s => s.hp > 0).length;
+    aliveCount += G.babyMicrowaves.filter(s => s.hp > 0).length;
     aliveCount += G.turrets.filter(t => t.hp > 0).length;
     aliveCount += G.bats.filter(b => b.hp > 0).length;
     aliveCount += G.tables.filter(t => t.hp > 0).length;
@@ -10743,6 +10883,9 @@ function getEnemySnapshot() {
       alive: e.alive ?? true,
       hitFlash: e.hitFlash ?? 0,
       frame: e.frame ?? 0,
+      openTimer: e.openTimer ?? 0,
+      dingTimer: e.dingTimer ?? 0,
+      wobblePhase: e.wobblePhase ?? 0,
     };
   }
   return {
@@ -10751,6 +10894,7 @@ function getEnemySnapshot() {
     bats:        G.bats.map(minEnemy),
     yetis:       G.yetis.map(minEnemy),
     snowmen:     G.snowmen.map(minEnemy),
+    babyMicrowaves: G.babyMicrowaves.map(minEnemy),
     turrets:     G.turrets.map(minEnemy),
     chairs:      G.chairs.map(minEnemy),
     tables:      G.tables.map(minEnemy),
@@ -10785,6 +10929,7 @@ function applyEnemySnapshot(snap) {
   applyList(G.bats,        snap.bats);
   applyList(G.yetis,       snap.yetis);
   applyList(G.snowmen,     snap.snowmen);
+  applyList(G.babyMicrowaves, snap.babyMicrowaves || []);
   applyList(G.turrets,     snap.turrets);
   applyList(G.chairs,      snap.chairs);
   applyList(G.tables,      snap.tables);
@@ -10921,6 +11066,7 @@ debugTests = [];
   G.shopkeepers = []
   timeElapsed = 0;
  hasPotato = false;
+  G.babyMicrowaves = [];
   potato.collected = true;
   cheeses = [];
   cannonProjectiles = [];
@@ -10937,6 +11083,7 @@ debugTests = [];
   if (initialBoxes && initialBoxes.length) boxes = initialBoxes.map(b => ({ ...b }));
   if (initialSnails && initialSnails.length) G.snails = initialSnails.map(s => ({ ...s }));
   if (initialSuperSnails && initialSuperSnails.length) G.SuperSnails = initialSuperSnails.map(s => ({ ...s }));
+  if (initialBabyMicrowaves && initialBabyMicrowaves.length) G.babyMicrowaves = initialBabyMicrowaves.map(m => ({ ...m }));
   if (initialWalls && initialWalls.length) walls = initialWalls.map(w => ({ ...w }));
   if (initialSpikes && initialSpikes.length) spikes = initialSpikes.map(s => ({ ...s }));
   if (initialLadders && initialLadders.length) ladders = initialLadders.map(l => ({ ...l }));
@@ -11027,6 +11174,7 @@ function saveInitialState() {
   initialBoxes = boxes.map(b => ({ ...b }));
   initialSnails = G.snails.map(s => ({ ...s }));
   initialSuperSnails = G.SuperSnails.map(s => ({ ...s }));
+  initialBabyMicrowaves = G.babyMicrowaves.map(m => ({ ...m }));
   initialWalls = walls.map(w => ({ ...w }));
   initialSpikes = spikes.map(s => ({ ...s }));
   initialLadders = ladders.map(l => ({ ...l }));
@@ -12410,6 +12558,201 @@ function updateSnowmen() {
   }
 }
 
+function createBabyMicrowave(x, y, hp = 2) {
+  return {
+    x,
+    y,
+    width: 34,
+    height: 28,
+    dx: 0,
+    dy: 0,
+    dir: Math.random() > 0.5 ? 1 : -1,
+    speed: 0.85 + Math.random() * 0.35,
+    gravity: 0.55,
+    chaseRange: 420 + Math.random() * 120,
+    hopTimer: 0,
+    openTimer: 0,
+    dingTimer: 0,
+    wobblePhase: Math.random() * Math.PI * 2,
+    hp,
+    maxHp: hp,
+    hitFlash: 0,
+    knockbackTimer: 0,
+    knockbackDx: 0,
+    knockbackDy: 0
+  };
+}
+
+function updateBabyMicrowaves() {
+  for (let m of G.babyMicrowaves) {
+    if (m.hp <= 0) {
+      triggerBabyMicrowaveExplosion(m);
+      continue;
+    }
+
+    ensureEntityInBounds(m);
+
+    if (m.hitFlash > 0) m.hitFlash--;
+    if (m.openTimer > 0) m.openTimer--;
+    if (m.dingTimer > 0) m.dingTimer--;
+    if (m.hopTimer > 0) m.hopTimer--;
+
+    if (m.knockbackTimer > 0) {
+      m.x += m.knockbackDx;
+      m.y += m.knockbackDy;
+      m.knockbackDx *= 0.84;
+      m.knockbackDy *= 0.84;
+      m.knockbackTimer--;
+      continue;
+    }
+
+    m.dy += m.gravity;
+    if (m.dy > 12) m.dy = 12;
+
+    const centerX = m.x + m.width / 2;
+    const centerY = m.y + m.height / 2;
+    const playerDx = player.x + player.width / 2 - centerX;
+    const playerDy = player.y + player.height / 2 - centerY;
+    const dist = Math.hypot(playerDx, playerDy);
+
+    m.dir = playerDx >= 0 ? 1 : -1;
+
+    if (dist < m.chaseRange) {
+      m.dx = m.dir * m.speed;
+      m.openTimer = Math.max(m.openTimer, 10);
+      if (dist < 160) {
+        m.dingTimer = 12;
+      }
+    } else {
+      m.dx = m.dir * (m.speed * 0.35);
+      if (Math.random() < 0.01) {
+        m.dir *= -1;
+      }
+    }
+
+    m.x += m.dx;
+    m.y += m.dy;
+
+    let onGround = false;
+
+    for (let wall of walls) {
+      if (!isColliding(m, wall)) continue;
+      const ox = Math.min(m.x + m.width - wall.x, wall.x + wall.width - m.x);
+      const oy = Math.min(m.y + m.height - wall.y, wall.y + wall.height - m.y);
+
+      if (ox < oy) {
+        m.x += m.x < wall.x ? -ox : ox;
+        m.dir *= -1;
+        m.dx = 0;
+      } else {
+        if (m.y < wall.y) {
+          m.y -= oy;
+          m.dy = 0;
+          onGround = true;
+        } else {
+          m.y += oy;
+          m.dy = 0;
+        }
+      }
+    }
+
+    if (onGround) {
+      const frontX = m.dir > 0 ? m.x + m.width + 2 : m.x - 2;
+      const frontY = m.y + m.height + 4;
+      let groundAhead = false;
+
+      for (let wall of walls) {
+        if (
+          frontX > wall.x &&
+          frontX < wall.x + wall.width &&
+          frontY > wall.y &&
+          frontY < wall.y + wall.height
+        ) {
+          groundAhead = true;
+          break;
+        }
+      }
+
+      if (!groundAhead) m.dir *= -1;
+    }
+
+    m.wobblePhase += 0.08;
+
+    if (isColliding(m, player)) {
+      damagePlayer("Baby Microwave");
+      m.dir *= -1;
+      m.dx = -m.dir * m.speed;
+    }
+  }
+}
+
+function drawBabyMicrowaves() {
+  for (let m of G.babyMicrowaves) {
+    if (!isEffectVisibleInWorld(m.x - 12, m.y - 12, m.width + 24, m.height + 24, 120)) continue;
+
+    const bob = Math.sin(m.wobblePhase) * 1.5;
+    const centerX = m.x + m.width / 2;
+    const centerY = m.y + m.height / 2;
+
+    ctx.save();
+    ctx.translate(centerX, centerY + bob);
+
+    if (m.dir < 0) {
+      ctx.scale(-1, 1);
+    }
+
+    if (m.hitFlash > 0) {
+      ctx.filter = "brightness(1.7) saturate(1.25)";
+    }
+
+    if (babyMicrowaveImg.complete && babyMicrowaveImg.naturalWidth) {
+      ctx.drawImage(babyMicrowaveImg, -m.width / 2, -m.height / 2, m.width, m.height);
+    } else {
+      ctx.fillStyle = "#f2c1d4";
+      ctx.fillRect(-m.width / 2, -m.height / 2, m.width, m.height);
+      ctx.fillStyle = "#fff0f5";
+      ctx.fillRect(-10, -8, 20, 14);
+    }
+
+    ctx.filter = "none";
+
+    if (m.openTimer > 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.35)";
+      ctx.fillRect(2, -5, 7, 10);
+      ctx.fillStyle = "rgba(255,214,226,0.65)";
+      ctx.beginPath();
+      ctx.arc(9, 0, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (m.dingTimer > 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.8)";
+      ctx.beginPath();
+      ctx.arc(0, -18, 2, 0, Math.PI * 2);
+      ctx.arc(5, -15, 1.5, 0, Math.PI * 2);
+      ctx.arc(-5, -15, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
+function triggerBabyMicrowaveExplosion(microwave) {
+  if (!microwave || microwave.exploding) return;
+
+  microwave.exploding = true;
+  const index = G.babyMicrowaves.indexOf(microwave);
+  if (index > -1) G.babyMicrowaves.splice(index, 1);
+  onEnemyKilled('babyMicrowave');
+
+  createExplosion(
+    microwave.x + microwave.width / 2,
+    microwave.y + microwave.height / 2,
+    { type: 'microwave', maxRadius: 64, timer: 24, damage: 2 }
+  );
+}
+
 function drawOvens() {
   for (const oven of ovens) {
     drawOven(oven);
@@ -12659,6 +13002,14 @@ function updateTables() {
             if (s.hp <= 0) { G.SuperSnails.splice(i, 1); onEnemyKilled('superSnail'); }
           }
         }
+        // Hurt baby microwaves
+        for (let i = G.babyMicrowaves.length - 1; i >= 0; i--) {
+          const m = G.babyMicrowaves[i];
+          if (isColliding(flipHit, m)) {
+            damageEnemy(m, 1, { x: (m.x - cx)*0.15, y: -4 });
+            if (m.hp <= 0) triggerBabyMicrowaveExplosion(m);
+          }
+        }
         // Hurt G.turrets
         for (let i = G.turrets.length - 1; i >= 0; i--) {
           if (isColliding(flipHit, G.turrets[i])) {
@@ -12749,6 +13100,13 @@ function updateTables() {
             if (Math.hypot(s.x+s.width/2 - cx, s.y+s.height/2 - cy) < slamR) {
               damageEnemy(s, 2, { x:(s.x-cx)*0.1, y:-6 });
               if (s.hp <= 0) { G.SuperSnails.splice(i, 1); onEnemyKilled('superSnail'); }
+            }
+          }
+          for (let i = G.babyMicrowaves.length - 1; i >= 0; i--) {
+            const m = G.babyMicrowaves[i];
+            if (Math.hypot(m.x+m.width/2 - cx, m.y+m.height/2 - cy) < slamR) {
+              damageEnemy(m, 2, { x:(m.x-cx)*0.1, y:-6 });
+              if (m.hp <= 0) triggerBabyMicrowaveExplosion(m);
             }
           }
           for (let i = G.chairs.length - 1; i >= 0; i--) {
@@ -13788,6 +14146,16 @@ function hitSwordTargets(attackBox) {
     triggerScreenShake(5);
   }
 
+  for (let i = G.babyMicrowaves.length - 1; i >= 0; i--) {
+    const m = G.babyMicrowaves[i];
+    if (!isColliding(attackBox, m) || player.swordHitObjects.has(m)) continue;
+    const died = damageEnemy(m, damage, getSwordKnockback(m.x, m.y));
+    if (died) triggerBabyMicrowaveExplosion(m);
+    if (shouldBounce) player.dy = SWORD_DOWN_BOUNCE_VELOCITY;
+    player.swordHitObjects.add(m);
+    triggerScreenShake(2);
+  }
+
   for (let i = G.bats.length - 1; i >= 0; i--) {
     const b = G.bats[i];
     if (!isColliding(attackBox, b) || player.swordHitObjects.has(b)) continue;
@@ -13892,6 +14260,7 @@ function updatePlayerClubAttack() {
     
     if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
       applyClubStun(s);
+      damageEnemy(s, CLUB_DAMAGE, { x: 0, y: 0 });
       const knockback = getClubKnockback(s.x + (s.width || 0) / 2, s.y + (s.height || 0) / 2);
       s.knockbackDx = knockback.x;
       s.knockbackDy = knockback.y;
@@ -13908,6 +14277,7 @@ function updatePlayerClubAttack() {
     
     if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
       applyClubStun(s);
+      damageEnemy(s, CLUB_DAMAGE, { x: 0, y: 0 });
       const knockback = getClubKnockback(s.x + (s.width || 0) / 2, s.y + (s.height || 0) / 2);
       s.knockbackDx = knockback.x;
       s.knockbackDy = knockback.y;
@@ -13924,6 +14294,7 @@ function updatePlayerClubAttack() {
     
     if (isColliding(attackBox, bat) && !player.attackHitObjects.has(bat)) {
       applyClubStun(bat);
+      damageEnemy(bat, CLUB_DAMAGE, { x: 0, y: 0 });
       const knockback = getClubKnockback(bat.x + (bat.width || 0) / 2, bat.y + (bat.height || 0) / 2);
       bat.knockbackDx = knockback.x;
       bat.knockbackDy = knockback.y;
@@ -13940,6 +14311,7 @@ function updatePlayerClubAttack() {
     
     if (isColliding(attackBox, y) && !player.attackHitObjects.has(y)) {
       applyClubStun(y);
+      damageEnemy(y, CLUB_DAMAGE, { x: 0, y: 0 });
       const knockback = getClubKnockback(y.x + (y.width || 0) / 2, y.y + (y.height || 0) / 2);
       y.knockbackDx = knockback.x;
       y.knockbackDy = knockback.y;
@@ -13956,6 +14328,7 @@ function updatePlayerClubAttack() {
     
     if (isColliding(attackBox, s) && !player.attackHitObjects.has(s)) {
       applyClubStun(s);
+      damageEnemy(s, CLUB_DAMAGE, { x: 0, y: 0 });
       const knockback = getClubKnockback(s.x + (s.width || 0) / 2, s.y + (s.height || 0) / 2);
       s.knockbackDx = knockback.x;
       s.knockbackDy = knockback.y;
@@ -13971,6 +14344,7 @@ function updatePlayerClubAttack() {
     
     if (isColliding(attackBox, t) && !player.attackHitObjects.has(t)) {
       applyClubStun(t, CLUB_TURRET_STUN_DURATION);
+      damageEnemy(t, CLUB_DAMAGE, { x: 0, y: 0 });
       const knockback = getClubKnockback(t.x + (t.width || 0) / 2, t.y + (t.height || 0) / 2);
       t.knockbackDx = knockback.x;
       t.knockbackDy = knockback.y;
@@ -13986,6 +14360,7 @@ function updatePlayerClubAttack() {
     let c = G.chairs[i];
     if (isColliding(attackBox, c) && !player.attackHitObjects.has(c)) {
       applyClubStun(c);
+      damageEnemy(c, CLUB_DAMAGE, { x: 0, y: 0 });
       const knockback = getClubKnockback(c.x + (c.width || 0) / 2, c.y + (c.height || 0) / 2);
       c.knockbackDx = knockback.x;
       c.knockbackDy = knockback.y;
@@ -13995,11 +14370,12 @@ function updatePlayerClubAttack() {
       player.attackHitObjects.add(c);
     }
   }
-  // Hit G.tables — club only stuns, no damage or flip
+  // Hit G.tables — club now deals half damage while still applying stun
   for (let i = G.tables.length - 1; i >= 0; i--) {
     let t = G.tables[i];
     if (isColliding(attackBox, t) && !player.attackHitObjects.has(t)) {
       applyClubStun(t);
+      damageEnemy(t, CLUB_DAMAGE, { x: 0, y: 0 });
       const knockback = getClubKnockback(t.x + (t.width || 0) / 2, t.y + (t.height || 0) / 2, CLUB_BOX_KNOCKBACK_MULTIPLIER);
       t.knockbackDx = knockback.x;
       t.knockbackDy = knockback.y;
@@ -14021,6 +14397,21 @@ function updatePlayerClubAttack() {
     player.attackHitObjects.add(box);
   }
 
+
+  for (let i = G.babyMicrowaves.length - 1; i >= 0; i--) {
+    const m = G.babyMicrowaves[i];
+    if (!isColliding(attackBox, m) || player.attackHitObjects.has(m)) continue;
+    applyClubStun(m, 24);
+    const knockback = getClubKnockback(m.x + (m.width || 0) / 2, m.y + (m.height || 0) / 2, CLUB_ENEMY_KNOCKBACK_MULTIPLIER * 0.75);
+    m.knockbackDx = knockback.x;
+    m.knockbackDy = knockback.y;
+    damageEnemy(m, CLUB_DAMAGE, knockback);
+    if (m.hp <= 0) triggerBabyMicrowaveExplosion(m);
+    player.dx -= knockback.x * 0.4;
+    player.dy -= knockback.y * 0.4;
+    hitEnemyThisFrame = true;
+    player.attackHitObjects.add(m);
+  }
   if (hitEnemyThisFrame) {
     triggerScreenShake(CLUB_HIT_SHAKE_INTENSITY);
   }
@@ -14038,6 +14429,7 @@ function resetWorld() {
   G.chairs = [];
   G.tables = [];
   G.SuperSnails = [];
+  G.babyMicrowaves = [];
   ladders = [];
   spikes = [];
   G.bats = [];
@@ -14385,6 +14777,7 @@ function updateOrbiters() {
     ...G.SuperSnails.map(e => ({ e, list: G.SuperSnails, key: 'superSnail' })),
     ...G.yetis.filter(y => y.alive).map(e => ({ e, list: null, key: 'yeti' })),
     ...G.snowmen.map(e => ({ e, list: G.snowmen, key: 'snowman' })),
+    ...G.babyMicrowaves.map(e => ({ e, list: G.babyMicrowaves, key: 'babyMicrowave' })),
     ...G.turrets.map(e => ({ e, list: G.turrets, key: 'turret' })),
     ...G.chairs.map(e => ({ e, list: G.chairs, key: 'chair' })),
     ...G.tables.map(e => ({ e, list: G.tables, key: 'table' })),
@@ -14505,6 +14898,7 @@ function updateDashDamage() {
     { list: G.snails,      key: 'snail' },
     { list: G.SuperSnails, key: 'superSnail' },
     { list: G.snowmen,     key: 'snowman' },
+    { list: G.babyMicrowaves, key: 'babyMicrowave' },
     { list: G.chairs,      key: 'chair' },
     { list: G.turrets,     key: 'turret' },
     { list: G.tables,      key: 'table' },
@@ -15506,6 +15900,7 @@ drawWolf();
   drawVehicles();
   drawShopkeepers();
   drawSnails();
+  drawBabyMicrowaves();
   drawSuperSnails();
   drawYetis();
   drawSnowballs();
@@ -15832,6 +16227,7 @@ function gameLoop(currentTime) {
           updateYetis();
           updateSnowballs();
           updateSnails();
+          updateBabyMicrowaves();
           updateChairs();
           updateTables();
           updateSuperSnails();
