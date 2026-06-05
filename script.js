@@ -1198,7 +1198,12 @@ function renderShop() {
   if (shopGold) shopGold.textContent = playerInventory.gold;
   const shopList = document.getElementById('shopList');
   shopList.innerHTML = '';
-  for (const it of SHOP_ITEMS) {
+
+  // Shuffle SHOP_ITEMS and pick 3 random ones
+  const shuffledItems = [...SHOP_ITEMS].sort(() => 0.5 - Math.random());
+  const itemsToDisplay = shuffledItems.slice(0, 3);
+
+  for (const it of itemsToDisplay) {
     const row = document.createElement('div');
     row.className = 'shop-row';
     row.innerHTML = `<span class="shop-item">${it.label}</span><span class="shop-price">💰${it.price}</span>`;
@@ -1268,6 +1273,11 @@ function useInventoryItem(slotIndex) {
       consumed = true;
       potatoMessage = 'Dash Battery: quarter dash cooldown for 20 seconds';
       potatoMessageTimer = 90;
+      break;
+    }
+    case 'lucky_charm': {
+      useLuckyCharm();
+      consumed = true;
       break;
     }
     default:
@@ -1602,6 +1612,7 @@ turrets:     [],
 chairs:      [],
 tables:      [],
 bullets:     [],
+peaProjectiles: [],
 fireballs:   [],
 snowballs:   [],
 icicles:     [],
@@ -1698,6 +1709,12 @@ let cannonAimAngle = 0;       // radians, updated every frame from mouse or joys
 let cannonCooldown = 0;       // prevents spray-firing
 const CANNON_COOLDOWN_FRAMES = 18;
 
+const PEA_MINIGUN_COOLDOWN_FRAMES = 3; // Fires very fast
+const PEA_MINIGUN_DAMAGE = 0.2;
+const PEA_MINIGUN_PROJECTILE_SPEED = 12;
+const PEA_MINIGUN_SPREAD = 0.2; // radians
+
+
 let droppedParts = [];    // world pickups
 let placedStructures = []; // built objects in the world
 let partInventory = {
@@ -1730,8 +1747,11 @@ const SHOP_ITEMS = [
   { id: 'speed_chili',   label: 'Speed Chili',  price: 60 },
   { id: 'mega_potion',   label: 'Mega Potion',  price: 55 },
   { id: 'feather_boots', label: 'Feather Boots', price: 90 },
-  { id: 'dash_battery',  label: 'Dash Battery', price: 70 }
+  { id: 'dash_battery',  label: 'Dash Battery', price: 70 },
+  { id: 'lucky_charm',   label: 'Lucky Charm',  price: 150 }
 ];
+
+const INVINCIBILITY_DURATION_FRAMES = 180; // 3 seconds at 60 FPS
 
 const SPEED_CHILI_DURATION_FRAMES = 25 * 60;
 const SPEED_CHILI_SPEED = 8;
@@ -1753,6 +1773,23 @@ function activateFeatherBoots() {
 
 function activateDashBattery() {
   player.dashBatteryTimer = DASH_BATTERY_DURATION_FRAMES;
+}
+
+function useLuckyCharm() {
+  const outcome = Math.random();
+  if (outcome < 0.05) { // 5% chance to die
+    loseLife();
+    potatoMessage = 'Lucky Charm: You gambled and lost it all...';
+    potatoMessageTimer = 90;
+  } else if (outcome < 0.05 + 0.45) { // 45% chance to get a shield
+    player.invincibilityTimer = INVINCIBILITY_DURATION_FRAMES;
+    potatoMessage = 'Lucky Charm: You feel protected!';
+    potatoMessageTimer = 90;
+  } else { // 50% chance to get XP
+    xp += 100; // Assuming 100 XP is a good amount
+    potatoMessage = 'Lucky Charm: You gained experience!';
+    potatoMessageTimer = 90;
+  }
 }
 
 function updateSpeedChiliState() {
@@ -2295,7 +2332,7 @@ function initDebugTests() {
         this._prevCount = cannonProjectiles.length;
         cannonAimAngle = 0;
         cannonCooldown = 0;
-        firePotatoCannon();
+        fireWeapon();
       },
       check() { return cannonProjectiles.length > this._prevCount; },
       cleanup() { hasPotato = false; potatoState = "none"; }
@@ -3274,8 +3311,8 @@ if (gameRunning && !gamePaused && !gameOver) {
   }
 }
 
-if (!hasPotato || !gameRunning || gamePaused || gameOver) return;
-if (e.button === 0) firePotatoCannon();
+if (!gameRunning || gamePaused || gameOver) return;
+if (e.button === 0) fireWeapon();
 });
 
 // --- Inject mobile joystick into touchControls div ---
@@ -3374,7 +3411,7 @@ if (e.button === 0) firePotatoCannon();
 
     if (joystick.active && joystick.magnitude > 0.15) {
       cannonAimAngle = joystick.angle;
-      firePotatoCannon();
+      fireWeapon();
     }
     activeTouchId      = null;
     joystick.active    = false;
@@ -3392,7 +3429,7 @@ if (e.button === 0) firePotatoCannon();
 function syncJoystickVisibility() {
   const zone = document.getElementById("potatoJoystickArea");
   if (!zone) return;
-  zone.style.display = hasPotato ? "flex" : "none";
+  zone.style.display = (player.hasPotatoCannon || player.hasPeaMinigun) ? "flex" : "none";
 }
 
 function syncShopButtonVisibility() {
@@ -3440,7 +3477,7 @@ function updateGamepad() {
   localInput._gpSword = gp.buttons[3]?.pressed;
 
   // Potato cannon — right stick aim + right trigger (index 7) to fire
-if (hasPotato) {
+if (player.hasPotatoCannon || player.hasPeaMinigun) {
   const rx = gp.axes[2];
   const ry = gp.axes[3];
   if (Math.hypot(rx, ry) > STICK_DEAD) {
@@ -3458,7 +3495,7 @@ if (hasPotato) {
     mouse.y = virtualCursor.y;
   }
   if (gp.buttons[7]?.pressed && cannonCooldown <= 0) {
-    firePotatoCannon();
+    fireWeapon();
   }
 }
 
@@ -4802,7 +4839,7 @@ document.addEventListener("keydown", (e) => {
 */
 // --- Aim update (called every frame in gameLoop) ---
 function updateCannonAim() {
-  if (!hasPotato) return;
+  if (!player.hasPotatoCannon && !player.hasPeaMinigun) return;
 
   if (!joystick.active) {
     // Desktop: aim toward world-space mouse
@@ -4816,45 +4853,62 @@ function updateCannonAim() {
   }
 
   // Keep player facing the cannon direction
-  player.facing = Math.abs(cannonAimAngle) < Math.PI / 2 ? 1 : -1;
+  //player.facing = Math.abs(cannonAimAngle) < Math.PI / 2 ? 1 : -1;
 
   // Cooldown tick
   if (cannonCooldown > 0) cannonCooldown--;
 }
 
 // --- Fire a projectile ---
-function firePotatoCannon() {
-  if (cannonCooldown > 0) return;
+function fireWeapon() {
+  if (player.hasPotatoCannon) {
+    if (cannonCooldown > 0) return;
+    const speed = 14;
+    const cx = player.x + player.width  / 2;
+    const cy = player.y + player.height / 2;
+    const baked = potatoState === "baked";
 
-  const speed = 14;
-  const cx = player.x + player.width  / 2;
-  const cy = player.y + player.height / 2;
-  const baked = potatoState === "baked";
+    cannonProjectiles.push({
+      x:         cx + Math.cos(cannonAimAngle) * 20,  // spawn at barrel tip
+      y:         cy + Math.sin(cannonAimAngle) * 20,
+      vx:        Math.cos(cannonAimAngle) * speed,
+      vy:        Math.sin(cannonAimAngle) * speed,
+      size:      baked ? 13 : 8,
+      explosive: baked,
+      alive:     true,
+      trail:     [],
+      animFrame: 0,
+      animTimer: 0,
+      rotation: 0,
+      screamTimer: 0,
+      screamInterval: 22 + Math.floor(Math.random() * 18)
+    });
+    
+    playPotatoScream();
 
-  cannonProjectiles.push({
-    x:         cx + Math.cos(cannonAimAngle) * 20,  // spawn at barrel tip
-    y:         cy + Math.sin(cannonAimAngle) * 20,
-    vx:        Math.cos(cannonAimAngle) * speed,
-    vy:        Math.sin(cannonAimAngle) * speed,
-    size:      baked ? 13 : 8,
-    explosive: baked,
-    alive:     true,
-    trail:     [],
-    animFrame: 0,
-    animTimer: 0,
-    rotation: 0,
-    screamTimer: 0,
-    screamInterval: 22 + Math.floor(Math.random() * 18)
-  });
-  
-  playPotatoScream();
+    cannonCooldown = playerUpgrades.cannonRapidEnabled
+    ? Math.floor(CANNON_COOLDOWN_FRAMES / 2)
+    : CANNON_COOLDOWN_FRAMES;
+    // Tiny recoil
+    player.dx -= Math.cos(cannonAimAngle) * 1.5;
+    player.dy -= Math.sin(cannonAimAngle) * 0.8;
+  } else if (player.hasPeaMinigun) {
+    if (cannonCooldown > 0) return; // Reuse cannonCooldown for minigun fire rate
 
-  cannonCooldown = playerUpgrades.cannonRapidEnabled
-  ? Math.floor(CANNON_COOLDOWN_FRAMES / 2)
-  : CANNON_COOLDOWN_FRAMES;
-  // Tiny recoil
-  player.dx -= Math.cos(cannonAimAngle) * 1.5;
-  player.dy -= Math.sin(cannonAimAngle) * 0.8;
+    const cx = player.x + player.width  / 2;
+    const cy = player.y + player.height / 2;
+
+    // Apply spread to the angle
+    const spread = (Math.random() - 0.5) * PEA_MINIGUN_SPREAD;
+    const angle = cannonAimAngle + spread;
+
+    createPeaProjectile(cx, cy, angle);
+    cannonCooldown = PEA_MINIGUN_COOLDOWN_FRAMES;
+
+    // Tiny recoil for minigun
+    player.dx -= Math.cos(cannonAimAngle) * 0.2;
+    player.dy -= Math.sin(cannonAimAngle) * 0.1;
+  }
 }
 
 // --- Update projectiles ---
@@ -4940,6 +4994,7 @@ if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
     // Enemy hit detection
     const hitBox = { x: p.x - p.size, y: p.y - p.size, width: p.size * 2, height: p.size * 2 };
     let hit = false;
+
     const dmg = p.explosive ? 2 : 1;
     const kb  = { x: p.vx * 0.4, y: -3 };
 
@@ -5045,7 +5100,51 @@ if (!hit) {
       }
     }
   }
-
+  // --- Pea Projectiles ---
+  function updatePeaProjectiles() {
+    for (let i = G.peaProjectiles.length - 1; i >= 0; i--) {
+      const p = G.peaProjectiles[i];
+  
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life--;
+  
+      if (p.life <= 0 || p.x < 0 || p.x > world.width || p.y < 0 || p.y > world.height) {
+        G.peaProjectiles.splice(i, 1);
+        continue;
+      }
+  
+      // Enemy hit detection
+      const hitBox = { x: p.x - p.size, y: p.y - p.size, width: p.size * 2, height: p.size * 2 };
+      let hit = false;
+  
+      const enemiesToHit = [
+        ...G.snails,
+        ...G.SuperSnails,
+        ...G.bats,
+        ...G.yetis,
+        ...G.snowmen,
+        ...G.turrets,
+        ...G.chairs,
+        ...G.tables,
+        ...G.babyMicrowaves,
+      ];
+  
+      for (const enemy of enemiesToHit) {
+        if (enemy.hp <= 0) continue; // Skip dead enemies
+        if (isColliding(hitBox, enemy)) {
+          damageEnemy(enemy, p.damage, { x: p.vx * 0.5, y: p.vy * 0.5 });
+          hit = true;
+          break; // Pea hits one enemy
+        }
+      }
+  
+      if (hit) {
+        G.peaProjectiles.splice(i, 1);
+      }
+    }
+  }
+  
 // --- Explosion effects ---
 function createExplosion(x, y, options = {}) {
   const type = options.type || 'potato';
@@ -5098,6 +5197,7 @@ function createExplosion(x, y, options = {}) {
   }
   for (let j = G.babyMicrowaves.length - 1; j >= 0; j--) {
     const m = G.babyMicrowaves[j];
+    if (!m) continue;
     if (Math.hypot((m.x + m.width/2) - x, (m.y + m.height/2) - y) < R) {
       if (type === 'microwave') {
         damageEnemy(m, dmg, kb(m.x, m.y));
@@ -5186,7 +5286,48 @@ function updateExplosions() {
 }
 
 
+function drawPeaProjectiles() {
+  for (const p of G.peaProjectiles) {
+    ctx.fillStyle = "#00ff00"; // Green pea color
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawPotatoCannon() {
+  if (player.hasPeaMinigun) {
+    drawPeaProjectiles();
+    // Draw minigun barrel
+    const cx = player.x + player.width  / 2;
+    const cy = player.y + player.height / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(cannonAimAngle);
+    // Draw minigun body (green/gray metal look)
+    ctx.fillStyle = "#3a4a3a";
+    ctx.fillRect(-5, -6, 55, 12);
+    ctx.fillStyle = "#2a3a2a";
+    ctx.fillRect(-5, -4, 50, 8);
+    // Barrel end
+    ctx.fillStyle = "#1a2a1a";
+    ctx.beginPath();
+    ctx.arc(50, 0, 6, 0, Math.PI * 2);
+    ctx.fill();
+    // Rotating barrels indicator
+    ctx.fillStyle = "#4a5a4a";
+    for (let i = 0; i < 3; i++) {
+      const angle = (cannonAimAngle * 5) + (i * Math.PI * 2 / 3);
+      ctx.beginPath();
+      ctx.arc(40, 0, 3, angle, angle + 0.3);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    if (Math.abs(cannonAimAngle) > Math.PI / 2) { ctx.scale(1, -1); }
+    ctx.restore();
+    return;
+  }
+  if (!player.hasPotatoCannon) return;
 
   // --- Draw projectiles ---
   for (const p of cannonProjectiles) {
@@ -5229,8 +5370,6 @@ function drawPotatoCannon() {
     drawScreamingPotato(p);  // ← pass p, not the whole array
   }
 
-  if (!hasPotato) return;
-
   const cx = player.x + player.width  / 2;
   const cy = player.y + player.height / 2;
   const baked = potatoState === "baked";
@@ -5247,32 +5386,32 @@ function drawPotatoCannon() {
   ctx.restore();
 }
 
-  function drawScreamingPotato(p) {
-    const drawSize = p.explosive ? SCREAM_ANIM.drawSizeBig : SCREAM_ANIM.drawSize;
-    const half = drawSize / 2;
-    const col = p.animFrame % SCREAM_ANIM.framesPerRow;
-    const row = Math.floor(p.animFrame / SCREAM_ANIM.framesPerRow);
-  
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.rotation);
-    if (p.explosive) { ctx.shadowColor = "#ff5500"; ctx.shadowBlur = 18; }
-    ctx.imageSmoothingEnabled = false;
-  
-    if (screamPotatoSheet.complete && screamPotatoSheet.naturalWidth > 0) {
-      ctx.drawImage(
-        screamPotatoSheet,
-        col * SCREAM_ANIM.frameW, row * SCREAM_ANIM.frameH,
-        SCREAM_ANIM.frameW, SCREAM_ANIM.frameH,
-        -half, -half, drawSize, drawSize
-      );
-    } else {
-      // Fallback while sheet loads
-      ctx.fillStyle = p.explosive ? "#ff8800" : "#b58b4a";
-      ctx.fillRect(-half, -half, drawSize, drawSize);
-    }
-    ctx.restore();
+function drawScreamingPotato(p) {
+  const drawSize = p.explosive ? SCREAM_ANIM.drawSizeBig : SCREAM_ANIM.drawSize;
+  const half = drawSize / 2;
+  const col = p.animFrame % SCREAM_ANIM.framesPerRow;
+  const row = Math.floor(p.animFrame / SCREAM_ANIM.framesPerRow);
+
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.rotation);
+  if (p.explosive) { ctx.shadowColor = "#ff5500"; ctx.shadowBlur = 18; }
+  ctx.imageSmoothingEnabled = false;
+
+  if (screamPotatoSheet.complete && screamPotatoSheet.naturalWidth > 0) {
+    ctx.drawImage(
+      screamPotatoSheet,
+      col * SCREAM_ANIM.frameW, row * SCREAM_ANIM.frameH,
+      SCREAM_ANIM.frameW, SCREAM_ANIM.frameH,
+      -half, -half, drawSize, drawSize
+    );
+  } else {
+    // Fallback while sheet loads
+    ctx.fillStyle = p.explosive ? "#ff8800" : "#b58b4a";
+    ctx.fillRect(-half, -half, drawSize, drawSize);
   }
+  ctx.restore();
+}
 
 function drawExplosions() {
   for (const e of G.explosions) {
@@ -5337,7 +5476,7 @@ function drawExplosions() {
 
 // HUD crosshair — draw in screen-space (after ctx.restore for camera)
 function drawCannonCrosshair() {
-  if (!hasPotato || gameOver) return;
+  if (!player.hasPotatoCannon && !player.hasPeaMinigun || gameOver) return;
 
   const screenMouseX = mouse.x;
   const screenMouseY = mouse.y;
@@ -6740,6 +6879,7 @@ const allEnemies = [
     ...G.chairs.map(e => ({ e, list: G.chairs, key: 'chair' })),
     ...G.tables.map(e => ({ e, list: G.tables, key: 'table' })),
     ...G.bats.map(e => ({ e, list: G.bats, key: 'bat' })),
+    ...G.babyMicrowaves.map(e => ({ e, list: G.babyMicrowaves, key: 'babyMicrowave' })),
   ];
   
   for (let enemy of allEnemies) {
@@ -9090,7 +9230,10 @@ const player = {
   attackDir: 1, // 1 = right, -1 = left
   featherBootsTimer: 0,
   dashBatteryTimer: 0,
-  dashCooldownMultiplier: 1
+  dashCooldownMultiplier: 1,
+  invincibilityTimer: 0,
+  hasPotatoCannon: false,
+  hasPeaMinigun: false,
 };
 
 player.facing = 1; // 1 = right, -1 = left, default right
@@ -9511,6 +9654,8 @@ const UPGRADE_POOL = [
   desc: "Gain the 🥔 — aim and fire with mouse/joystick",
   icon: "🥔",
   apply() {
+    player.hasPotatoCannon = true;
+    player.hasPeaMinigun = false; // Mutual exclusivity
     hasPotato = true;
     potatoState = "raw";
     potato.collected = true;
@@ -9519,6 +9664,22 @@ const UPGRADE_POOL = [
     potatoHUDLine = "🥔 something feels different";
     camera.x += (Math.random() - 0.5) * 13;
     camera.y += (Math.random() - 0.5) * 15;
+    syncJoystickVisibility();
+  }
+},
+{
+  id: "peaMinigun",
+  name: "Pea Minigun",
+  desc: "Gain a 🟢 minigun — rapid-fire peas with low damage",
+  icon: "🔫",
+  apply() {
+    player.hasPeaMinigun = true;
+    player.hasPotatoCannon = false; // Mutual exclusivity
+    hasPotato = false; // Ensure potato cannon is removed
+    potato.collected = false;
+    potatoMessage = "You acquired the Pea Minigun!";
+    potatoMessageTimer = 180;
+    potatoHUDLine = "🔫 pew pew pew";
     syncJoystickVisibility();
   }
 },
@@ -10123,6 +10284,20 @@ function getSpawnPosition(type) {
 }
 }
 // Spawn an enemy with custom HP
+function createPeaProjectile(x, y, angle) {
+  const speed = PEA_MINIGUN_PROJECTILE_SPEED;
+  G.peaProjectiles.push({
+    x: x,
+    y: y,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    size: 4,
+    damage: PEA_MINIGUN_DAMAGE,
+    alive: true,
+    life: 60, // frames
+  });
+}
+
 function spawnEnemy(type, hp) {
   let pos = getSpawnPosition(type);
   
@@ -10304,6 +10479,7 @@ function updateWaveSystem() {
     aliveCount += G.yetis.filter(y => y.alive && y.hp > 0).length;
     aliveCount += G.snowmen.filter(s => s.hp > 0).length;
     aliveCount += G.turrets.filter(t => t.hp > 0).length;
+    aliveCount += G.babyMicrowaves.filter(m => m.hp > 0).length;
     aliveCount += G.bats.filter(b => b.hp > 0).length;
     aliveCount += G.tables.filter(t => t.hp > 0).length;
     if (aliveCount === 0) {
@@ -15500,7 +15676,7 @@ chatLog("  /reset /clear /tp /wave /echo", "#a0d0ff");
     run() {
       if (!gameRunning) { chatLog("Start a level first.", "#ff8888"); return; }
       let count = 0;
-      const lists = [G.snails, G.SuperSnails, G.bats, G.yetis, G.snowmen, G.turrets, G.chairs, G.tables];
+      const lists = [G.snails, G.SuperSnails, G.bats, G.yetis, G.snowmen, G.turrets, G.chairs, G.tables, G.babyMicrowaves];
       for (const list of lists) { count += list.length; list.length = 0; }
       chatLog("💀 Killed " + count + " enemies", "#ff8888");
     }
@@ -16239,6 +16415,7 @@ function gameLoop(currentTime) {
         updateDirectionalSwordAttack();
         updateCannonAim();
         updateCannonProjectiles();
+        updatePeaProjectiles();
         updateExplosions();
         updatePlacedStructures();
         syncJoystickVisibility();
