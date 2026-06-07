@@ -993,6 +993,7 @@ const settings = {
   swapJumpDash: false,
   vibration: true,
   joystickDeadzone: 0.2,
+  holdToFire: true, // Hold to fire for cannon/minigun (default on)
 
   // UI
   showFPS: false,
@@ -2080,6 +2081,7 @@ function loadSettings() {
   document.getElementById("settingVibration").checked    = settings.vibration;
   document.getElementById("settingDeadzone").value       = settings.joystickDeadzone;
   document.getElementById("deadzoneLabel").textContent   = settings.joystickDeadzone.toFixed(2);
+  document.getElementById("settingHoldToFire").checked   = settings.holdToFire;
   document.getElementById("settingFPS").checked          = settings.showFPS;
   document.getElementById("settingCoords").checked       = settings.showCoords;
   document.getElementById("settingMinimap").checked      = settings.showMinimap;
@@ -2821,6 +2823,10 @@ document.getElementById("settingDeadzone").addEventListener("input", function() 
   document.getElementById("deadzoneLabel").textContent = parseFloat(this.value).toFixed(2);
   saveSettings();
 });
+document.getElementById("settingHoldToFire").addEventListener("change", function() {
+  settings.holdToFire = this.checked;
+  saveSettings();
+});
 document.getElementById("settingFPS").addEventListener("change", function() {
   settings.showFPS = this.checked;
   saveSettings();
@@ -3312,7 +3318,20 @@ if (gameRunning && !gamePaused && !gameOver) {
 }
 
 if (!gameRunning || gamePaused || gameOver) return;
-if (e.button === 0) fireWeapon();
+if (e.button === 0) {
+  if (settings.holdToFire) {
+    mouseFireHeld = true;
+  } else {
+    fireWeapon();
+  }
+}
+});
+
+// Track mouse button release for hold-to-fire
+window.addEventListener("mouseup", (e) => {
+  if (e.button === 0) {
+    mouseFireHeld = false;
+  }
 });
 
 // --- Inject mobile joystick into touchControls div ---
@@ -3365,6 +3384,9 @@ if (e.button === 0) fireWeapon();
     joystick.startY   = t.clientY;
     joystick.currentX = t.clientX;
     joystick.currentY = t.clientY;
+    
+    // Start holding to fire if joystick is moved enough
+    // We'll check magnitude in touchmove
   }, { passive: false });
 
   zone.addEventListener("touchmove", (e) => {
@@ -3396,6 +3418,11 @@ if (e.button === 0) fireWeapon();
     knob.style.left      = `calc(50% + ${Math.cos(angle) * dist}px)`;
     knob.style.top       = `calc(50% + ${Math.sin(angle) * dist}px)`;
     knob.style.transform = "none";
+    
+    // Enable continuous fire when joystick is held with sufficient magnitude
+    if (joystick.magnitude > 0.15) {
+      joystickFireHeld = true;
+    }
   }, { passive: false });
 
   function onJoystickRelease(e) {
@@ -3409,10 +3436,12 @@ if (e.button === 0) fireWeapon();
     }
     if (!found) return; // a different finger lifted, ignore
 
-    if (joystick.active && joystick.magnitude > 0.15) {
+    // Fire once on release if not holding to fire
+    if (joystick.active && joystick.magnitude > 0.15 && !joystickFireHeld) {
       cannonAimAngle = joystick.angle;
       fireWeapon();
     }
+    joystickFireHeld = false;
     activeTouchId      = null;
     joystick.active    = false;
     joystick.magnitude = 0;
@@ -5114,6 +5143,12 @@ if (!hit) {
         continue;
       }
   
+      // Wall collision - destroy pea on wall hit
+      if (collidesWithWall(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2)) {
+        G.peaProjectiles.splice(i, 1);
+        continue;
+      }
+  
       // Enemy hit detection
       const hitBox = { x: p.x - p.size, y: p.y - p.size, width: p.size * 2, height: p.size * 2 };
       let hit = false;
@@ -5133,7 +5168,7 @@ if (!hit) {
       for (const enemy of enemiesToHit) {
         if (enemy.hp <= 0) continue; // Skip dead enemies
         if (isColliding(hitBox, enemy)) {
-          damageEnemy(enemy, p.damage, { x: p.vx * 0.5, y: p.vy * 0.5 });
+          damageEnemy(enemy, p.damage, { x: 0, y: 0 }); // No knockback for peas
           hit = true;
           break; // Pea hits one enemy
         }
@@ -9332,7 +9367,7 @@ function damageEnemy(enemy, damage, knockbackDir) {
   enemy.hitFlash = 5; // frames to show red
   
   // Death
-  if (enemy.hp <= 0) {
+  if (enemy.hp <= 0.1) {
     enemy.dead = true;
     return true; // enemy died
   }
@@ -11190,6 +11225,8 @@ player.speedChiliTrailCooldown = 0;
 player.featherBootsTimer = 0;
 player.dashBatteryTimer = 0;
 player.dashCooldownMultiplier = 1;
+
+ player.hasPeaMinigun = false;
   // reset roll state
   player.rollSpeed = 10;
   player.rollDuration = 0;
@@ -13717,6 +13754,8 @@ function getLocalInput() {
 // The active input for the local player — swap this out for network input later
 let localInput = {};
 let prevInput  = {};
+let mouseFireHeld = false; // Track if mouse fire button is held
+let joystickFireHeld = false; // Track if joystick is held for firing
 // --- UPDATE PLAYER ---
 
 function updatePlayerAnimation() {
@@ -14613,6 +14652,8 @@ function resetWorld() {
   G.yetis =[];
   swordRangeMulti = 1
   G.snowmen =[];
+
+  player.hasPeaMinigun = false;
 
   vehicles = [];
   playerVehicle = null;
@@ -16414,6 +16455,14 @@ function gameLoop(currentTime) {
         updatePlayerClubAttack();
         updateDirectionalSwordAttack();
         updateCannonAim();
+        // Hold-to-fire for cannon/minigun (mouse)
+        if (settings.holdToFire && mouseFireHeld && (player.hasPotatoCannon || player.hasPeaMinigun)) {
+          fireWeapon();
+        }
+        // Hold-to-fire for cannon/minigun (on-screen joystick) - always hold to fire
+        if (joystickFireHeld && joystick.active && joystick.magnitude > 0.15 && (player.hasPotatoCannon || player.hasPeaMinigun)) {
+          fireWeapon();
+        }
         updateCannonProjectiles();
         updatePeaProjectiles();
         updateExplosions();
