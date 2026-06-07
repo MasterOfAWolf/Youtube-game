@@ -1780,6 +1780,8 @@ function useLuckyCharm() {
   const outcome = Math.random();
   if (outcome < 0.05) { // 5% chance to die
     loseLife();
+    loseLife();
+    loseLife();
     potatoMessage = 'Lucky Charm: You gambled and lost it all...';
     potatoMessageTimer = 90;
   } else if (outcome < 0.05 + 0.45) { // 45% chance to get a shield
@@ -15747,6 +15749,45 @@ chatLog("  /reset /clear /tp /wave /echo", "#a0d0ff");
       const lists = [G.snails, G.SuperSnails, G.bats, G.yetis, G.snowmen, G.turrets, G.chairs, G.tables];
       for (const list of lists) { count += list.length; list.length = 0; }
       chatLog("⏭ Skipped to wave " + (G.wavesystem.currentWave), "#f0d060");
+    }
+  },
+
+  item: {
+    run(args) {
+      if (!gameRunning) { chatLog("Start a level first.", "#ff8888"); return; }
+      const itemId = args[0];
+      const qty = parseInt(args[1]) || 1;
+      if (!itemId) { 
+        chatLog("Usage: /item <itemId> [quantity]", "#ff8888"); 
+        chatLog("Available: " + SHOP_ITEMS.map(i => i.id).join(", "), "#a0d0ff");
+        return; 
+      }
+      const item = SHOP_ITEMS.find(i => i.id === itemId.toLowerCase());
+      if (!item) { 
+        chatLog("Unknown item. Available: " + SHOP_ITEMS.map(i => i.id).join(", "), "#ff8888"); 
+        return; 
+      }
+      // Add to inventory (same logic as buyFromShop)
+      let stacked = false;
+      for (let i = 0; i < playerInventory.items.length; i++) {
+        const slot = playerInventory.items[i];
+        if (slot && slot.id === item.id) {
+          slot.qty = Math.min(99, slot.qty + qty);
+          stacked = true;
+          chatLog("Added " + qty + "x " + item.label + " to existing stack", "#80ff80");
+          break;
+        }
+      }
+      if (!stacked) {
+        if (playerInventory.items.length < INVENTORY_SIZE) {
+          playerInventory.items.push({ id: item.id, label: item.label, qty: qty });
+          chatLog("Added " + qty + "x " + item.label + " to inventory", "#80ff80");
+        } else {
+          chatLog("Inventory full!", "#ff8888");
+          return;
+        }
+      }
+      renderInventory();
     }
   },
 
